@@ -1,10 +1,12 @@
 import type { Asset, ImagePlacement, Map, Project } from '../domain/project'
+import type { Region } from '../domain/region'
 
 export interface ProjectSnapshot {
   project: Project
   maps: Map[]
   imagePlacements: ImagePlacement[]
   assets: Asset[]
+  regions: Region[]
 }
 export interface ProjectBackupRepository {
   snapshot(projectId: string): Promise<ProjectSnapshot>
@@ -21,5 +23,6 @@ export function independentCopy(snapshot: ProjectSnapshot): ProjectSnapshot {
     maps: snapshot.maps.map((map) => ({ ...map, id: mapIds.get(map.id)!, projectId })),
     assets: snapshot.assets.map((asset) => ({ ...asset, id: assetIds.get(asset.id)!, projectId })),
     imagePlacements: snapshot.imagePlacements.map((placement) => ({ ...placement, id: crypto.randomUUID(), mapId: mapIds.get(placement.mapId)!, assetId: assetIds.get(placement.assetId)! })),
+    regions: snapshot.regions.map((region) => ({ ...region, id: crypto.randomUUID(), mapId: mapIds.get(region.mapId)!, vertices: region.vertices.map((point) => ({ ...point })) })),
   }
 }

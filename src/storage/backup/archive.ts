@@ -8,7 +8,7 @@ import { BACKUP_LIMITS, fileLimit, unpackZip, validPath } from './zip'
 import type { BackupLimits } from './zip'
 
 export const BACKUP_FORMAT = 'bounty-mapper-project'
-export const BACKUP_VERSION = 1
+export const BACKUP_VERSION = 2
 interface Manifest { format: string; formatVersion: number; createdAt: string; files: { path: string; byteSize: number; sha256: string }[] }
 export async function sha256(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(bytes))
@@ -22,7 +22,7 @@ function json(bytes: Uint8Array): unknown {
 function manifest(value: unknown, limits: BackupLimits): Manifest {
   if (!value || typeof value !== 'object') throw new Error('Некорректный manifest.json.')
   const m = value as Partial<Manifest>
-  if (m.format !== BACKUP_FORMAT || m.formatVersion !== BACKUP_VERSION) throw new Error('Неизвестная версия или формат архива.')
+  if (m.format !== BACKUP_FORMAT || ![1, BACKUP_VERSION].includes(m.formatVersion!)) throw new Error('Неизвестная версия или формат архива.')
   if (Object.keys(m).some((key) => !['format', 'formatVersion', 'createdAt', 'files'].includes(key)) ||
       typeof m.createdAt !== 'string' || !Number.isFinite(Date.parse(m.createdAt)) || !Array.isArray(m.files) || m.files.length > limits.files - 1) throw new Error('Некорректный manifest.json.')
   const paths = new Set<string>()
@@ -72,7 +72,7 @@ export async function parseArchive(file: Blob, decode: typeof prepareImage = pre
     const bytes = files.get(entry.path)
     if (!bytes || bytes.length !== entry.byteSize || await sha256(bytes) !== entry.sha256) throw new Error(`Ошибка контрольной суммы или размера файла: ${entry.path}`)
   }
-  const doc = validateDocument(json(files.get('project.json')!), limits)
+  const doc = validateDocument(json(files.get('project.json')!), limits, m.formatVersion)
   const paths = new Set(doc.assets.map((asset) => asset.path))
   if ([...listed].some((path) => path !== 'project.json' && !paths.has(path)) || doc.assets.some((asset) => !listed.has(asset.path))) throw new Error('Перечень изображений не соответствует данным проекта.')
   const assets: Asset[] = []
@@ -86,5 +86,5 @@ export async function parseArchive(file: Blob, decode: typeof prepareImage = pre
     void _path
     assets.push({ ...metadata, blob })
   }
-  return { project: doc.project, maps: doc.maps, imagePlacements: doc.imagePlacements, assets }
+  return { project: doc.project, maps: doc.maps, imagePlacements: doc.imagePlacements, regions: doc.regions, assets }
 }

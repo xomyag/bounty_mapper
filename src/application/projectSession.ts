@@ -16,10 +16,12 @@ export class ProjectSession {
   private editVersion = 0
   private pending?: Promise<void>
   private initialization?: Promise<void>
+  private openVersion = 0
   private readonly repository: ProjectRepository
 
   constructor(repository: ProjectRepository) { this.repository = repository }
   getSnapshot = () => this.state
+  getOpenVersion = () => this.openVersion
   subscribe = (listener: () => void) => {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
@@ -36,6 +38,7 @@ export class ProjectSession {
     this.update({ ...this.state, loading: true, error: undefined })
     try {
       const project = await this.repository.restore()
+      this.openVersion++
       this.update({ project, status: project ? 'saved' : 'idle', loading: false })
     } catch (error) { this.fail(error) }
   }
@@ -47,6 +50,7 @@ export class ProjectSession {
   create = async (name: string) => {
     if (this.state.loading || this.hasUnsavedChanges() || this.pending) throw new Error('Сначала сохраните текущий проект.')
     const project = createProject(name)
+    this.openVersion++
     this.editVersion++
     this.update({ project, status: 'dirty', loading: false })
     await this.save()
@@ -56,6 +60,7 @@ export class ProjectSession {
     this.update({ ...this.state, loading: true, error: undefined })
     try {
       const project = await this.repository.open(id)
+      this.openVersion++
       this.editVersion++
       this.update({ project, status: 'saved', loading: false })
     } catch (error) {
@@ -75,13 +80,14 @@ export class ProjectSession {
     this.update({ ...this.state, loading: true })
     try {
       const project = await work()
+      this.openVersion++
       this.editVersion++
       this.update({ project, status: 'saved', loading: false })
     } finally {
       if (this.state.loading) this.update({ ...this.state, loading: false })
     }
   }
-  // Image writes share the project revision; lock editing and switching until completion.
+  // Image and region writes share the revision; lock editing and switching until completion.
   mutateProject = async (work: (project: Project) => Promise<Project>) => {
     if (!this.state.project || this.state.loading || this.pending || this.hasUnsavedChanges()) {
       throw new Error('Сначала сохраните изменения проекта.')
