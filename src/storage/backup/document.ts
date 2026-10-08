@@ -1,0 +1,87 @@
+import type { Asset, ImagePlacement, Map as ProjectMap, Project } from '../../domain/project'
+import { PROJECT_SCHEMA_VERSION } from '../../domain/project'
+import type { ProjectSnapshot } from '../../application/projectBackupRepository'
+import { BACKUP_LIMITS } from './zip'
+import type { BackupLimits } from './zip'
+
+export type AssetRecord = Omit<Asset, 'blob'> & { path: string }
+export interface BackupDocument {
+  project: Project
+  maps: ProjectMap[]
+  imagePlacements: ImagePlacement[]
+  assets: AssetRecord[]
+}
+function invalid(): never { throw new Error('Некорректная структура данных проекта.') }
+function record(value: unknown, required: string[], optional: string[] = []): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid()
+  const object = value as Record<string, unknown>
+  if (required.some((key) => !Object.hasOwn(object, key)) || Object.keys(object).some((key) => !required.includes(key) && !optional.includes(key))) return invalid()
+  return object
+}
+function string(value: unknown, nonempty = false): string {
+  if (typeof value !== 'string' || (nonempty && !value.trim())) return invalid()
+  return value
+}
+function number(value: unknown, positive = false): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || (positive && value <= 0)) return invalid()
+  return value
+}
+function integer(value: unknown, min = 0): number {
+  const result = number(value)
+  if (!Number.isSafeInteger(result) || result < min) return invalid()
+  return result
+}
+function boolean(value: unknown): boolean { if (typeof value !== 'boolean') return invalid(); return value }
+function array(value: unknown, limit: number): unknown[] { if (!Array.isArray(value) || value.length > limit) return invalid(); return value }
+function date(value: unknown): string { const text = string(value); if (!Number.isFinite(Date.parse(text))) return invalid(); return text }
+function bounds(value: unknown) {
+  const b = record(value, ['x', 'y', 'width', 'height'])
+  return { x: number(b.x), y: number(b.y), width: number(b.width, true), height: number(b.height, true) }
+}
+function unique(items: { id: string }[]) { if (new Set(items.map((item) => item.id)).size !== items.length) return invalid() }
+
+export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_LIMITS): BackupDocument {
+  const root = record(value, ['project', 'maps', 'imagePlacements', 'assets'])
+  const p = record(root.project, ['id', 'name', 'contextMd', 'schemaVersion', 'revision', 'createdAt', 'updatedAt'])
+  if (p.schemaVersion !== PROJECT_SCHEMA_VERSION) throw new Error('Версия данных проекта не поддерживается.')
+  const project: Project = { id: string(p.id, true), name: string(p.name, true), contextMd: string(p.contextMd), schemaVersion: PROJECT_SCHEMA_VERSION, revision: integer(p.revision, 1), createdAt: date(p.createdAt), updatedAt: date(p.updatedAt) }
+  const maps: ProjectMap[] = array(root.maps, limits.maps).map((value) => {
+    const m = record(value, ['id', 'projectId', 'name', 'notesMd', 'order', 'coordinateBounds'])
+    return { id: string(m.id, true), projectId: string(m.projectId, true), name: string(m.name, true), notesMd: string(m.notesMd), order: integer(m.order), coordinateBounds: bounds(m.coordinateBounds) }
+  })
+  const assets: AssetRecord[] = array(root.assets, limits.assets).map((value) => {
+    const a = record(value, ['id', 'projectId', 'mimeType', 'byteSize', 'pixelWidth', 'pixelHeight', 'checksum', 'tags', 'path'], ['caption'])
+    const mimeType = string(a.mimeType)
+    const path = string(a.path)
+    const extension = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' } as Record<string, string>)[mimeType]
+    if (!extension || !new RegExp(`^assets/[0-9]+\\.${extension}$`).test(path)) return invalid()
+    const byteSize = integer(a.byteSize, 1)
+    const checksum = string(a.checksum)
+    if (byteSize > limits.assetBytes || !/^[a-f0-9]{64}$/.test(checksum)) return invalid()
+    const pixelWidth = integer(a.pixelWidth, 1); const pixelHeight = integer(a.pixelHeight, 1)
+    // Bound image decoding too; metadata is checked against actual decoded dimensions later.
+    if (pixelWidth * pixelHeight > 64 * 1024 * 1024) throw new Error('Изображение превышает лимит 64 мегапикселей.')
+    return { id: string(a.id, true), projectId: string(a.projectId, true), mimeType, path, byteSize, pixelWidth, pixelHeight, checksum, tags: array(a.tags, 1024).map((tag) => string(tag)), ...(a.caption === undefined ? {} : { caption: string(a.caption) }) }
+  })
+  const imagePlacements: ImagePlacement[] = array(root.imagePlacements, limits.maps).map((value) => {
+    const i = record(value, ['id', 'mapId', 'assetId', 'x', 'y', 'width', 'height', 'rotation', 'order', 'locked', 'visible'])
+    return { id: string(i.id, true), mapId: string(i.mapId, true), assetId: string(i.assetId, true), x: number(i.x), y: number(i.y), width: number(i.width, true), height: number(i.height, true), rotation: number(i.rotation), order: integer(i.order), locked: boolean(i.locked), visible: boolean(i.visible) }
+  })
+  unique(maps); unique(assets); unique(imagePlacements)
+  if (new Set(assets.map((asset) => asset.path)).size !== assets.length || new Set(imagePlacements.map((placement) => placement.mapId)).size !== imagePlacements.length) return invalid()
+  if (maps.some((map) => map.projectId !== project.id) || assets.some((asset) => asset.projectId !== project.id)) throw new Error('Карта или изображение относится к другому проекту.')
+  const mapIds = new Set(maps.map((map) => map.id)); const assetIds = new Set(assets.map((asset) => asset.id))
+  if (imagePlacements.some((placement) => !mapIds.has(placement.mapId) || !assetIds.has(placement.assetId))) throw new Error('В проекте есть ссылка на отсутствующую карту или изображение.')
+  return { project, maps, assets, imagePlacements }
+}
+
+// Explicit field projection: storage/UI extras and secrets never enter the archive.
+export function documentFromSnapshot(snapshot: ProjectSnapshot): BackupDocument {
+  const p = snapshot.project
+  return validateDocument({
+    project: { id: p.id, name: p.name, contextMd: p.contextMd, schemaVersion: p.schemaVersion, revision: p.revision, createdAt: p.createdAt, updatedAt: p.updatedAt },
+    maps: snapshot.maps.map((m) => ({ id: m.id, projectId: m.projectId, name: m.name, notesMd: m.notesMd, order: m.order, coordinateBounds: { x: m.coordinateBounds.x, y: m.coordinateBounds.y, width: m.coordinateBounds.width, height: m.coordinateBounds.height } })),
+    imagePlacements: snapshot.imagePlacements.map((i) => ({ id: i.id, mapId: i.mapId, assetId: i.assetId, x: i.x, y: i.y, width: i.width, height: i.height, rotation: i.rotation, order: i.order, locked: i.locked, visible: i.visible })),
+    assets: snapshot.assets.map((a, index) => ({ id: a.id, projectId: a.projectId, mimeType: a.mimeType, byteSize: a.byteSize, pixelWidth: a.pixelWidth, pixelHeight: a.pixelHeight, checksum: a.checksum, tags: [...a.tags], ...(a.caption === undefined ? {} : { caption: a.caption }), path: `assets/${index}.${a.mimeType === 'image/jpeg' ? 'jpg' : a.mimeType === 'image/png' ? 'png' : 'webp'}` })),
+  })
+}

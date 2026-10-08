@@ -64,6 +64,23 @@ export class ProjectSession {
     }
   }
   retry = () => this.state.loading ? Promise.resolve() : this.state.project ? this.save() : this.restore()
+  flush = async () => {
+    if (this.state.loading) throw new Error('Дождитесь завершения текущей операции.')
+    await this.save()
+    if (this.state.status === 'dirty') await this.save()
+    if (this.hasUnsavedChanges()) throw new Error('Экспорт остановлен: сначала сохраните изменения проекта.')
+  }
+  adoptProject = async (work: () => Promise<Project>) => {
+    if (this.state.loading || this.pending || this.hasUnsavedChanges()) throw new Error('Сначала сохраните изменения текущего проекта.')
+    this.update({ ...this.state, loading: true })
+    try {
+      const project = await work()
+      this.editVersion++
+      this.update({ project, status: 'saved', loading: false })
+    } finally {
+      if (this.state.loading) this.update({ ...this.state, loading: false })
+    }
+  }
   // Image writes share the project revision; lock editing and switching until completion.
   mutateProject = async (work: (project: Project) => Promise<Project>) => {
     if (!this.state.project || this.state.loading || this.pending || this.hasUnsavedChanges()) {
