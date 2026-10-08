@@ -9,3 +9,5 @@ dist/
 *.pem
 *.key
 credentials.json
+test-results/
+playwright-report/
