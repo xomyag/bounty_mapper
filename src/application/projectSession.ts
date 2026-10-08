@@ -64,6 +64,19 @@ export class ProjectSession {
     }
   }
   retry = () => this.state.loading ? Promise.resolve() : this.state.project ? this.save() : this.restore()
+  // Image writes share the project revision; lock editing and switching until completion.
+  mutateProject = async (work: (project: Project) => Promise<Project>) => {
+    if (!this.state.project || this.state.loading || this.pending || this.hasUnsavedChanges()) {
+      throw new Error('Сначала сохраните изменения проекта.')
+    }
+    this.update({ ...this.state, loading: true })
+    try {
+      const project = await work(this.state.project!)
+      this.update({ project, status: 'saved', loading: false })
+    } finally {
+      if (this.state.loading) this.update({ ...this.state, loading: false })
+    }
+  }
   edit = (fields: Pick<Project, 'name' | 'contextMd'>) => {
     if (!this.state.project || this.state.loading) return
     this.editVersion++

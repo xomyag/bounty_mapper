@@ -4,6 +4,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { IDBFactory } from 'fake-indexeddb'
 import { IndexedDbProjectRepository } from './storage/indexedDbProjectRepository'
 import { App } from './App'
+import { IndexedDbMapImageRepository } from './storage/indexedDbMapImageRepository'
+
+vi.mock('./features/map/MapCanvas', () => ({ MapCanvas: () => <div>Canvas</div> }))
 
 beforeEach(() => {
   // jsdom does not implement the native modal API or focus trapping.
@@ -24,7 +27,8 @@ describe('Project UI', () => {
   it('creates, autosaves edits, restores after reload and opens another project', async () => {
     const factory = new IDBFactory()
     const repo = new IndexedDbProjectRepository(() => factory)
-    const app = render(<App repository={repo} />)
+    const mapRepository = new IndexedDbMapImageRepository(() => factory)
+    const app = render(<App repository={repo} mapRepository={mapRepository} />)
     expect(screen.queryByRole('dialog')).toBeNull()
     await createInUi('Приключение')
     fireEvent.change(screen.getByLabelText('Название проекта'), { target: { value: 'Новая история' } })
@@ -39,7 +43,7 @@ describe('Project UI', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect((await repo.restore())?.id).toBe(first.id)
     app.unmount()
-    render(<App repository={new IndexedDbProjectRepository(() => factory)} />)
+    render(<App repository={new IndexedDbProjectRepository(() => factory)} mapRepository={mapRepository} />)
     await screen.findByText('Новая история')
     expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Контекст' }))
@@ -49,7 +53,7 @@ describe('Project UI', () => {
   it('shows a write error without losing typed text or showing saved, then retries', async () => {
     const factory = new IDBFactory()
     const repo = new IndexedDbProjectRepository(() => factory)
-    render(<App repository={repo} />)
+    render(<App repository={repo} mapRepository={new IndexedDbMapImageRepository(() => factory)} />)
     await createInUi('Проект')
     vi.spyOn(repo, 'save').mockRejectedValueOnce(new DOMException('Нет места', 'QuotaExceededError'))
     fireEvent.change(screen.getByLabelText('Общий контекст приключения'), { target: { value: 'Несохранённая заметка' } })

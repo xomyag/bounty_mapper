@@ -32,6 +32,20 @@ export interface Asset {
   blob: Blob
 }
 
+export interface ImagePlacement {
+  id: string
+  mapId: string
+  assetId: string
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  order: number
+  locked: boolean
+  visible: boolean
+}
+
 export function createProject(name: string): Project {
   if (!name.trim()) throw new Error('Укажите название проекта.')
   const now = new Date().toISOString()
