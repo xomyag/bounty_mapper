@@ -63,7 +63,10 @@ export class IndexedDbMapImageRepository implements MapImageRepository {
         await requestResult(tx.objectStore('imagePlacements').delete(previous.background!.placement.id))
         image = { map: previous.map }
       }
-      if (previous.background) await requestResult(tx.objectStore('assets').delete(previous.background.asset.id))
+      if (previous.background) {
+        const remaining = await requestResult(tx.objectStore('imagePlacements').getAll()) as ImagePlacement[]
+        if (!remaining.some((item) => item.assetId === previous.background!.asset.id)) await requestResult(tx.objectStore('assets').delete(previous.background.asset.id))
+      }
       await requestResult(projectStore.put(nextProject))
       return { project: nextProject, image }
     })

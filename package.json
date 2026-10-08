@@ -16,6 +16,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort"
   },
   "dependencies": {
+    "fflate": "0.8.3",
     "konva": "10.7.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
