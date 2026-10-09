@@ -22,10 +22,11 @@ export class ProjectBackupSession {
   private update(state: BackupState) { this.state = state; this.listeners.forEach((listener) => listener()) }
   busy = () => ['exporting', 'validating', 'importing'].includes(this.state.phase)
   dismiss = () => { if (!this.busy()) this.update({ phase: 'idle' }) }
-  export = async (download: (bytes: Uint8Array, filename: string) => void | Promise<void>) => {
+  export = async (download: (bytes: Uint8Array, filename: string) => void | Promise<void>, beforeSnapshot: () => Promise<void> = async () => {}) => {
     if (this.busy()) return
     this.update({ phase: 'exporting' })
     try {
+      await beforeSnapshot()
       await this.projects.flush()
       await this.projects.mutateProject(async (project) => {
         const snapshot = await this.repository.snapshot(project.id)

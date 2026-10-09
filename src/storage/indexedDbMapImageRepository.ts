@@ -3,8 +3,10 @@ import { RevisionConflictError } from '../application/projectRepository'
 import type { Asset, ImagePlacement, Map, Project } from '../domain/project'
 import { IndexedDb, requestResult, DATABASE_NAME } from './indexedDb'
 import { readProject } from './indexedDbProjectRepository'
+import type { Region } from '../domain/region'
+import { documentAssetIds } from '../domain/richText'
 
-const stores = ['projects', 'maps', 'assets', 'imagePlacements']
+const stores = ['projects', 'maps', 'assets', 'imagePlacements', 'regions']
 
 async function loadMap(tx: IDBTransaction, projectId: string): Promise<MapImage> {
   const maps = await requestResult(tx.objectStore('maps').index('projectId').getAll(projectId)) as Map[]
@@ -65,7 +67,9 @@ export class IndexedDbMapImageRepository implements MapImageRepository {
       }
       if (previous.background) {
         const remaining = await requestResult(tx.objectStore('imagePlacements').getAll()) as ImagePlacement[]
-        if (!remaining.some((item) => item.assetId === previous.background!.asset.id)) await requestResult(tx.objectStore('assets').delete(previous.background.asset.id))
+        const regions = await requestResult(tx.objectStore('regions').getAll()) as Region[]
+        const usedInText = regions.some((r) => [...documentAssetIds(r.gmNotes), ...documentAssetIds(r.playerDescription)].includes(previous.background!.asset.id))
+        if (!usedInText && !remaining.some((item) => item.assetId === previous.background!.asset.id)) await requestResult(tx.objectStore('assets').delete(previous.background.asset.id))
       }
       await requestResult(projectStore.put(nextProject))
       return { project: nextProject, image }

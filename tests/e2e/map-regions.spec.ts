@@ -59,6 +59,7 @@ test('polygon drag/vertices stay in world coordinates, one drag is one undo; met
   expect(original).toMatchObject({ fillOpacity: 0.4, number: 1, title: 'Область 1' })
   await drag(page, { x: box.x + 200, y: box.y + 220 }, { x: box.x + 240, y: box.y + 250 })
   const moved = (await stored(page)).regions[0]
+  await expect(page.getByRole('region', { name: 'Карточка области', exact: true })).toHaveCount(0)
   expect(moved.vertices[0].x).toBeGreaterThan(original.vertices[0].x)
   for (let i = 1; i < 4; i++) {
     expect(moved.vertices[i].x - original.vertices[i].x).toBeCloseTo(moved.vertices[0].x - original.vertices[0].x)
@@ -78,11 +79,14 @@ test('polygon drag/vertices stay in world coordinates, one drag is one undo; met
   camera = { ...camera, x: camera.x - 40 }
   expect((await stored(page)).regions[0]).toEqual(moved)
   expect((await stored(page)).placements[0]).toEqual(placement)
+  const center = worldToScreen({ x: (moved.vertices[0].x + moved.vertices[2].x) / 2, y: (moved.vertices[0].y + moved.vertices[2].y) / 2 }, camera)
+  await page.mouse.click(box.x + center.x, box.y + center.y)
   await page.getByRole('button', { name: 'Редактировать вершины', exact: true }).click()
   await canvasFrame(page)
   const first = worldToScreen(moved.vertices[0], camera)
   await drag(page, { x: box.x + first.x, y: box.y + first.y }, { x: box.x + first.x + 30, y: box.y + first.y + 10 })
   const edited = (await stored(page)).regions[0]
+  await expect(page.getByRole('region', { name: 'Карточка области', exact: true })).toHaveCount(1)
   expect(edited.vertices[0].x).toBeCloseTo(moved.vertices[0].x + 30 / camera.scale)
   expect(edited.vertices[0].y).toBeCloseTo(moved.vertices[0].y + 10 / camera.scale)
   expect(edited.vertices.slice(1)).toEqual(moved.vertices.slice(1))
@@ -98,6 +102,7 @@ test('polygon drag/vertices stay in world coordinates, one drag is one undo; met
   await page.getByRole('button', { name: 'Отменить', exact: true }).click()
   await expect.poll(async () => (await stored(page)).regions[0].vertices.length).toBe(5)
   await page.getByRole('button', { name: 'Закончить правку вершин' }).click()
+  await page.getByRole('button', { name: 'Редактировать', exact: true }).click()
   await page.getByLabel('Номер области', { exact: true }).fill('12')
   await page.getByLabel('Название области', { exact: true }).fill('Зал сокровищ')
   await page.getByRole('button', { name: 'Цвет области', exact: true }).click()
@@ -108,7 +113,7 @@ test('polygon drag/vertices stay in world coordinates, one drag is one undo; met
   await page.getByLabel('Непрозрачность заливки').focus()
   await page.keyboard.press('Home')
   for (let i = 0; i < 65; i++) await page.keyboard.press('ArrowRight')
-  await page.getByRole('button', { name: 'Применить', exact: true }).click()
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
   await expect.poll(async () => (await stored(page)).regions[0].title).toBe('Зал сокровищ')
   const saved = (await stored(page)).regions[0]
   expect(saved).toMatchObject({ number: 12, color: '#22aa77', fillOpacity: 0.65 })
@@ -144,7 +149,7 @@ test('double-click finishes without duplicate, Esc/draft export, context menu an
   await page.mouse.dblclick(box.x + 220, box.y + 330)
   await expect.poll(async () => (await stored(page)).regions.length).toBe(1)
   expect((await stored(page)).regions[0].vertices).toHaveLength(3)
-  await page.getByRole('button', { name: 'Снять выделение области' }).click()
+  await page.getByRole('region', { name: 'Карта приключения' }).focus(); await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Добавить область', exact: true }).click()
   await page.mouse.click(box.x + 500, box.y + 100); await page.mouse.click(box.x + 650, box.y + 100)
   const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: 'Экспорт проекта' }).click()
@@ -174,6 +179,9 @@ test('double-click finishes without duplicate, Esc/draft export, context menu an
   await page.getByRole('button', { name: 'Повторить запись областей', exact: true }).click()
   await expect.poll(async () => (await stored(page)).regions.length).toBe(2)
   await expect(page.getByRole('group', { name: 'Создание области' })).toHaveCount(0)
+  box = (await page.getByRole('region', { name: 'Карта приключения' }).boundingBox())!
+  await page.mouse.click(box.x + 566, box.y + 150)
+  await page.getByRole('button', { name: 'Отмена', exact: true }).click()
   await page.getByRole('button', { name: 'Удалить область', exact: true }).click()
   await expect.poll(async () => (await stored(page)).regions.length).toBe(1)
   await page.getByRole('button', { name: 'Отменить', exact: true }).click()
@@ -188,18 +196,22 @@ test('rejects self-crossing drafts and rereads the same project after a revision
   const otherBox = (await other.getByRole('region', { name: 'Карта приключения' }).boundingBox())!
   await other.mouse.click(otherBox.x + 220, otherBox.y + 230)
   await expect(other.getByLabel('Название области', { exact: true })).toHaveValue('Область 1')
+  await page.mouse.click(box.x + 220, box.y + 230)
   await page.getByLabel('Название области', { exact: true }).fill('Название из первой вкладки')
-  await page.getByRole('button', { name: 'Применить', exact: true }).click()
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
   await expect.poll(async () => (await stored(page)).regions[0].title).toBe('Название из первой вкладки')
   await other.getByLabel('Название области', { exact: true }).fill('Несохранённый текст второй вкладки')
-  await other.getByRole('button', { name: 'Применить', exact: true }).click()
+  await other.getByRole('button', { name: 'Сохранить', exact: true }).click()
   await expect(other.getByRole('alert')).toContainText('другой вкладке')
   await expect(other.getByLabel('Название области', { exact: true })).toHaveValue('Несохранённый текст второй вкладки')
+  // Discard is explicit; an unsuccessful card write must not silently lose its draft on reopen.
+  await other.getByRole('button', { name: 'Отмена', exact: true }).click()
   await other.getByRole('button', { name: 'Проекты', exact: true }).click()
   await other.getByRole('button', { name: 'Открыть проект «Карта с областями»' }).click()
   await expect(other.getByRole('button', { name: 'Добавить область', exact: true })).toBeEnabled()
   await expect(other.getByRole('region', { name: 'Свойства области' })).toHaveCount(0)
   await other.mouse.click(otherBox.x + 220, otherBox.y + 230)
+  await other.getByRole('button', { name: 'Редактировать', exact: true }).click()
   await expect(other.getByLabel('Название области', { exact: true })).toHaveValue('Название из первой вкладки')
   await expect(other.getByRole('button', { name: 'Отменить', exact: true })).toBeDisabled()
   await other.close()
@@ -248,6 +260,8 @@ test('moves draft handles under pan/zoom and deletes handles by double click wit
   expect(saved.vertices.slice(1)).toEqual(vertices.slice(2))
   expect((await stored(page)).placements[0]).toEqual(placement)
 
+  const center = worldToScreen({ x: saved.vertices.reduce((sum, p) => sum + p.x, 0) / 3, y: saved.vertices.reduce((sum, p) => sum + p.y, 0) / 3 }, camera)
+  await page.mouse.click(box.x + center.x, box.y + center.y)
   await page.getByRole('button', { name: 'Редактировать вершины', exact: true }).click()
   await canvasFrame(page)
   const midpoint = { x: (saved.vertices[0].x + saved.vertices[1].x) / 2, y: (saved.vertices[0].y + saved.vertices[1].y) / 2 }
@@ -272,13 +286,15 @@ test('moves draft handles under pan/zoom and deletes handles by double click wit
 })
 
 test('keeps the first color palette open through choices and closes on outside click or Escape', async ({ page }) => {
-  await seed(page); await createSquare(page)
+  await seed(page); const box = await createSquare(page)
+  await page.mouse.click(box.x + 220, box.y + 230)
   const trigger = page.getByRole('button', { name: 'Цвет области', exact: true })
   const palette = page.getByRole('dialog', { name: 'Палитра цвета области', exact: true })
   await trigger.click()
   await expect(palette).toBeVisible()
   await palette.getByRole('button', { name: 'Красный (#ef6543)', exact: true }).click()
   await expect(palette).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Карточка области', exact: true })).toHaveCount(1)
   await expect(trigger).toHaveAttribute('aria-expanded', 'true')
   await expect(palette.getByLabel('HEX цвета')).toHaveValue('#ef6543')
   await palette.getByRole('button', { name: 'Синий (#4a90e2)', exact: true }).click()
@@ -288,7 +304,7 @@ test('keeps the first color palette open through choices and closes on outside c
   await palette.getByLabel('Красный канал').focus(); await page.keyboard.press('Home')
   await expect(palette.getByLabel('HEX цвета')).toHaveValue('#00aa77')
   await expect(palette).toBeVisible()
-  // Color choices edit the form; writing remains explicit via Apply.
+  // Color choices edit the single draft; writing remains explicit via Save.
   expect((await stored(page)).regions[0].color).toBe('#d7ad62')
   await page.getByLabel('Название области', { exact: true }).click()
   await expect(palette).toHaveCount(0)
@@ -298,7 +314,7 @@ test('keeps the first color palette open through choices and closes on outside c
   await page.keyboard.press('Escape')
   await expect(palette).toHaveCount(0)
   await expect(trigger).toBeFocused()
-  await page.getByRole('button', { name: 'Применить', exact: true }).click()
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
   await expect.poll(async () => (await stored(page)).regions[0].color).toBe('#00aa77')
   await page.reload()
   await expect(page.getByRole('button', { name: 'Добавить область', exact: true })).toBeEnabled()

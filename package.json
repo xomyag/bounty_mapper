@@ -16,11 +16,21 @@
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort"
   },
   "dependencies": {
+    "@tiptap/core": "3.31.4",
+    "@tiptap/extension-image": "3.31.4",
+    "@tiptap/extension-table": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/react": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
+    "dompurify": "3.4.16",
     "fflate": "0.8.3",
     "konva": "10.7.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "react-konva": "19.3.0"
+    "react-konva": "19.3.0",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "unified": "11.0.5"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -74,18 +74,11 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .reload-project { margin-top: 12px; }
 
 .canvas-host.drawing { cursor: crosshair; }
-.region-tools, .region-draft-tools, .map-context-menu { position: absolute; z-index: 2; background: #202933; color: #e5e8eb; border: 1px solid #62717c; border-radius: 8px; box-shadow: 0 8px 24px #0006; }
-.region-tools { top: 12px; right: 12px; width: 256px; max-height: calc(100% - 56px); overflow-y: auto; padding: 12px; font-size: 13px; }
-.region-tools-heading { display: flex; align-items: center; justify-content: space-between; }
-.region-tools button, .region-draft-tools button, .map-context-menu button { border: 1px solid #56616c; border-radius: 6px; padding: 7px 9px; color: #e5e8eb; background: #2b3540; font: inherit; cursor: pointer; }
-.region-tools > button { width: 100%; margin-top: 8px; }
-.region-tools fieldset { border: 0; padding: 0; margin: 0 0 4px; min-width: 0; }
-.region-tools label { display: block; margin: 10px 0; }
-.region-tools input { display: block; width: 100%; min-width: 0; padding: 6px; border: 1px solid #56616c; border-radius: 4px; background: #11161b; color: #e5e8eb; font: inherit; }
+.region-draft-tools, .map-context-menu { position: absolute; z-index: 2; background: #202933; color: #e5e8eb; border: 1px solid #62717c; border-radius: 8px; box-shadow: 0 8px 24px #0006; }
+.region-draft-tools button, .map-context-menu button { border: 1px solid #56616c; border-radius: 6px; padding: 7px 9px; color: #e5e8eb; background: #2b3540; font: inherit; cursor: pointer; }
 .region-appearance { display: flex; align-items: center; gap: 12px; }
 .region-color-picker { flex: 0 0 54px; }
 .region-color-picker > span { display: block; margin-bottom: 4px; }
-.region-tools .color-trigger { width: 54px; height: 32px; padding: 3px; }
 .color-trigger span { display: block; width: 100%; height: 100%; border-radius: 2px; }
 .color-palette { position: fixed; z-index: 5; width: min(240px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow-y: auto; padding: 12px; border: 1px solid #62717c; border-radius: 8px; background: #202933; color: #e5e8eb; box-shadow: 0 8px 24px #0006; font-size: 13px; }
 .color-swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 12px 0; }
@@ -98,9 +91,55 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .color-channel span { flex: 0 0 88px; font-size: 12px; }
 .color-channel input { flex: 1; width: auto; margin: 0; }
 .region-appearance label:last-child { flex: 1; }
-.region-tools input[type=range] { padding: 0; margin-top: 8px; accent-color: #d7ad62; }
 .region-draft-tools { top: 12px; left: 12px; display: flex; gap: 10px; align-items: center; padding: 8px 12px; font-size: 13px; }
 .map-context-menu { padding: 5px; }
+
+.region-card { position: absolute; z-index: 2; top: 12px; right: 12px; width: min(410px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto; padding: 16px; background: #202933; border: 1px solid #62717c; border-radius: 8px; box-shadow: 0 8px 24px #0006; font-size: 13px; }
+.card-heading, .card-actions, .tag-entry { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-heading { position: sticky; top: -16px; background: #202933; z-index: 1; padding: 8px 0; }
+.card-heading h2 { font-size: 17px; margin: 0; overflow-wrap: anywhere; }
+.region-card h3 { font-size: 14px; margin: 20px 0 10px; }
+.region-card button { border: 1px solid #56616c; border-radius: 6px; padding: 7px 9px; background: #2b3540; color: #e5e8eb; font: inherit; }
+.region-card fieldset { border: 0; min-width: 0; margin: 0; padding: 0; }
+.region-card label { display: block; margin: 10px 0; }
+.region-card input, .region-card textarea { width: 100%; padding: 7px; border: 1px solid #56616c; border-radius: 4px; background: #11161b; color: #e5e8eb; font: inherit; line-height: 1.5; }
+.region-card textarea { resize: vertical; }
+.card-identity { display: grid; grid-template-columns: 70px 1fr; gap: 10px; }
+.card-status { color: #a4afb9; }
+.region-card .region-check { padding: 10px; border: 1px solid #56616c; border-radius: 6px; margin: 12px 0; }
+.region-tags { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; }
+.region-tags li { display: flex; align-items: center; gap: 6px; padding-left: 8px; border: 1px solid #56616c; border-radius: 6px; overflow-wrap: anywhere; max-width: 100%; }
+.region-tags button { border: 0; }
+.tag-entry input { min-width: 0; }
+.tag-entry button { flex-shrink: 0; }
+.card-actions { margin: 16px 0; }
+.details-error-overlay { position: absolute; z-index: 3; top: 12px; left: 12px; width: min(400px, calc(100% - 24px)); flex-wrap: wrap; border-radius: 8px; }
+.region-hover { position: absolute; z-index: 1; pointer-events: none; width: min(304px, calc(100% - 16px)); max-height: 164px; overflow: hidden; padding: 12px; border: 1px solid #62717c; border-radius: 6px; background: #202933f5; font-size: 13px; box-shadow: 0 6px 20px #0006; overflow-wrap: anywhere; }
+.region-hover p { white-space: pre-wrap; margin: 8px 0; max-height: 96px; overflow: hidden; }
+.region-hover small { color: #a4afb9; }
+
+.rich-field { margin: 14px 0; }
+.format-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 0; }
+.format-toolbar button { padding: 5px 7px; font-size: 12px; }
+.format-toolbar button[aria-pressed=true] { border-color: #dfb577; background: #54452e; }
+.rich-field .tiptap { min-height: 140px; padding: 10px; border: 1px solid #56616c; border-radius: 6px; background: #11161b; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.rich-field .tiptap:focus-visible { outline: 2px solid #dfb577; outline-offset: 2px; }
+.rich-field .tiptap[contenteditable=false] { opacity: .7; }
+.rich-field .tiptap p, .rich-text-view p { margin: 8px 0; min-height: 1em; }
+.rich-field .tiptap img, .rich-text-view img { display: block; max-width: 100%; height: auto; margin: 10px 0; }
+.rich-field .tiptap a, .rich-text-view a { color: #dfb577; text-decoration: underline; }
+.rich-field .tiptap blockquote, .rich-text-view blockquote { margin: 8px 0; padding-left: 12px; border-left: 3px solid #dfb577; }
+.rich-field .tiptap table, .rich-text-view table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.rich-field .tiptap th, .rich-field .tiptap td, .rich-text-view th, .rich-text-view td { border: 1px solid #62717c; padding: 5px; overflow-wrap: anywhere; min-width: 20px; position: relative; }
+.rich-field .tiptap .selectedCell::after { content: ''; position: absolute; inset: 0; background: #dfb57733; pointer-events: none; }
+.rich-field .tiptap pre, .rich-text-view pre { white-space: pre-wrap; padding: 8px; background: #11161b; }
+.rich-text-view { overflow-wrap: anywhere; line-height: 1.6; }
+.text-image { border: 1px solid transparent; }
+.text-image.ProseMirror-selectednode { border-color: #dfb577; }
+.link-entry { display: grid; gap: 6px; margin-bottom: 8px; }
+.card-map-tools { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid #56616c; padding-top: 10px; }
+.region-card .color-trigger { width: 54px; height: 32px; padding: 3px; }
+.region-card input[type=range] { padding: 0; accent-color: #d7ad62; }
 
 @media (max-width: 640px) {
   .control-panel { padding: 12px 16px; gap: 12px; flex-wrap: wrap; }

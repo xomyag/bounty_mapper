@@ -1,5 +1,6 @@
+import { migrateRegionText } from './migrateRegionText'
 export const DATABASE_NAME = 'bounty-mapper'
-export const DATABASE_VERSION = 3
+export const DATABASE_VERSION = 5
 
 export function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -43,6 +44,15 @@ export class IndexedDb {
         }
         if (event.oldVersion < 3) {
           db.createObjectStore('regions', { keyPath: 'id' }).createIndex('mapId', 'mapId')
+        }
+        if (event.oldVersion < 5) {
+          const cursor = request.transaction!.objectStore('regions').openCursor()
+          cursor.onsuccess = () => {
+            const row = cursor.result
+            if (!row) return
+            try { row.update(migrateRegionText(row.value)); row.continue() }
+            catch { request.transaction!.abort() }
+          }
         }
       }
       request.onblocked = () => {
