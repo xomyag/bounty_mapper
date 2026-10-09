@@ -1,6 +1,7 @@
 import type { RegionRepository } from '../application/regionRepository'
 import { RevisionConflictError } from '../application/projectRepository'
-import type { Map, Project } from '../domain/project'
+import type { Asset, Map, Project } from '../domain/project'
+import { documentAssetIds } from '../domain/richText'
 import { MAX_REGIONS, validateRegion } from '../domain/region'
 import type { Region } from '../domain/region'
 import { DATABASE_NAME, IndexedDb, requestResult } from './indexedDb'
@@ -16,18 +17,34 @@ export class IndexedDbRegionRepository implements RegionRepository {
       return regions.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
     })
   }
-  save(project: Project, mapId: string, regions: Region[]): Promise<Project> {
-    return this.db.transaction(['projects', 'maps', 'regions'], 'readwrite', async (tx) => {
+  loadAssets(mapId: string): Promise<Asset[]> {
+    return this.db.transaction(['maps', 'assets'], 'readonly', async (tx) => {
+      const map = await requestResult(tx.objectStore('maps').get(mapId)) as Map | undefined
+      return map ? requestResult(tx.objectStore('assets').index('projectId').getAll(map.projectId)) as Promise<Asset[]> : []
+    })
+  }
+  save(project: Project, mapId: string, regions: Region[], newAssets: Asset[] = []): Promise<Project> {
+    return this.db.transaction(['projects', 'maps', 'regions', 'assets'], 'readwrite', async (tx) => {
       const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
       if (stored.revision !== project.revision) throw new RevisionConflictError()
       const map = await requestResult(tx.objectStore('maps').get(mapId)) as Map | undefined
       if (!map || map.projectId !== project.id) throw new Error('Карта не принадлежит открытому проекту.')
       if (regions.length > MAX_REGIONS || new Set(regions.map((r) => r.id)).size !== regions.length) throw new Error('Некорректный список областей.')
+      for (const asset of newAssets) {
+        if (asset.projectId !== project.id || !asset.blob || asset.blob.size !== asset.byteSize || asset.byteSize < 1 || asset.byteSize > 64 * 1024 * 1024 ||
+            !['image/png', 'image/jpeg', 'image/webp'].includes(asset.mimeType) || !/^[a-f0-9]{64}$/.test(asset.checksum) ||
+            !Number.isSafeInteger(asset.pixelWidth) || !Number.isSafeInteger(asset.pixelHeight) || asset.pixelWidth < 1 || asset.pixelHeight < 1 || asset.pixelWidth * asset.pixelHeight > 64 * 1024 * 1024) throw new Error('Некорректное изображение карточки.')
+        await requestResult(tx.objectStore('assets').add(asset))
+      }
       for (const region of regions) {
         validateRegion(region)
         if (region.mapId !== mapId) throw new Error('Область принадлежит другой карте.')
         const existing = await requestResult(tx.objectStore('regions').get(region.id)) as Region | undefined
         if (existing && existing.mapId !== mapId) throw new Error('ID области занят другой картой.')
+        for (const id of [...documentAssetIds(region.gmNotes), ...documentAssetIds(region.playerDescription)]) {
+          const asset = await requestResult(tx.objectStore('assets').get(id)) as Asset | undefined
+          if (!asset || asset.projectId !== project.id) throw new Error('Изображение текста отсутствует или принадлежит другому проекту.')
+        }
       }
       const store = tx.objectStore('regions')
       const previous = await requestResult(store.index('mapId').getAllKeys(mapId))

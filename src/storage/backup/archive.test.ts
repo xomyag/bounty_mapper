@@ -15,7 +15,7 @@ describe('Project backup format', () => {
     const entries = unzipSync(bytes)
     expect(Object.keys(entries).sort()).toEqual(['assets/', 'assets/0.png', 'assets/1.png', 'manifest.json', 'project.json'])
     const manifest = read(entries['manifest.json'])
-    expect(manifest.formatVersion).toBe(2)
+    expect(manifest.formatVersion).toBe(4)
     for (const file of manifest.files) {
       expect(file.byteSize).toBe(entries[file.path].length)
       expect(file.sha256).toBe(await sha256(entries[file.path]))

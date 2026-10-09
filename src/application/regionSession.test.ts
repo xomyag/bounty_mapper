@@ -5,8 +5,10 @@ import { IndexedDbMapImageRepository } from '../storage/indexedDbMapImageReposit
 import { IndexedDbRegionRepository } from '../storage/indexedDbRegionRepository'
 import { testAsset } from '../storage/testAsset'
 import { ProjectSession } from './projectSession'
-import { RegionSession } from './regionSession'
+import { detailsOf, RegionSession } from './regionSession'
 import { translateVertices } from '../domain/region'
+import { markdownToDocument } from '../storage/migrateRegionText'
+import { emptyDocument } from '../domain/richText'
 
 async function setup() {
   const factory = new IDBFactory()
@@ -23,6 +25,93 @@ async function create(session: RegionSession) {
   session.start(); session.addPoint({ x: 0, y: 0 }); session.addPoint({ x: 10, y: 0 }); session.addPoint({ x: 10, y: 10 }); session.addPoint({ x: 0, y: 10 }); await session.finish()
 }
 describe('Region commands and saved history', () => {
+  it('opens empty regions for editing, uses saved view for filled regions and ignores technical blocks/number/color', async () => {
+    const { session, repo, mapId } = await setup(); await create(session)
+    const a = session.getSnapshot().regions[0]
+    session.openCard(a.id)
+    expect(session.getSnapshot().cardMode).toBe('edit')
+    expect(session.hasUnsavedDetails()).toBe(false)
+    session.editDetails(a.id, { ...detailsOf(a), number: '7', color: '#ef6543', gmNotes: emptyDocument() })
+    await session.saveDetails(); session.closeCard(); session.openCard(a.id)
+    expect(session.getSnapshot().cardMode).toBe('edit')
+    const fields = session.getSnapshot().details[a.id].fields
+    session.editDetails(a.id, { ...fields, gmNotes: markdownToDocument('# Зал\n**Тайна**') })
+    await session.saveDetails(); session.closeCard(); session.openCard(a.id)
+    expect(session.getSnapshot().cardMode).toBe('view')
+    expect((await repo.load(mapId))[0].gmNotes).toEqual(markdownToDocument('# Зал\n**Тайна**'))
+  })
+  it('prompts on closing/switching a dirty card; stay/discard/save apply only to its region', async () => {
+    const { session, repo, mapId } = await setup(); await create(session); await create(session)
+    const [a, b] = session.getSnapshot().regions
+    session.openCard(a.id)
+    session.editDetails(a.id, { ...detailsOf(a), title: 'Мой зал', gmNotes: markdownToDocument('Черновик A') })
+    session.openCard(b.id)
+    expect(session.getSnapshot()).toMatchObject({ cardId: a.id, pendingIntent: { kind: 'open', id: b.id } })
+    await session.resolveCardIntent('stay')
+    expect(session.getSnapshot().details[a.id].fields.title).toBe('Мой зал')
+    expect((await repo.load(mapId))[0].title).toBe(a.title)
+    session.openCard(b.id); await session.resolveCardIntent('save')
+    expect(session.getSnapshot()).toMatchObject({ cardId: b.id, cardMode: 'edit' })
+    expect((await repo.load(mapId)).find((r) => r.id === a.id)?.title).toBe('Мой зал')
+    session.editDetails(b.id, { ...detailsOf(b), gmNotes: markdownToDocument('Отбросить B') })
+    session.closeCard(); await session.resolveCardIntent('discard')
+    expect(session.getSnapshot().cardId).toBeUndefined()
+    expect((await repo.load(mapId)).find((r) => r.id === b.id)?.gmNotes).toEqual(emptyDocument())
+  })
+  it('keeps the draft and pending destination on a write error; rejects export and retries explicitly', async () => {
+    const { session, repo, mapId } = await setup(); await create(session)
+    const a = session.getSnapshot().regions[0]
+    session.openCard(a.id); session.editDetails(a.id, { ...detailsOf(a), gmNotes: markdownToDocument('Не потерять') })
+    await expect(session.flushDetails()).rejects.toThrow('Сначала сохраните')
+    session.closeCard()
+    vi.spyOn(repo, 'save').mockRejectedValueOnce(new Error('Нет места'))
+    await session.resolveCardIntent('save')
+    expect(session.getSnapshot()).toMatchObject({ cardId: a.id, pendingIntent: { kind: 'close' }, details: { [a.id]: { phase: 'error', error: 'Нет места' } } })
+    expect((await repo.load(mapId))[0].gmNotes).toEqual(emptyDocument())
+    await session.resolveCardIntent('stay'); await session.saveDetails()
+    expect(session.getSnapshot().cardMode).toBe('view')
+    expect((await repo.load(mapId))[0].gmNotes).toEqual(markdownToDocument('Не потерять'))
+  })
+  it('preserves later documents through geometry undo/redo and cancels all draft fields together', async () => {
+    const { session, repo, mapId } = await setup(); await create(session)
+    const a = session.getSnapshot().regions[0]
+    await session.change({ ...a, vertices: translateVertices(a.vertices, { x: 20, y: 10 }) })
+    session.openCard(a.id); session.editDetails(a.id, { ...detailsOf(a), gmNotes: markdownToDocument('Описание'), title: 'Зал' })
+    await session.saveDetails(); await session.undo()
+    expect((await repo.load(mapId))[0]).toMatchObject({ vertices: a.vertices, gmNotes: markdownToDocument('Описание'), title: 'Зал' })
+    await session.redo(); session.beginEdit()
+    const saved = structuredClone(session.getSnapshot().regions[0])
+    session.editDetails(a.id, { ...detailsOf(saved), title: 'Отмена', color: '#ff0000', tags: ['новый'], checks: [{ id: '1', condition: 'Новая', ability: '', result: '' }] })
+    session.cancelEdit()
+    expect(session.hasUnsavedDetails()).toBe(false)
+    expect((await repo.load(mapId))[0]).toEqual(saved)
+  })
+  it('keeps edits bound to their ID during a delayed write and does not insert a written asset twice', async () => {
+    const { session, repo, projects, mapId } = await setup(); await create(session); await create(session)
+    const [a, b] = session.getSnapshot().regions
+    session.openCard(a.id)
+    const asset = { ...testAsset(projects.getSnapshot().project!.id), id: 'inline', checksum: 'a'.repeat(64) }
+    session.addDraftAsset(a.id, asset)
+    const gmNotes = { type: 'doc' as const, content: [{ type: 'image', attrs: { assetId: asset.id, alt: '' } }] }
+    session.editDetails(a.id, { ...detailsOf(a), gmNotes, title: 'Первая версия' })
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const save = repo.save.bind(repo)
+    const spy = vi.spyOn(repo, 'save').mockImplementationOnce(async (...args) => { await gate; return save(...args) })
+    const writing = session.saveDetails()
+    session.openCard(b.id); session.closeCard()
+    expect(session.getSnapshot().cardId).toBe(a.id)
+    session.editDetails(a.id, { ...session.getSnapshot().details[a.id].fields, title: 'Последняя версия' })
+    release(); await writing
+    expect(session.getSnapshot().details[a.id]?.error).toBeUndefined()
+    expect(session.hasUnsavedDetails()).toBe(false)
+    expect(session.getSnapshot().cardMode).toBe('view')
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(spy.mock.calls[1][3]).toEqual([])
+    const rows = await repo.load(mapId)
+    expect(rows.find((r) => r.id === a.id)).toMatchObject({ title: 'Последняя версия', gmNotes })
+    expect(rows.find((r) => r.id === b.id)).toEqual(b)
+  })
   it('moves and removes draft vertices without storage/history writes until valid completion', async () => {
     const { session, projects, repo, mapId } = await setup()
     const revision = projects.getSnapshot().project!.revision

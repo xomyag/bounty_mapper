@@ -14,7 +14,7 @@ import { downloadArchive } from './features/projects/downloadArchive'
 import { RegionSession } from './application/regionSession'
 import type { RegionRepository } from './application/regionRepository'
 import { IndexedDbRegionRepository } from './storage/indexedDbRegionRepository'
-import { RegionTools } from './features/map/RegionTools'
+import { RegionCard } from './features/regions/RegionCard'
 
 const MapCanvas = lazy(() => import('./features/map/MapCanvas').then((module) => ({ default: module.MapCanvas })))
 
@@ -36,6 +36,9 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   const [regions] = useState(() => new RegionSession(regionRepository, session))
   const regionState = useSyncExternalStore(regions.subscribe, regions.getSnapshot)
   const regionBusy = regions.busy()
+  const unsavedDetails = regions.hasUnsavedDetails()
+  const detailsSaving = regions.detailsSaving()
+  const detailsError = Object.values(regionState.details).find((draft) => draft.phase === 'error')
   const fileInput = useRef<HTMLInputElement>(null)
   const archiveInput = useRef<HTMLInputElement>(null)
   const [backups] = useState(() => new ProjectBackupSession(session, backupRepository))
@@ -45,9 +48,9 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   const mapBusy = maps.busy() || regionBusy
   const projectId = state.project?.id
   const openVersion = session.getOpenVersion()
-  const canWriteImage = !!state.project && !state.loading && !mapBusy && state.status === 'saved' && mapState.projectId === projectId
+  const canWriteImage = !!state.project && !state.loading && !mapBusy && !unsavedDetails && state.status === 'saved' && mapState.projectId === projectId
   const mapId = mapState.projectId === projectId ? mapState.image.map?.id : undefined
-  const selectedRegion = regionState.mapId === mapId ? regionState.regions.find((region) => region.id === regionState.selectedId) : undefined
+  const cardRegion = regionState.mapId === mapId ? regionState.regions.find((region) => region.id === regionState.cardId) : undefined
   const canEditRegion = regions.ready() && !maps.busy() && !backupBusy && regionState.mapId === mapId
   const startRegion = () => {
     regions.start()
@@ -71,11 +74,11 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
     return () => window.clearTimeout(timer)
   }, [session, state])
   useEffect(() => {
-    if (!session.hasUnsavedChanges() && !['uploading', 'saving'].includes(mapState.phase) && regionState.phase !== 'saving' && !backupBusy) return
+    if (!session.hasUnsavedChanges() && !unsavedDetails && !['uploading', 'saving'].includes(mapState.phase) && regionState.phase !== 'saving' && !backupBusy) return
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [session, state.status, mapState.phase, regionState.phase, backupBusy])
+  }, [session, state.status, mapState.phase, regionState.phase, backupBusy, unsavedDetails])
   return (
     <div className="app-shell">
       <header className="control-panel">
@@ -88,11 +91,11 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
         </a>
         <div className="project-state">
           {state.project && <span className="project-name" title={state.project.name}>{state.project.name}</span>}
-          <span role="status">{regionState.phase === 'saving' ? 'Сохранение областей…' : regionState.phase === 'loading' ? 'Чтение областей…' : regionState.error ? 'Ошибка области' : backupBusy ? backupState.phase === 'exporting' ? 'Экспорт проекта…' : backupState.phase === 'validating' ? 'Проверка архива…' : 'Сохранение копии…' : mapState.phase === 'error' ? 'Ошибка изображения карты' : mapState.phase === 'uploading' ? 'Загрузка изображения…' : mapState.phase === 'saving' ? 'Сохранение изображения…' : mapState.phase === 'loading' ? 'Чтение карты…' : state.loading ? 'Открытие…' : !state.project && state.error ? 'Ошибка открытия хранилища' : statusLabels[state.status]}</span>
+          <span role="status">{detailsSaving ? 'Сохранение карточек…' : detailsError ? 'Ошибка сохранения карточки' : unsavedDetails ? 'Есть изменения в карточках' : regionState.phase === 'saving' ? 'Сохранение областей…' : regionState.phase === 'loading' ? 'Чтение областей…' : regionState.error ? 'Ошибка области' : backupBusy ? backupState.phase === 'exporting' ? 'Экспорт проекта…' : backupState.phase === 'validating' ? 'Проверка архива…' : 'Сохранение копии…' : mapState.phase === 'error' ? 'Ошибка изображения карты' : mapState.phase === 'uploading' ? 'Загрузка изображения…' : mapState.phase === 'saving' ? 'Сохранение изображения…' : mapState.phase === 'loading' ? 'Чтение карты…' : state.loading ? 'Открытие…' : !state.project && state.error ? 'Ошибка открытия хранилища' : statusLabels[state.status]}</span>
         </div>
         <nav className="panel-actions" aria-label="Панель управления">
-          <button type="button" disabled={state.loading || mapBusy || backupBusy} onClick={() => setDialog('projects')}>Проекты</button>
-          {state.project && <button type="button" disabled={state.loading || mapBusy || backupBusy} onClick={() => setDialog('edit')}>Контекст</button>}
+          <button type="button" disabled={state.loading || mapBusy || backupBusy || unsavedDetails} onClick={() => setDialog('projects')}>Проекты</button>
+          {state.project && <button type="button" disabled={state.loading || mapBusy || backupBusy || unsavedDetails} onClick={() => setDialog('edit')}>Контекст</button>}
           {state.project && <>
             <input ref={fileInput} className="file-input" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" aria-label="Файл изображения карты" onChange={(event) => {
               const file = event.target.files?.[0]
@@ -108,13 +111,13 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
           <button type="button" disabled={!canEditRegion || !!regionState.draft} onClick={startRegion}>Добавить область</button>
           <button type="button" disabled={!canEditRegion || !!regionState.draft || !regionState.canUndo} onClick={() => { void regions.undo() }}>Отменить</button>
           <button type="button" disabled={!canEditRegion || !!regionState.draft || !regionState.canRedo} onClick={() => { void regions.redo() }}>Повторить</button>
-          <button type="button" disabled={!state.project || state.loading || mapBusy || backupBusy} onClick={() => { void backups.export(downloadArchive) }}>Экспорт проекта</button>
+          <button type="button" disabled={!state.project || state.loading || mapBusy || backupBusy || unsavedDetails} onClick={() => { void backups.export(downloadArchive, regions.flushDetails) }}>Экспорт проекта</button>
           <input ref={archiveInput} className="file-input" type="file" accept=".zip,application/zip" aria-label="Архив проекта" onChange={(event) => {
             const file = event.target.files?.[0]
             event.target.value = ''
             if (file) void backups.import(file)
           }} />
-          <button type="button" disabled={state.loading || mapBusy || backupBusy || session.hasUnsavedChanges()} onClick={() => archiveInput.current?.click()}>Импорт проекта</button>
+          <button type="button" disabled={state.loading || mapBusy || backupBusy || unsavedDetails || session.hasUnsavedChanges()} onClick={() => archiveInput.current?.click()}>Импорт проекта</button>
           <button type="button" disabled title="Навигация станет доступна после добавления объектов">
             Навигация
           </button>
@@ -130,6 +133,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
       {backupState.message && <div className={backupState.phase === 'error' ? 'error-banner' : 'backup-message'}><span role={backupState.phase === 'error' ? 'alert' : 'status'}>{backupState.message}</span><button type="button" onClick={backups.dismiss} aria-label="Закрыть сообщение об архиве">Закрыть</button></div>}
       {regionState.error && <div className="error-banner" role="alert"><span>{regionState.error}</span>{regionState.canRetry && <button type="button" disabled={mapBusy || state.loading || backupBusy} onClick={() => { void regions.retry() }}>{regions.hasLoaded() ? 'Повторить запись областей' : 'Повторить чтение областей'}</button>}<button type="button" disabled={regionBusy || !regions.hasLoaded()} onClick={regions.dismiss}>Закрыть ошибку области</button></div>}
       <main id="map-workspace" className="map-workspace" aria-label="Рабочая область карты" tabIndex={-1}>
+        {detailsError && regionState.details[cardRegion?.id ?? '']?.phase !== 'error' && <div className="error-banner details-error-overlay" role="alert"><span>{detailsError.error} Тексты сохранены в черновиках карточек.</span><button type="button" disabled={state.loading || backupBusy} onClick={() => { void regions.saveDetails() }}>Повторить запись карточек</button></div>}
         {mapId && <Suspense fallback={<p className="map-overlay" role="status">Подготовка карты…</p>}><MapCanvas key={projectId} image={mapState.image} fitVersion={fitVersion} regions={regionState} session={regions} editable={canEditRegion} /></Suspense>}
         {!mapId && <div className="empty-state">
           <span className="workspace-label">РАБОЧАЯ ОБЛАСТЬ</span>
@@ -137,7 +141,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
           <p>{state.project ? 'Загрузите PNG, JPEG или WebP через верхнюю панель.' : 'Создайте или откройте проект в верхней панели.'}</p>
         </div>}
         {regionState.draft && <div className="region-draft-tools" role="group" aria-label="Создание области"><span>Вершин: {regionState.draft.length}</span><button type="button" disabled={!canEditRegion} onClick={() => { void regions.finish() }}>Готово</button><button type="button" disabled={regionBusy} onClick={regions.cancel}>Отменить контур</button></div>}
-        {selectedRegion && !regionState.draft && <RegionTools key={`${selectedRegion.id}:${selectedRegion.number}:${selectedRegion.title}:${selectedRegion.color}:${selectedRegion.fillOpacity}`} region={selectedRegion} state={regionState} session={regions} disabled={!canEditRegion} />}
+        {cardRegion && <RegionCard key={cardRegion.id} region={cardRegion} state={regionState} session={regions} disabled={mapBusy || backupBusy || (state.loading && !detailsSaving) || session.hasUnsavedChanges()} geometryDisabled={!canEditRegion} />}
       </main>
       {dialog && <ProjectDialog key={dialog} mode={dialog} repository={repository} session={session} onClose={() => setDialog(null)} onEdit={() => setDialog('edit')} />}
     </div>

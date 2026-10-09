@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { independentCopy } from '../application/projectBackupRepository'
-import { translateVertices } from '../domain/region'
+import { emptyRegionContent, translateVertices } from '../domain/region'
 import type { Region } from '../domain/region'
 import { IndexedDbRegionRepository } from './indexedDbRegionRepository'
 import { IndexedDbProjectBackupRepository } from './indexedDbProjectBackupRepository'
@@ -10,9 +10,10 @@ import { DATABASE_NAME, IndexedDb, requestResult } from './indexedDb'
 import { testSnapshot, testDecode } from './backup/testSnapshot'
 import { buildArchive, parseArchive, sha256 } from './backup/archive'
 import { unzipSync, zipSync } from 'fflate'
+import { markdownToDocument } from './migrateRegionText'
 
 const vertices = [{ x: -10, y: 20 }, { x: 30, y: 20 }, { x: 30, y: 50 }, { x: -10, y: 50 }]
-function region(mapId: string): Region { return { id: crypto.randomUUID(), mapId, number: 7, title: 'Сокровищница', order: 0, color: '#ef6543', fillOpacity: 0.4, vertices: structuredClone(vertices) } }
+function region(mapId: string): Region { return { ...emptyRegionContent(), titleCustomized: true, id: crypto.randomUUID(), mapId, number: 7, title: 'Сокровищница', order: 0, color: '#ef6543', fillOpacity: 0.4, vertices: structuredClone(vertices) } }
 
 describe('Region persistence, migrations and archives', () => {
   it('migrates a real BM-004 database v2 without losing its project, map or image', async () => {
@@ -73,6 +74,7 @@ describe('Region persistence, migrations and archives', () => {
     const backups = new IndexedDbProjectBackupRepository(() => factory)
     const snapshot = await testSnapshot()
     snapshot.regions = [region(snapshot.maps[0].id), region(snapshot.maps[2].id)]
+    Object.assign(snapshot.regions[0], { gmNotes: markdownToDocument('# Тайна\n**Золото**'), playerDescription: markdownToDocument('Для игроков'), tags: ['ловушка'], checks: [{ id: 'check-1', condition: 'Открыть дверь', ability: 'Сила', dc: 15, result: 'Дверь открыта' }, { id: 'check-2', condition: '', ability: '', result: '' }] })
     await backups.insertCopy(snapshot)
     const bytes = await buildArchive(await backups.snapshot(snapshot.project.id))
     const restored = await parseArchive(new Blob([new Uint8Array(bytes)]), testDecode)
@@ -80,8 +82,103 @@ describe('Region persistence, migrations and archives', () => {
     const copy = independentCopy(restored); await backups.insertCopy(copy)
     expect(copy.regions.every((r) => copy.maps.some((m) => m.id === r.mapId))).toBe(true)
     expect(copy.regions.some((r) => snapshot.regions.some((s) => s.id === r.id))).toBe(false)
+    expect(copy.regions[0].checks[0].id).not.toBe(snapshot.regions[0].checks[0].id)
+    expect(copy.regions[0].gmNotes).toEqual(snapshot.regions[0].gmNotes)
     await new IndexedDbRegionRepository(() => factory).save(copy.project, copy.regions[0].mapId, [{ ...copy.regions[0], title: 'Только копия', vertices: translateVertices(vertices, { x: 5, y: 10 }) }])
     expect((await backups.snapshot(snapshot.project.id)).regions).toEqual(snapshot.regions)
+  })
+  it.each([3, 4])('migrates a real v%s database without changing geometry, notes or project revision', async (version) => {
+    const factory = new IDBFactory()
+    const snapshot = await testSnapshot()
+    const old = region(snapshot.maps[0].id)
+    const markdown = '# Старая тайна\n\n- **Золото**\n\n| Навык | СЛ |\n| --- | --- |\n| Сила | 15 |'
+    if (version === 4) old.gmNotes = markdownToDocument(markdown)
+    const { gmNotes: _gm, playerDescription: _player, checks: _checks, tags: _tags, titleCustomized: _custom, ...legacy } = old
+    void [_gm, _player, _checks, _tags, _custom]
+    if (version === 4) Object.assign(legacy, { gmNotesMd: markdown, playerDescriptionMd: '', checks: [], tags: [] })
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const request = factory.open(DATABASE_NAME, version)
+      request.onupgradeneeded = () => {
+        const db = request.result
+        db.createObjectStore('projects', { keyPath: 'id' })
+        db.createObjectStore('maps', { keyPath: 'id' }).createIndex('projectId', 'projectId')
+        db.createObjectStore('assets', { keyPath: 'id' }).createIndex('projectId', 'projectId')
+        db.createObjectStore('imagePlacements', { keyPath: 'id' }).createIndex('mapId', 'mapId', { unique: true })
+        db.createObjectStore('regions', { keyPath: 'id' }).createIndex('mapId', 'mapId')
+        db.createObjectStore('settings')
+      }
+      request.onsuccess = () => resolve(request.result)
+    })
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(['projects', 'maps', 'regions'], 'readwrite')
+      tx.objectStore('projects').add(snapshot.project); tx.objectStore('maps').add(snapshot.maps[0]); tx.objectStore('regions').add(legacy)
+      tx.oncomplete = () => resolve()
+    }); db.close()
+    expect(await new IndexedDbRegionRepository(() => factory).load(old.mapId)).toEqual([old])
+    expect((await new IndexedDbProjectBackupRepository(() => factory).snapshot(snapshot.project.id)).project).toEqual(snapshot.project)
+  })
+  it('imports v3 Markdown into one visual document and validates image references in v4', async () => {
+    const snapshot = await testSnapshot(); snapshot.regions = [region(snapshot.maps[0].id)]
+    const files = unzipSync(await buildArchive(snapshot))
+    const document = JSON.parse(new TextDecoder().decode(files['project.json']))
+    const r = document.regions[0]
+    delete r.gmNotes; delete r.playerDescription; delete r.titleCustomized
+    r.gmNotesMd = '# Старый зал\n**Тайна**'; r.playerDescriptionMd = '> Описание'
+    files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
+    const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
+    manifest.formatVersion = 3
+    const entry = manifest.files.find((f: { path: string }) => f.path === 'project.json')
+    entry.byteSize = files['project.json'].length; entry.sha256 = await sha256(files['project.json'])
+    files['manifest.json'] = new TextEncoder().encode(JSON.stringify(manifest))
+    const restored = await parseArchive(new Blob([new Uint8Array(zipSync(files))]), testDecode)
+    expect(restored.regions[0].gmNotes).toEqual(markdownToDocument(r.gmNotesMd))
+    expect(restored.regions[0]).not.toHaveProperty('gmNotesMd')
+    restored.regions[0].gmNotes = { type: 'doc', content: [{ type: 'image', attrs: { assetId: 'missing', alt: '' } }] }
+    await expect(buildArchive(restored)).rejects.toThrow('отсутствующее изображение')
+  })
+  it('saves documents and new assets atomically, retains shared assets on image removal and remaps them in copies', async () => {
+    const factory = new IDBFactory()
+    const backups = new IndexedDbProjectBackupRepository(() => factory)
+    const snapshot = await testSnapshot(); snapshot.regions = [region(snapshot.maps[0].id)]
+    await backups.insertCopy(snapshot)
+    const repo = new IndexedDbRegionRepository(() => factory)
+    const image = { ...snapshot.assets[0], id: 'text-image' }
+    const doc = { type: 'doc' as const, content: [{ type: 'image', attrs: { assetId: image.id, alt: '' } }] }
+    const r = { ...snapshot.regions[0], gmNotes: doc, playerDescription: structuredClone(doc) }
+    const put = IDBObjectStore.prototype.put
+    const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) {
+      if (this.name === 'projects') throw new DOMException('Нет места для картинки', 'QuotaExceededError')
+      return put.apply(this, args)
+    })
+    await expect(repo.save(snapshot.project, r.mapId, [r], [image])).rejects.toThrow('Нет места')
+    spy.mockRestore()
+    expect((await backups.snapshot(snapshot.project.id)).assets).toHaveLength(2)
+    expect(await repo.load(r.mapId)).toEqual(snapshot.regions)
+    const project = await repo.save(snapshot.project, r.mapId, [r], [image])
+    await repo.save(project, r.mapId, [{ ...r, gmNotes: emptyRegionContent().gmNotes }])
+    const stored = await backups.snapshot(project.id)
+    expect(stored.assets).toHaveLength(3)
+    expect(stored.regions[0].playerDescription).toEqual(doc)
+    const parsed = await parseArchive(new Blob([new Uint8Array(await buildArchive(stored))]), testDecode)
+    const copy = independentCopy(parsed)
+    const copiedId = copy.regions[0].playerDescription.content[0].attrs!.assetId
+    expect(copiedId).not.toBe(image.id)
+    expect(copy.assets.some((a) => a.id === copiedId)).toBe(true)
+    await backups.insertCopy(copy)
+  })
+  it('imports legacy archive v2 with empty new fields and unchanged contour', async () => {
+    const snapshot = await testSnapshot(); snapshot.regions = [region(snapshot.maps[0].id)]
+    const files = unzipSync(await buildArchive(snapshot))
+    const document = JSON.parse(new TextDecoder().decode(files['project.json']))
+    for (const region of document.regions) for (const field of ['gmNotes', 'playerDescription', 'titleCustomized', 'checks', 'tags']) delete region[field]
+    files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
+    const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
+    manifest.formatVersion = 2
+    const entry = manifest.files.find((f: { path: string }) => f.path === 'project.json')
+    entry.byteSize = files['project.json'].length; entry.sha256 = await sha256(files['project.json'])
+    files['manifest.json'] = new TextEncoder().encode(JSON.stringify(manifest))
+    const restored = await parseArchive(new Blob([new Uint8Array(zipSync(files))]), testDecode)
+    expect(restored.regions).toEqual(snapshot.regions)
   })
   it('imports a checksum-valid BM-004 archive v1 as an empty region collection', async () => {
     const snapshot = await testSnapshot()

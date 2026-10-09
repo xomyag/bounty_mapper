@@ -6,6 +6,7 @@ import type { Camera, Point } from '../../domain/viewport'
 import { fitBounds, screenToWorld, zoomAt } from '../../domain/viewport'
 import { labelAnchor, projectOnEdge, translateVertices } from '../../domain/region'
 import type { Region } from '../../domain/region'
+import { documentText } from '../../domain/richText'
 import type { RegionSession, RegionState } from '../../application/regionSession'
 import { decodeImage } from './prepareImage'
 
@@ -17,6 +18,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable }: Pro
   const host = useRef<HTMLDivElement>(null)
   const stage = useRef<Konva.Stage>(null)
   const doubleClickTarget = useRef<{ kind: 'draft' | 'region'; index: number; regionId?: string } | undefined>(undefined)
+  const draggingRegion = useRef(false)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [cameraState, setCameraState] = useState<{ key: string; camera: Camera }>()
   const [bitmap, setBitmap] = useState<{ assetId: string; image: HTMLImageElement }>()
@@ -24,6 +26,9 @@ export function MapCanvas({ image, fitVersion, regions, session, editable }: Pro
   const [pointer, setPointer] = useState<Point>()
   const [preview, setPreview] = useState<Region>()
   const [menu, setMenu] = useState<{ x: number; y: number; point: Point }>()
+  const [hover, setHover] = useState<{ id: string; x: number; y: number }>()
+  const hoverRegion = !regions.draft && !regions.vertexMode && !preview && hover ? regions.regions.find((r) => r.id === hover.id) : undefined
+  const hoverNotes = hoverRegion ? documentText(hoverRegion.gmNotes) : ''
   const asset = image.background?.asset
   const placement = image.background?.placement
   const cameraKey = `${image.map?.id}:${asset?.id}:${size.width}:${size.height}:${fitVersion}`
@@ -96,7 +101,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable }: Pro
       }}
       onKeyDown={(event) => {
         if (event.target !== host.current) return
-        if (event.key === 'Escape') { setMenu(undefined); if (regions.draft) session.cancel(); else session.select() }
+        if (event.key === 'Escape') { setMenu(undefined); if (regions.draft) session.cancel(); else if (regions.cardId) session.closeCard(); else session.select() }
         else if (event.key === 'Enter' && regions.draft && editable) void session.finish()
         else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && editable) { if (event.shiftKey) void session.redo(); else void session.undo() }
         else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && editable) void session.redo()
@@ -137,12 +142,16 @@ export function MapCanvas({ image, fitVersion, regions, session, editable }: Pro
               const vertices = selected && regions.vertexMode && !regions.draft
               const anchor = labelAnchor(region.vertices)
               return <Group key={region.id} draggable={editable && !regions.draft && !regions.vertexMode}
-                onMouseDown={(event) => { if (!regions.draft && !regions.vertexMode) { event.cancelBubble = true; focus(); session.select(region.id) } }}
-                onClick={(event) => { if (!regions.draft) { event.cancelBubble = true; if (!selected) session.select(region.id) } }}
-                onDragStart={(event) => { event.cancelBubble = true; session.select(region.id) }}
+                onMouseDown={(event) => { if (!regions.draft && !regions.vertexMode) { event.cancelBubble = true; focus() } }}
+                onClick={(event) => { if (!regions.draft) { event.cancelBubble = true; if (event.evt.button === 0 && !regions.vertexMode) { setHover(undefined); session.openCard(region.id) } } }}
+                onTap={(event) => { event.cancelBubble = true; if (!regions.draft && !regions.vertexMode) { setHover(undefined); session.openCard(region.id) } }}
+                onMouseMove={() => { const p = stage.current?.getPointerPosition(); if (p && !draggingRegion.current) setHover({ id: region.id, x: Math.max(8, Math.min(p.x + 16, size.width - 320)), y: Math.max(8, Math.min(p.y + 16, size.height - 180)) }) }}
+                onMouseLeave={() => setHover(undefined)}
+                onDragStart={(event) => { event.cancelBubble = true; draggingRegion.current = true; setHover(undefined); session.select(region.id) }}
                 onDragMove={(event) => { event.cancelBubble = true }}
                 onDragEnd={(event) => {
                   event.cancelBubble = true
+                  draggingRegion.current = false
                   const offset = { x: event.target.x(), y: event.target.y() }
                   event.target.position({ x: 0, y: 0 })
                   savePreview({ ...saved, vertices: translateVertices(saved.vertices, offset) })
@@ -201,6 +210,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable }: Pro
       {asset && bitmap?.assetId !== asset.id && !decodeError && <p className="map-overlay" role="status">Подготовка изображения…</p>}
       {decodeError && <p className="map-overlay form-error" role="alert">{decodeError}</p>}
       {menu && <div className="map-context-menu" role="menu" style={{ left: menu.x, top: menu.y }}><button type="button" role="menuitem" onClick={() => { session.start(menu.point); setMenu(undefined); focus() }}>Добавить область</button></div>}
+      {hoverRegion && hover && hoverNotes && <aside className="region-hover" role="tooltip" style={{ left: hover.x, top: hover.y }}><strong>{hoverRegion.number}. {hoverRegion.title}</strong><p>{hoverNotes.length > 450 ? `${hoverNotes.slice(0, 450)}…` : hoverNotes}</p><small>Полный текст — в карточке по клику</small></aside>}
       <p id="map-controls-hint" className="map-hint">{regions.draft ? 'Клик — вершина · Ручки — перемещение · Двойной клик по ручке — удалить · Enter / двойной клик по фону — готово · Esc — отмена' : regions.vertexMode ? 'Перетащите вершину · Клик по ребру — добавить · Двойной клик по ручке / Delete — удалить' : 'Фон — перемещение вида · Колесо — масштаб · Ctrl+Z / Ctrl+Shift+Z — отмена / повтор'}</p>
     </div>
   )

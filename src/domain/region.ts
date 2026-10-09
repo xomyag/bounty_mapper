@@ -1,14 +1,20 @@
 import type { Point } from './viewport'
+import { documentHasContent, emptyDocument, validateRichDocument } from './richText'
+import type { RichDocument } from './richText'
 
 export const MAX_REGION_VERTICES = 512
 export const MAX_REGIONS = 2048
-export interface Region {
+export interface RegionCheck { id: string; condition: string; ability: string; dc?: number; result: string }
+export interface RegionContent { gmNotes: RichDocument; playerDescription: RichDocument; checks: RegionCheck[]; tags: string[] }
+export const emptyRegionContent = (): RegionContent => ({ gmNotes: emptyDocument(), playerDescription: emptyDocument(), checks: [], tags: [] })
+export interface Region extends RegionContent {
   id: string
   mapId: string
   vertices: Point[]
   order: number
   number: number
   title: string
+  titleCustomized: boolean
   color: string
   fillOpacity: number
 }
@@ -50,8 +56,22 @@ export function validatePolygon(vertices: Point[]): void {
 export function validateRegion(region: Region): void {
   if (!region.id || !region.mapId || !Number.isSafeInteger(region.number) || region.number < 1 ||
       !Number.isSafeInteger(region.order) || region.order < 0 || typeof region.title !== 'string' || !region.title.trim() ||
-      !/^#[a-f0-9]{6}$/i.test(region.color) || !Number.isFinite(region.fillOpacity) || region.fillOpacity < 0 || region.fillOpacity > 1) throw new Error('Некорректные свойства области.')
+      typeof region.titleCustomized !== 'boolean' || !/^#[a-f0-9]{6}$/i.test(region.color) || !Number.isFinite(region.fillOpacity) || region.fillOpacity < 0 || region.fillOpacity > 1) throw new Error('Некорректные свойства области.')
   validatePolygon(region.vertices)
+  validateRegionContent(region)
+}
+
+export function validateRegionContent(content: RegionContent): void {
+  validateRichDocument(content.gmNotes); validateRichDocument(content.playerDescription)
+  const text = (value: unknown) => typeof value === 'string' && value.length <= 262144
+  if (!Array.isArray(content.checks) || content.checks.length > 256 ||
+      !Array.isArray(content.tags) || content.tags.length > 256 || content.tags.some((t) => typeof t !== 'string' || !t.trim() || t.length > 120) ||
+      new Set(content.tags).size !== content.tags.length || content.checks.some((c) => !c || typeof c.id !== 'string' || !c.id ||
+        !text(c.condition) || !text(c.ability) || !text(c.result) || (c.dc !== undefined && (!Number.isSafeInteger(c.dc) || c.dc < 0))) ||
+      new Set(content.checks.map((c) => c.id)).size !== content.checks.length) throw new Error('Некорректное содержимое области или превышен лимит текста, проверок и тегов.')
+}
+export function regionHasUserContent(region: Region): boolean {
+  return region.titleCustomized || documentHasContent(region.gmNotes) || documentHasContent(region.playerDescription) || !!region.checks.length || !!region.tags.length
 }
 
 export const translateVertices = (vertices: Point[], offset: Point): Point[] => vertices.map((p) => ({ x: p.x + offset.x, y: p.y + offset.y }))
