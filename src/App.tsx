@@ -11,46 +11,71 @@ import { ProjectBackupSession } from './application/projectBackupSession'
 import { IndexedDbProjectBackupRepository } from './storage/indexedDbProjectBackupRepository'
 import type { ProjectBackupRepository } from './application/projectBackupRepository'
 import { downloadArchive } from './features/projects/downloadArchive'
+import { RegionSession } from './application/regionSession'
+import type { RegionRepository } from './application/regionRepository'
+import { IndexedDbRegionRepository } from './storage/indexedDbRegionRepository'
+import { RegionTools } from './features/map/RegionTools'
 
 const MapCanvas = lazy(() => import('./features/map/MapCanvas').then((module) => ({ default: module.MapCanvas })))
 
 const defaultRepository = new IndexedDbProjectRepository()
 const defaultMapRepository = new IndexedDbMapImageRepository()
 const defaultBackupRepository = new IndexedDbProjectBackupRepository()
+const defaultRegionRepository = new IndexedDbRegionRepository()
 const statusLabels = {
   idle: 'Проект не открыт', dirty: 'Есть изменения', saving: 'Сохранение…',
   saved: 'Сохранено на устройстве', error: 'Ошибка сохранения',
 }
 
-export function App({ repository = defaultRepository, mapRepository = defaultMapRepository, backupRepository = defaultBackupRepository }: { repository?: ProjectRepository; mapRepository?: MapImageRepository; backupRepository?: ProjectBackupRepository }) {
+export function App({ repository = defaultRepository, mapRepository = defaultMapRepository, backupRepository = defaultBackupRepository, regionRepository = defaultRegionRepository }: { repository?: ProjectRepository; mapRepository?: MapImageRepository; backupRepository?: ProjectBackupRepository; regionRepository?: RegionRepository }) {
   const [session] = useState(() => new ProjectSession(repository))
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot)
   const [dialog, setDialog] = useState<'projects' | 'edit' | null>(null)
   const [maps] = useState(() => new MapImageSession(mapRepository, session, prepareImage))
   const mapState = useSyncExternalStore(maps.subscribe, maps.getSnapshot)
+  const [regions] = useState(() => new RegionSession(regionRepository, session))
+  const regionState = useSyncExternalStore(regions.subscribe, regions.getSnapshot)
+  const regionBusy = regions.busy()
   const fileInput = useRef<HTMLInputElement>(null)
   const archiveInput = useRef<HTMLInputElement>(null)
   const [backups] = useState(() => new ProjectBackupSession(session, backupRepository))
   const backupState = useSyncExternalStore(backups.subscribe, backups.getSnapshot)
   const backupBusy = backups.busy()
   const [fitVersion, setFitVersion] = useState(0)
-  const mapBusy = maps.busy()
+  const mapBusy = maps.busy() || regionBusy
   const projectId = state.project?.id
+  const openVersion = session.getOpenVersion()
   const canWriteImage = !!state.project && !state.loading && !mapBusy && state.status === 'saved' && mapState.projectId === projectId
+  const mapId = mapState.projectId === projectId ? mapState.image.map?.id : undefined
+  const selectedRegion = regionState.mapId === mapId ? regionState.regions.find((region) => region.id === regionState.selectedId) : undefined
+  const canEditRegion = regions.ready() && !maps.busy() && !backupBusy && regionState.mapId === mapId
+  const startRegion = () => {
+    regions.start()
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('[aria-label="Карта приключения"]')?.focus())
+  }
 
   useEffect(() => { void session.initialize() }, [session])
-  useEffect(() => { void maps.load(projectId) }, [maps, projectId])
+  useEffect(() => { void maps.load(projectId) }, [maps, projectId, openVersion])
+  useEffect(() => { void regions.load(mapId) }, [regions, mapId])
+  useEffect(() => {
+    if (!regionState.draft || dialog) return
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); regions.cancel() }
+    }
+    window.addEventListener('keydown', cancel)
+    return () => window.removeEventListener('keydown', cancel)
+  }, [regions, regionState.draft, dialog])
   useEffect(() => {
     if (state.status !== 'dirty') return
     const timer = window.setTimeout(() => { void session.save() }, 600)
     return () => window.clearTimeout(timer)
   }, [session, state])
   useEffect(() => {
-    if (!session.hasUnsavedChanges() && !['uploading', 'saving'].includes(mapState.phase) && !backupBusy) return
+    if (!session.hasUnsavedChanges() && !['uploading', 'saving'].includes(mapState.phase) && regionState.phase !== 'saving' && !backupBusy) return
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [session, state.status, mapState.phase, backupBusy])
+  }, [session, state.status, mapState.phase, regionState.phase, backupBusy])
   return (
     <div className="app-shell">
       <header className="control-panel">
@@ -63,7 +88,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
         </a>
         <div className="project-state">
           {state.project && <span className="project-name" title={state.project.name}>{state.project.name}</span>}
-          <span role="status">{backupBusy ? backupState.phase === 'exporting' ? 'Экспорт проекта…' : backupState.phase === 'validating' ? 'Проверка архива…' : 'Сохранение копии…' : mapState.phase === 'error' ? 'Ошибка изображения карты' : mapState.phase === 'uploading' ? 'Загрузка изображения…' : mapState.phase === 'saving' ? 'Сохранение изображения…' : mapState.phase === 'loading' ? 'Чтение карты…' : state.loading ? 'Открытие…' : !state.project && state.error ? 'Ошибка открытия хранилища' : statusLabels[state.status]}</span>
+          <span role="status">{regionState.phase === 'saving' ? 'Сохранение областей…' : regionState.phase === 'loading' ? 'Чтение областей…' : regionState.error ? 'Ошибка области' : backupBusy ? backupState.phase === 'exporting' ? 'Экспорт проекта…' : backupState.phase === 'validating' ? 'Проверка архива…' : 'Сохранение копии…' : mapState.phase === 'error' ? 'Ошибка изображения карты' : mapState.phase === 'uploading' ? 'Загрузка изображения…' : mapState.phase === 'saving' ? 'Сохранение изображения…' : mapState.phase === 'loading' ? 'Чтение карты…' : state.loading ? 'Открытие…' : !state.project && state.error ? 'Ошибка открытия хранилища' : statusLabels[state.status]}</span>
         </div>
         <nav className="panel-actions" aria-label="Панель управления">
           <button type="button" disabled={state.loading || mapBusy || backupBusy} onClick={() => setDialog('projects')}>Проекты</button>
@@ -75,11 +100,14 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
               if (file) void maps.upload(file)
             }} />
             <button type="button" disabled={!canWriteImage || backupBusy} onClick={() => fileInput.current?.click()}>{mapState.image.background ? 'Заменить изображение' : 'Загрузить карту'}</button>
-            <button type="button" disabled={!mapState.image.background || mapBusy} onClick={() => setFitVersion((version) => version + 1)}>Показать всю карту</button>
+            <button type="button" disabled={!mapId || mapBusy} onClick={() => setFitVersion((version) => version + 1)}>Показать всю карту</button>
             {mapState.image.background && <button type="button" disabled={!canWriteImage || backupBusy} onClick={() => {
               if (window.confirm('Удалить фоновое изображение? Карта и контекст проекта останутся.')) void maps.remove()
             }}>Удалить изображение</button>}
           </>}
+          <button type="button" disabled={!canEditRegion || !!regionState.draft} onClick={startRegion}>Добавить область</button>
+          <button type="button" disabled={!canEditRegion || !!regionState.draft || !regionState.canUndo} onClick={() => { void regions.undo() }}>Отменить</button>
+          <button type="button" disabled={!canEditRegion || !!regionState.draft || !regionState.canRedo} onClick={() => { void regions.redo() }}>Повторить</button>
           <button type="button" disabled={!state.project || state.loading || mapBusy || backupBusy} onClick={() => { void backups.export(downloadArchive) }}>Экспорт проекта</button>
           <input ref={archiveInput} className="file-input" type="file" accept=".zip,application/zip" aria-label="Архив проекта" onChange={(event) => {
             const file = event.target.files?.[0]
@@ -100,13 +128,16 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
       )}
       {mapState.error && <div className="error-banner" role="alert"><span>{mapState.error} Ранее сохранённое изображение не изменено.</span><button type="button" disabled={mapBusy || state.loading} onClick={() => { void maps.retry() }}>Повторить загрузку карты</button></div>}
       {backupState.message && <div className={backupState.phase === 'error' ? 'error-banner' : 'backup-message'}><span role={backupState.phase === 'error' ? 'alert' : 'status'}>{backupState.message}</span><button type="button" onClick={backups.dismiss} aria-label="Закрыть сообщение об архиве">Закрыть</button></div>}
+      {regionState.error && <div className="error-banner" role="alert"><span>{regionState.error}</span>{regionState.canRetry && <button type="button" disabled={mapBusy || state.loading || backupBusy} onClick={() => { void regions.retry() }}>{regions.hasLoaded() ? 'Повторить запись областей' : 'Повторить чтение областей'}</button>}<button type="button" disabled={regionBusy || !regions.hasLoaded()} onClick={regions.dismiss}>Закрыть ошибку области</button></div>}
       <main id="map-workspace" className="map-workspace" aria-label="Рабочая область карты" tabIndex={-1}>
-        {mapState.image.background && <Suspense fallback={<p className="map-overlay" role="status">Подготовка карты…</p>}><MapCanvas key={projectId} image={mapState.image} fitVersion={fitVersion} /></Suspense>}
-        {!mapState.image.background && <div className="empty-state">
+        {mapId && <Suspense fallback={<p className="map-overlay" role="status">Подготовка карты…</p>}><MapCanvas key={projectId} image={mapState.image} fitVersion={fitVersion} regions={regionState} session={regions} editable={canEditRegion} /></Suspense>}
+        {!mapId && <div className="empty-state">
           <span className="workspace-label">РАБОЧАЯ ОБЛАСТЬ</span>
           <h1>Здесь будет ваша карта</h1>
           <p>{state.project ? 'Загрузите PNG, JPEG или WebP через верхнюю панель.' : 'Создайте или откройте проект в верхней панели.'}</p>
         </div>}
+        {regionState.draft && <div className="region-draft-tools" role="group" aria-label="Создание области"><span>Вершин: {regionState.draft.length}</span><button type="button" disabled={!canEditRegion} onClick={() => { void regions.finish() }}>Готово</button><button type="button" disabled={regionBusy} onClick={regions.cancel}>Отменить контур</button></div>}
+        {selectedRegion && !regionState.draft && <RegionTools key={`${selectedRegion.id}:${selectedRegion.number}:${selectedRegion.title}:${selectedRegion.color}:${selectedRegion.fillOpacity}`} region={selectedRegion} state={regionState} session={regions} disabled={!canEditRegion} />}
       </main>
       {dialog && <ProjectDialog key={dialog} mode={dialog} repository={repository} session={session} onClose={() => setDialog(null)} onEdit={() => setDialog('edit')} />}
     </div>

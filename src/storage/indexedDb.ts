@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'bounty-mapper'
-export const DATABASE_VERSION = 2
+export const DATABASE_VERSION = 3
 
 export function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -40,6 +40,9 @@ export class IndexedDb {
         }
         if (event.oldVersion < 2) {
           db.createObjectStore('imagePlacements', { keyPath: 'id' }).createIndex('mapId', 'mapId', { unique: true })
+        }
+        if (event.oldVersion < 3) {
+          db.createObjectStore('regions', { keyPath: 'id' }).createIndex('mapId', 'mapId')
         }
       }
       request.onblocked = () => {

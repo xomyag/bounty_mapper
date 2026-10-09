@@ -46,6 +46,7 @@ describe('Project UI', () => {
     render(<App repository={new IndexedDbProjectRepository(() => factory)} mapRepository={mapRepository} />)
     await screen.findByText('Новая история')
     expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Контекст' }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: 'Контекст' }))
     expect((screen.getByLabelText('Общий контекст приключения') as HTMLTextAreaElement).value).toBe('# Заметки\nНайти башню')
   })
