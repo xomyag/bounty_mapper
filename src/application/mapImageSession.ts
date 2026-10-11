@@ -49,6 +49,12 @@ export class MapImageSession {
   upload = (file: Blob) => this.change(file)
   remove = () => this.change()
   retry = () => this.retryAction?.() ?? Promise.resolve()
+  readSelection = (mapId: string) => this.repository.load(this.projects.getSnapshot().project!.id, mapId)
+  adoptSelection = (image: MapImage) => {
+    ++this.loadVersion
+    this.retryAction = undefined
+    this.update({ projectId: this.projects.getSnapshot().project!.id, image, phase: 'saved' })
+  }
   private async change(file?: Blob) {
     if (this.busy()) return
     const project = this.projects.getSnapshot().project
@@ -60,7 +66,7 @@ export class MapImageSession {
         const asset = file ? await this.prepare(file, current.id) : undefined
         writing = true
         this.update({ ...this.state, phase: 'saving' })
-        const result = asset ? await this.repository.replace(current, asset) : await this.repository.remove(current)
+        const result = asset ? await this.repository.replace(current, asset, this.state.image.map?.id) : await this.repository.remove(current, this.state.image.map?.id)
         this.retryAction = undefined
         this.update({ ...this.state, image: result.image, phase: 'saved', error: undefined })
         return result.project

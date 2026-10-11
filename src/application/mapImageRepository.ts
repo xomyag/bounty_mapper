@@ -9,7 +9,7 @@ export interface MapImageResult {
   image: MapImage
 }
 export interface MapImageRepository {
-  load(projectId: string): Promise<MapImage>
-  replace(project: Project, asset: Asset): Promise<MapImageResult>
-  remove(project: Project): Promise<MapImageResult>
+  load(projectId: string, mapId?: string): Promise<MapImage>
+  replace(project: Project, asset: Asset, mapId?: string): Promise<MapImageResult>
+  remove(project: Project, mapId?: string): Promise<MapImageResult>
 }

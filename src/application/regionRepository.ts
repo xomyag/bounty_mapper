@@ -6,5 +6,5 @@ export interface RegionRepository {
   load(mapId: string): Promise<Region[]>
   loadAssets(mapId: string): Promise<Asset[]>
   loadObjects(mapId: string): Promise<MapObjects>
-  save(project: Project, mapId: string, regions: Region[], newAssets?: Asset[], objects?: MapObjects): Promise<Project>
+  save(project: Project, mapId: string, regions: Region[], newAssets?: Asset[], objects?: MapObjects, usedTags?: string[]): Promise<Project>
 }
