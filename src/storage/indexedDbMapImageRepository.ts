@@ -1,3 +1,4 @@
+import { message, t } from '../i18n'
 import { emptyDocument } from '../domain/richText'
 import type { MapImage, MapImageRepository, MapImageResult } from '../application/mapImageRepository'
 import { RevisionConflictError } from '../application/projectRepository'
@@ -13,7 +14,7 @@ const stores = ['projects', 'maps', 'assets', 'imagePlacements', 'regions', 'ent
 async function loadMap(tx: IDBTransaction, projectId: string, mapId?: string): Promise<MapImage> {
   const maps = await requestResult(tx.objectStore('maps').index('projectId').getAll(projectId)) as Map[]
   const map = mapId ? maps.find((m) => m.id === mapId) : maps.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))[0]
-  if (mapId && !map) throw new Error('Карта не найдена в текущем проекте.')
+  if (mapId && !map) throw new Error(message("ui.map.not.found.in.the.current.project"))
   if (!map) return {}
   const placement = await requestResult(tx.objectStore('imagePlacements').index('mapId').get(map.id)) as ImagePlacement | undefined
   if (!placement) return { map }
@@ -21,7 +22,7 @@ async function loadMap(tx: IDBTransaction, projectId: string, mapId?: string): P
   if (!asset || asset.projectId !== projectId || !asset.blob || asset.blob.size !== asset.byteSize ||
       !['image/png', 'image/jpeg', 'image/webp'].includes(asset.mimeType) ||
       ![placement.x, placement.y, placement.width, placement.height, placement.rotation].every(Number.isFinite) ||
-      placement.width <= 0 || placement.height <= 0) throw new Error('Не удалось прочитать сохранённое изображение: некорректные данные карты.')
+      placement.width <= 0 || placement.height <= 0) throw new Error(message("ui.could.not.read.the.saved.image.invalid.map.data"))
   return { map, background: { placement, asset } }
 }
 
@@ -48,7 +49,7 @@ export class IndexedDbMapImageRepository implements MapImageRepository {
         if (asset.projectId !== project.id || asset.byteSize !== asset.blob.size || asset.byteSize === 0 ||
             !['image/png', 'image/jpeg', 'image/webp'].includes(asset.mimeType) ||
             !Number.isInteger(asset.pixelWidth) || !Number.isInteger(asset.pixelHeight) || asset.pixelWidth <= 0 || asset.pixelHeight <= 0) {
-          throw new Error('Некорректные метаданные изображения.')
+          throw new Error(message("ui.invalid.image.metadata"))
         }
         const placement: ImagePlacement = {
           id: previous.background?.placement.id ?? crypto.randomUUID(),
@@ -57,7 +58,7 @@ export class IndexedDbMapImageRepository implements MapImageRepository {
           width: asset.pixelWidth, height: asset.pixelHeight, rotation: 0, order: 0, locked: true, visible: true,
         }
         const map: Map = {
-          ...(previous.map ?? { id: placement.mapId, projectId: project.id, name: 'Карта 1', description: emptyDocument(), order: 0 }),
+          ...(previous.map ?? { id: placement.mapId, projectId: project.id, name: t("ui.map.1"), description: emptyDocument(), order: 0 }),
           coordinateBounds: { x: placement.x, y: placement.y, width: placement.width, height: placement.height },
         }
         await requestResult(tx.objectStore('assets').add(asset))

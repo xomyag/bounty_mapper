@@ -1,3 +1,4 @@
+import { localizedFailure } from '../localizedTestFailure'
 import { legacyContextDocument } from './migrateProjectContext'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
@@ -41,15 +42,15 @@ describe('Project maps and navigation storage', () => {
     const before = await snapshots.snapshot(project.id)
     const put = IDBObjectStore.prototype.put
     const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) { if (this.name === 'projects') throw new Error('Нет места'); return put.apply(this, args) })
-    try { await expect(navigation.deleteMap(current, first.map.id)).rejects.toThrow('Нет места') } finally { spy.mockRestore() }
+    try { await expect(localizedFailure(navigation.deleteMap(current, first.map.id))).rejects.toThrow('Нет места') } finally { spy.mockRestore() }
     expect(await snapshots.snapshot(project.id)).toEqual(before)
     current = await navigation.deleteMap(current, first.map.id)
     const after = await snapshots.snapshot(project.id)
     expect(after.maps).toEqual([backgroundB.image.map]); expect(after.regions).toEqual([r2]); expect(after.markerPlacements).toEqual([marker('m2', second.map.id, r2.id)])
     expect(after.entities).toEqual([entity]); expect(after.assets).toHaveLength(2)
     expect(after.imagePlacements).toEqual([backgroundB.image.background!.placement])
-    await expect(navigation.deleteMap(project, second.map.id)).rejects.toThrow('другой вкладке')
-    await expect(navigation.deleteMap(current, 'missing')).rejects.toThrow('не найдена')
+    await expect(localizedFailure(navigation.deleteMap(project, second.map.id))).rejects.toThrow('другой вкладке')
+    await expect(localizedFailure(navigation.deleteMap(current, 'missing'))).rejects.toThrow('не найдена')
     current = await navigation.deleteMap(current, second.map.id)
     const empty = await snapshots.snapshot(project.id)
     expect(empty.maps).toEqual([]); expect(empty.regions).toEqual([]); expect(empty.markerPlacements).toEqual([]); expect(empty.imagePlacements).toEqual([])
@@ -65,7 +66,7 @@ describe('Project maps and navigation storage', () => {
     const entity: Entity = { checks: [], id: 'e1', projectId: project.id, kind: 'enemy', name: 'Страж', description: emptyDocument(), status: 'alive', tags: ['Ловушка', 'Ключ'] }
     const put = IDBObjectStore.prototype.put
     const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) { if (this.name === 'projects') throw new Error('Нет места'); return put.apply(this, args) })
-    try { await expect(repo.save(current, first.map.id, [region], [], { entities: [entity], markers: [] }, entity.tags)).rejects.toThrow('Нет места') } finally { spy.mockRestore() }
+    try { await expect(localizedFailure(repo.save(current, first.map.id, [region], [], { entities: [entity], markers: [] }, entity.tags))).rejects.toThrow('Нет места') } finally { spy.mockRestore() }
     expect((await navigation.load(project.id)).tagHistory).toEqual(['Тайна', 'Ловушка']); expect((await navigation.load(project.id)).entities).toEqual([])
     current = await repo.save(current, first.map.id, [region], [], { entities: [entity], markers: [] }, entity.tags)
     expect((await navigation.load(project.id)).tagHistory).toEqual(['Ключ', 'Ловушка', 'Тайна'])
@@ -102,15 +103,15 @@ describe('Project maps and navigation storage', () => {
     expect((await images.load(project.id, first.map.id)).background?.asset.id).toBe(backgroundA.image.background?.asset.id)
     expect((await images.load(project.id, second.map.id)).background).toBeUndefined()
     await expect(navigation.renameMap(project, first.map.id, 'Конфликт')).rejects.toThrow()
-    await expect(images.load(project.id, 'foreign')).rejects.toThrow('не найдена')
+    await expect(localizedFailure(images.load(project.id, 'foreign'))).rejects.toThrow('не найдена')
   })
   it('rolls back map creation/rename on a late write failure and retains project revision', async () => {
     const { project, navigation, projects } = await setup(); const first = await navigation.createMap(project, 'Башня')
     const put = IDBObjectStore.prototype.put
     const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) { if (this.name === 'projects') throw new Error('Нет места'); return put.apply(this, args) })
     try {
-      await expect(navigation.createMap(first.project, 'Не записана')).rejects.toThrow('Нет места')
-      await expect(navigation.renameMap(first.project, first.map.id, 'Не записано')).rejects.toThrow('Нет места')
+      await expect(localizedFailure(navigation.createMap(first.project, 'Не записана'))).rejects.toThrow('Нет места')
+      await expect(localizedFailure(navigation.renameMap(first.project, first.map.id, 'Не записано'))).rejects.toThrow('Нет места')
     } finally { spy.mockRestore() }
     expect((await navigation.load(project.id)).maps).toEqual([first.map])
     expect((await projects.restore())?.revision).toBe(first.project.revision)
@@ -119,8 +120,8 @@ describe('Project maps and navigation storage', () => {
     const { project, projects, navigation } = await setup(); const first = await navigation.createMap(project, 'Башня')
     const other = await projects.save(createProject('Другой'))
     expect((await navigation.load(other.id)).maps).toEqual([])
-    await expect(navigation.renameMap(other, first.map.id, 'Чужая карта')).rejects.toThrow('не найдена')
-    await expect(navigation.createMap(other, '  ')).rejects.toThrow('название')
+    await expect(localizedFailure(navigation.renameMap(other, first.map.id, 'Чужая карта'))).rejects.toThrow('не найдена')
+    await expect(localizedFailure(navigation.createMap(other, '  '))).rejects.toThrow('название')
     expect((await navigation.load(project.id)).maps).toEqual([first.map])
   })
 })

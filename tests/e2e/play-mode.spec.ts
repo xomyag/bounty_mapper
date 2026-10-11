@@ -3,7 +3,8 @@ import { clickMenuAction, control } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import { unzipSync } from 'fflate'
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './testLocale'
 import type { Page } from '@playwright/test'
 import type Konva from 'konva'
 import type { Camera, Point } from '../../src/domain/viewport'
@@ -147,7 +148,7 @@ test('play locks buttons/canvas/context/keyboard and unfinished tools; cards ren
   await canvas(page).click({ position: { x: 200, y: 40 }, button: 'right' }); await expect(page.getByRole('menu', { name: /Действия на карте/ })).toHaveCount(0)
   await canvas(page).focus(); for (const key of ['Enter', 'Delete', 'Control+z', 'Control+Shift+z', 'Control+y']) await page.keyboard.press(key)
   await button(page, 'Карты проекта').click()
-  const menu = page.getByRole('menu', { name: 'Карты проекта' }); await expect(menu.getByRole('menuitem', { name: 'New map' })).toBeDisabled()
+  const menu = page.getByRole('menu', { name: 'Карты проекта' }); await expect(menu.getByRole('menuitem', { name: 'Новая карта' })).toBeDisabled()
   for (const item of await menu.getByRole('menuitem', { name: /Переименовать|Удалить/ }).all()) await expect(item).toBeDisabled()
   await page.keyboard.press('Escape')
   const start = await screen(page, { x: 260, y: 120 }); await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(start.x + 80, start.y + 60, { steps: 8 }); await page.mouse.up()
@@ -203,12 +204,12 @@ test('quick status/undo/redo are atomic, update every representation, preserve c
   await stable(page, focused)
   await find(page, 'Маркеры', 'm1'); await nav(page).getByRole('button', { name: /Фильтры и группировка/ }).click()
   await nav(page).getByLabel('Тип маркера в поиске').selectOption('enemy'); await nav(page).getByLabel('Статус маркера в поиске').selectOption('defeated')
-  await expect(nav(page).getByText('Найдено: 2', { exact: true })).toBeVisible()
+  await expect(nav(page).getByText('Найдено 2 результата', { exact: true })).toBeVisible()
   await nav(page).locator('[data-object-id="mb"]').click(); await expect(canvas(page)).toHaveAttribute('data-map-id', b.id)
   await expect(markerCard(page).getByRole('combobox', { name: 'Быстрая смена статуса', exact: true })).toHaveValue('defeated')
   await expect(page.locator('.region-card')).toHaveCount(1)
   await button(page, 'Отменить статус').click(); await expect(markerCard(page).getByRole('combobox', { name: 'Быстрая смена статуса', exact: true })).toHaveValue('alive')
-  await expect(nav(page).getByText('Найдено: 0', { exact: true })).toBeVisible()
+  await expect(nav(page).getByText('Найдено 0 результатов', { exact: true })).toBeVisible()
   await button(page, 'Повторить статус').click(); await expect(markerCard(page).getByRole('combobox', { name: 'Быстрая смена статуса', exact: true })).toHaveValue('defeated')
   await switchMap(page, a.id); await expect(page.locator('.region-card')).toHaveCount(0)
   const saved = await stored(page)

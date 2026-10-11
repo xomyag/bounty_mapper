@@ -1,13 +1,14 @@
+import { message } from '../i18n/message'
 /** Preserve application errors (including RevisionConflictError) and explain DOM failures. */
 export function storageError(error: unknown): unknown {
   if (!(error instanceof DOMException)) return error
   const explanation: Record<string, string> = {
-    QuotaExceededError: 'Недостаточно места в локальном хранилище. Освободите место и повторите запись; сохранённые данные не изменены.',
-    VersionError: 'Версия локальной базы новее этого приложения. Откройте актуальную версию; база не очищена.',
-    SecurityError: 'Браузер запретил локальное хранилище. Проверьте разрешения для этого адреса.',
-    NotAllowedError: 'Браузер не разрешил доступ к локальному хранилищу. Проверьте разрешения для этого адреса.',
-    AbortError: 'Операция локального хранилища отменена. Запись не подтверждена; повторите попытку.',
-    UnknownError: 'Локальное хранилище временно недоступно. Повторите попытку; не очищайте данные браузера.',
+    QuotaExceededError: message("ui.not.enough.local.storage.space.free.some.space.and"),
+    VersionError: message("ui.the.local.database.is.newer.than.this.application.open"),
+    SecurityError: message("ui.the.browser.blocked.local.storage.check.permissions.for.this"),
+    NotAllowedError: message("ui.the.browser.did.not.allow.local.storage.access.check"),
+    AbortError: message("ui.the.local.storage.operation.was.cancelled.the.write.is"),
+    UnknownError: message("ui.local.storage.is.temporarily.unavailable.try.again.do.not"),
   }
   return explanation[error.name] ? new Error(`${explanation[error.name]} ${error.message}`, { cause: error }) : error
 }

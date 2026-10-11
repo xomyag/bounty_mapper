@@ -1,7 +1,8 @@
 import { finishProjectCreation } from './controls'
 import { clickMenuAction } from './controls'
 import { Buffer } from 'node:buffer'
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test, configureRussianLocale } from './testLocale'
 import type { Page } from '@playwright/test'
 import type { Entity, MarkerPlacement } from '../../src/domain/marker'
 import type { Region } from '../../src/domain/region'
@@ -279,6 +280,7 @@ test('marker rich text/image drafts survive errors and archive copy; every type 
 
 test('touch placement and tap open only the marker card above a region', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ hasTouch: true, baseURL, viewport: { width: 1280, height: 800 } }); const page = await context.newPage()
+  await configureRussianLocale(context)
   try {
     const { box } = await seed(page)
     await page.getByRole('button', { name: 'Добавить маркер', exact: true }).click(); await page.getByRole('group', { name: 'Тип нового маркера' }).getByRole('button', { name: 'Герой', exact: true }).click()

@@ -1,3 +1,5 @@
+import { localizedFailure } from '../localizedTestFailure'
+import { localize } from '../i18n'
 import { legacyTestMetadata } from '../storage/backup/legacyTestMetadata'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
@@ -49,12 +51,12 @@ describe('BM-007 markers and entities', () => {
     session.navigate(target)
     expect(session.getSnapshot().pendingIntent).toEqual({ kind: 'map', target })
     await session.resolveCardIntent('stay')
-    expect(session.getSnapshot().details[r.id].fields.title).toBe('Текст перед переходом')
+    expect(localize(session.getSnapshot().details[r.id].fields.title)).toBe('Текст перед переходом')
     session.navigate(target); const moving = session.resolveCardIntent('save')
     await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
     expect(session.busy()).toBe(true)
     expect(session.getSnapshot().mapId).toBe(r.mapId)
-    expect(session.getSnapshot().regions.find((x) => x.id === r.id)?.title).toBe('Текст перед переходом')
+    expect(localize(session.getSnapshot().regions.find((x) => x.id === r.id)?.title)).toBe('Текст перед переходом')
     finish(); await moving
     expect(session.getSnapshot()).toMatchObject({ mapId: target.mapId, transitioning: false, regions: [], markers: [], cardMode: 'view' })
     expect(session.getSnapshot().cardId).toBeUndefined()
@@ -67,7 +69,7 @@ describe('BM-007 markers and entities', () => {
     session.navigate({ mapId: original.maps[1].id }); await session.resolveCardIntent('discard')
     expect(session.getSnapshot().mapId).toBe(r.mapId)
     expect(session.getSnapshot().markerDraft?.fields.name).toBe('Оставить черновик')
-    expect(session.getSnapshot().error).toContain('другую карту')
+    expect(localize(session.getSnapshot().error)).toContain('другую карту')
     session.cancelMarkerEdit(); session.adoptMap({ mapId: original.maps[1].id }, await session.readMap(original.maps[1].id))
     session.setMapNavigator(async (target) => session.adoptMap(target, sourceData))
     const transitions: ReturnType<typeof session.getSnapshot>[] = []
@@ -93,7 +95,7 @@ describe('BM-007 markers and entities', () => {
     expect(session.getSnapshot().viewFocus).toBe(regionFocus)
     await session.resolveCardIntent('stay')
     expect(session.getSnapshot().cardId).toBe(r.id)
-    expect(session.getSnapshot().details[r.id].fields.title).toBe('Несохранённое название')
+    expect(localize(session.getSnapshot().details[r.id].fields.title)).toBe('Несохранённое название')
     session.openMarkerCard(id, true); await session.resolveCardIntent('discard')
     const markerFocus = session.getSnapshot().viewFocus
     expect(markerFocus?.point).toEqual({ x: 40, y: 5 })
@@ -189,7 +191,7 @@ describe('BM-007 markers and entities', () => {
     session.openMarkerCard(id); session.beginMarkerEdit()
     session.editMarkerDetails({ ...session.getSnapshot().markerDraft!.fields, status: 'defeated' })
     await session.saveMarkerDetails()
-    expect(session.getSnapshot().markerDraft?.error).toContain('статус')
+    expect(localize(session.getSnapshot().markerDraft?.error)).toContain('статус')
   })
   it('chooses bindings explicitly, retains them through moves, respects locks and treats each move as one undo', async () => {
     const { session, snapshot } = await setup(); const r = await area(session); const id = await add(session)
@@ -251,10 +253,10 @@ describe('BM-007 markers and entities', () => {
     const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) { if (this.name === 'projects') throw new DOMException('Нет места', 'QuotaExceededError'); return put.apply(this, args) })
     try { await session.resolveCardIntent('save') } finally { spy.mockRestore() }
     expect(await snapshot()).toEqual(before)
-    expect(session.getSnapshot().markerDraft?.error).toContain('Нет места')
+    expect(localize(session.getSnapshot().markerDraft?.error)).toContain('Нет места')
     expect(session.getSnapshot().markerDraft?.fields.name).toBe('Дверь с текстом')
     expect(session.getSnapshot().viewFocus).toBeUndefined()
-    await expect(session.flushDetails()).rejects.toThrow('Сначала сохраните')
+    await expect(localizedFailure(session.flushDetails())).rejects.toThrow('Сначала сохраните')
     await session.resolveCardIntent('stay'); session.openCard(r.id, true); await session.resolveCardIntent('save')
     expect(session.getSnapshot().cardId).toBe(r.id); expect(session.getSnapshot().markerCardId).toBeUndefined()
     expect(session.getSnapshot().viewFocus?.point).toEqual({ x: 5, y: 5 })
@@ -291,7 +293,7 @@ describe('BM-007 markers and entities', () => {
     const saved = await snapshot(); const copy = independentCopy(saved)
     const put = IDBObjectStore.prototype.put
     const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) { if (this.name === 'settings') throw new Error('Ошибка завершения импорта'); return put.apply(this, args) })
-    try { await expect(backups.insertCopy(copy)).rejects.toThrow('Ошибка завершения импорта') } finally { spy.mockRestore() }
+    try { await expect(localizedFailure(backups.insertCopy(copy))).rejects.toThrow('Ошибка завершения импорта') } finally { spy.mockRestore() }
     expect(await snapshot()).toEqual(saved)
     await expect(backups.snapshot(copy.project.id)).rejects.toThrow()
     // A retry with the exact same IDs proves that no orphan rows survived.

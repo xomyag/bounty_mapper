@@ -1,3 +1,4 @@
+import { localizedFailure } from '../../localizedTestFailure'
 import { describe, expect, it } from 'vitest'
 import { unzipSync, zipSync } from 'fflate'
 import { buildArchive, parseArchive, sha256 } from './archive'
@@ -53,17 +54,17 @@ describe('Project backup format', () => {
     const archive = await buildArchive(await testSnapshot())
     const corrupted = unzipSync(archive)
     corrupted['assets/0.png'][20] ^= 1
-    await expect(parseArchive(blob(zipSync(corrupted)), testDecode)).rejects.toThrow('контрольной суммы')
+    await expect(localizedFailure(parseArchive(blob(zipSync(corrupted)), testDecode))).rejects.toThrow('контрольной суммы')
     const unknown = unzipSync(archive)
     unknown['manifest.json'] = json({ ...read(unknown['manifest.json']), formatVersion: 99 })
-    await expect(parseArchive(blob(zipSync(unknown)), testDecode)).rejects.toThrow('Неизвестная версия')
+    await expect(localizedFailure(parseArchive(blob(zipSync(unknown)), testDecode))).rejects.toThrow('Неизвестная версия')
     const missing = unzipSync(archive)
     delete missing['project.json']
-    await expect(parseArchive(blob(zipSync(missing)), testDecode)).rejects.toThrow('обязательные')
+    await expect(localizedFailure(parseArchive(blob(zipSync(missing)), testDecode))).rejects.toThrow('обязательные')
     const extra = unzipSync(archive)
     extra['assets/99.png'] = new Uint8Array([1])
-    await expect(parseArchive(blob(zipSync(extra)), testDecode)).rejects.toThrow('не соответствуют')
-    await expect(parseArchive(blob(archive.subarray(0, archive.length - 15)), testDecode)).rejects.toThrow('ZIP')
+    await expect(localizedFailure(parseArchive(blob(zipSync(extra)), testDecode))).rejects.toThrow('не соответствуют')
+    await expect(localizedFailure(parseArchive(blob(archive.subarray(0, archive.length - 15)), testDecode))).rejects.toThrow('ZIP')
   })
 
   it('rejects invalid references even when all JSON checksums were updated correctly', async () => {
@@ -76,21 +77,21 @@ describe('Project backup format', () => {
     file.byteSize = entries['project.json'].length
     file.sha256 = await sha256(entries['project.json'])
     entries['manifest.json'] = json(manifest)
-    await expect(parseArchive(blob(zipSync(entries)), testDecode)).rejects.toThrow('отсутствующую карту или изображение')
+    await expect(localizedFailure(parseArchive(blob(zipSync(entries)), testDecode))).rejects.toThrow('отсутствующую карту или изображение')
   })
 
   it('rejects a dimension mismatch or failed decoding', async () => {
     const archive = blob(await buildArchive(await testSnapshot()))
-    await expect(parseArchive(archive, async (file, id) => ({ ...await testDecode(file, id), pixelWidth: 10 }))).rejects.toThrow('Размеры')
-    await expect(parseArchive(archive, async () => { throw new Error('Ошибка декодирования') })).rejects.toThrow('декодирования')
+    await expect(localizedFailure(parseArchive(archive, async (file, id) => ({ ...await testDecode(file, id), pixelWidth: 10 })))).rejects.toThrow('Размеры')
+    await expect(localizedFailure(parseArchive(archive, async () => { throw new Error('Ошибка декодирования') }))).rejects.toThrow('декодирования')
   })
 
   it('enforces compressed, per-file and total expanded limits before collecting payloads', async () => {
     const bytes = await buildArchive(await testSnapshot())
-    await expect(parseArchive(blob(bytes), testDecode, { ...BACKUP_LIMITS, archiveBytes: bytes.length - 1 })).rejects.toThrow('размер ZIP')
-    await expect(unpackZip(bytes, { ...BACKUP_LIMITS, assetBytes: 1 })).rejects.toThrow('размер')
-    await expect(unpackZip(bytes, { ...BACKUP_LIMITS, unpackedBytes: 100 })).rejects.toThrow('лимит распакованных')
-    await expect(unpackZip(bytes, { ...BACKUP_LIMITS, files: 2 })).rejects.toThrow('лимит файлов')
+    await expect(localizedFailure(parseArchive(blob(bytes), testDecode, { ...BACKUP_LIMITS, archiveBytes: bytes.length - 1 }))).rejects.toThrow('размер ZIP')
+    await expect(localizedFailure(unpackZip(bytes, { ...BACKUP_LIMITS, assetBytes: 1 }))).rejects.toThrow('размер')
+    await expect(localizedFailure(unpackZip(bytes, { ...BACKUP_LIMITS, unpackedBytes: 100 }))).rejects.toThrow('лимит распакованных')
+    await expect(localizedFailure(unpackZip(bytes, { ...BACKUP_LIMITS, files: 2 }))).rejects.toThrow('лимит файлов')
   })
 
   it('rejects actual decompression overflow when both ZIP headers lie about the size', async () => {
@@ -114,7 +115,7 @@ describe('Project backup format', () => {
   it('rejects unsafe paths and unexpected schema fields', async () => {
     const entries = unzipSync(await buildArchive(await testSnapshot()))
     entries['../outside'] = new Uint8Array()
-    await expect(unpackZip(zipSync(entries))).rejects.toThrow('Недопустимый')
+    await expect(localizedFailure(unpackZip(zipSync(entries)))).rejects.toThrow('Недопустимый')
     delete entries['../outside']
     const doc = read(entries['project.json'])
     doc.project.schemaVersion = 99
@@ -123,6 +124,6 @@ describe('Project backup format', () => {
     const file = m.files.find((entry: { path: string }) => entry.path === 'project.json')
     file.byteSize = entries['project.json'].length; file.sha256 = await sha256(entries['project.json'])
     entries['manifest.json'] = json(m)
-    await expect(parseArchive(blob(zipSync(entries)), testDecode)).rejects.toThrow('Версия данных проекта')
+    await expect(localizedFailure(parseArchive(blob(zipSync(entries)), testDecode))).rejects.toThrow('Версия данных проекта')
   })
 })

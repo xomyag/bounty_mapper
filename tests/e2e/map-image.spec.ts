@@ -1,7 +1,8 @@
 import { finishProjectCreation } from './controls'
 import { clickMenuAction, control } from './controls'
 import { Buffer } from 'node:buffer'
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './testLocale'
 import type { Page } from '@playwright/test'
 
 async function createProject(page: Page, name: string) {

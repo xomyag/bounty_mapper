@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import type { ProjectBackupRepository } from './projectBackupRepository'
 import { independentCopy } from './projectBackupRepository'
 import type { ProjectSession } from './projectSession'
@@ -33,8 +34,8 @@ export class ProjectBackupSession {
         const bytes = await this.encode(snapshot)
         await download(bytes, `bounty-mapper-${project.id.replace(/[^a-zA-Z0-9_-]/g, '_')}.zip`)
       })
-      this.update({ phase: 'done', message: 'Архив подготовлен и передан браузеру для скачивания.' })
-    } catch (error) { this.update({ phase: 'error', message: `Ошибка экспорта. ${error instanceof Error ? error.message : 'Не удалось создать архив.'}` }) }
+      this.update({ phase: 'done', message: message("ui.the.archive.is.ready.and.has.been.passed.to") })
+    } catch (error) { this.update({ phase: 'error', message: message("ui.export.failed.value", { p0: error instanceof Error ? error.message : message("errors.exportCreate") }) }) }
   }
   import = async (file: Blob) => {
     if (this.busy()) return
@@ -46,7 +47,7 @@ export class ProjectBackupSession {
         this.update({ phase: 'importing' })
         return this.repository.insertCopy(copy)
       })
-      this.update({ phase: 'done', message: 'Копия проекта импортирована и сохранена на устройстве.' })
-    } catch (error) { this.update({ phase: 'error', message: `Ошибка импорта. ${error instanceof Error ? error.message : 'Не удалось прочитать архив.'} Существующие проекты не изменены.` }) }
+      this.update({ phase: 'done', message: message("ui.the.project.copy.was.imported.and.saved.on.this") })
+    } catch (error) { this.update({ phase: 'error', message: message("ui.import.failed.value.existing.projects.are.unchanged", { p0: error instanceof Error ? error.message : message("errors.importRead") }) }) }
   }
 }

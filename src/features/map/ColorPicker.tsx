@@ -1,12 +1,13 @@
+import { localize, message, t } from '../../i18n'
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 const swatches = [
-  ['Золотой', '#d7ad62'], ['Красный', '#ef6543'], ['Оранжевый', '#eaa746'], ['Жёлтый', '#f2d35e'],
-  ['Зелёный', '#22aa77'], ['Бирюзовый', '#36b8bd'], ['Синий', '#4a90e2'], ['Фиолетовый', '#9b6bd3'],
-  ['Розовый', '#df7ba5'], ['Коричневый', '#966b4b'], ['Белый', '#ffffff'], ['Чёрный', '#000000'],
+  [message("ui.gold"), '#d7ad62'], [message("ui.red"), '#ef6543'], [message("ui.orange"), '#eaa746'], [message("ui.yellow"), '#f2d35e'],
+  [message("ui.green"), '#22aa77'], [message("ui.teal"), '#36b8bd'], [message("ui.blue"), '#4a90e2'], [message("ui.purple"), '#9b6bd3'],
+  [message("ui.pink"), '#df7ba5'], [message("ui.brown"), '#966b4b'], [message("ui.white"), '#ffffff'], [message("ui.black"), '#000000'],
 ]
-const channels = ['Красный', 'Зелёный', 'Синий']
+const channels = [message("ui.red"), message("ui.green"), message("ui.blue")]
 function palettePosition(trigger: HTMLElement) {
   const rect = trigger.getBoundingClientRect()
   const top = rect.bottom + 286 < window.innerHeight ? rect.bottom + 6 : Math.max(8, rect.top - 286)
@@ -17,7 +18,7 @@ function palettePosition(trigger: HTMLElement) {
   }
 }
 
-export function ColorPicker({ value, onChange, disabled, label = 'Цвет области', paletteLabel = 'Палитра цвета области' }: { value: string; onChange: (color: string) => void; disabled: boolean; label?: string; paletteLabel?: string }) {
+export function ColorPicker({ value, onChange, disabled, label = message("ui.region.color"), paletteLabel = message("ui.region.color.palette") }: { value: string; onChange: (color: string) => void; disabled: boolean; label?: string; paletteLabel?: string }) {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState({ left: 0, top: 0, maxHeight: 0 })
   const [hex, setHex] = useState(value)
@@ -50,22 +51,22 @@ export function ColorPicker({ value, onChange, disabled, label = 'Цвет об�
   }, [open])
 
   return <div className="region-color-picker">
-    <span>Цвет</span>
-    <button ref={trigger} className="color-trigger" type="button" aria-label={label} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} disabled={disabled}
+    <span>{t("ui.color")}</span>
+    <button ref={trigger} className="color-trigger" type="button" aria-label={localize(label)} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} disabled={disabled}
       onClick={() => { setPosition(palettePosition(trigger.current!)); setOpen((current) => !current) }}>
       <span style={{ backgroundColor: value }} aria-hidden="true" />
     </button>
-    {open && createPortal(<div ref={palette} id={id} className="color-palette" role="dialog" aria-label={paletteLabel} style={position}>
-      <strong>{label}</strong>
-      <div className="color-swatches" role="group" aria-label="Готовые цвета">
-        {swatches.map(([name, color]) => <button key={color} type="button" aria-label={`${name} (${color})`} title={`${name} (${color})`} aria-pressed={value.toLowerCase() === color} disabled={disabled} style={{ backgroundColor: color }} onClick={() => choose(color)} />)}
+    {open && createPortal(<div ref={palette} id={id} className="color-palette" role="dialog" aria-label={localize(paletteLabel)} style={position}>
+      <strong>{localize(label)}</strong>
+      <div className="color-swatches" role="group" aria-label={t("ui.preset.colors")}>
+        {swatches.map(([name, color]) => <button key={color} type="button" aria-label={localize(`${name} (${color})`)} title={localize(`${name} (${color})`)} aria-pressed={value.toLowerCase() === color} disabled={disabled} style={{ backgroundColor: color }} onClick={() => choose(color)} />)}
       </div>
-      <label>HEX<input aria-label="HEX цвета" value={hex} maxLength={7} spellCheck={false} disabled={disabled} onChange={(event) => {
+      <label>HEX<input aria-label={t("ui.color.hex")} value={hex} maxLength={7} spellCheck={false} disabled={disabled} onChange={(event) => {
         const next = event.target.value
         setHex(next)
         if (/^#[a-f0-9]{6}$/i.test(next)) onChange(next.toLowerCase())
       }} onBlur={() => { if (!/^#[a-f0-9]{6}$/i.test(hex)) setHex(value) }} /></label>
-      {channels.map((name, index) => <label className="color-channel" key={name}><span>{name}: {rgb[index]}</span><input type="range" aria-label={`${name} канал`} min="0" max="255" value={rgb[index]} disabled={disabled} onChange={(event) => {
+      {channels.map((name, index) => <label className="color-channel" key={name}><span>{localize(name)}: {rgb[index]}</span><input type="range" aria-label={t("ui.value.channel", { p0: name })} min="0" max="255" value={rgb[index]} disabled={disabled} onChange={(event) => {
         const next = rgb.map((channel, i) => i === index ? Number(event.target.value) : channel)
         choose(`#${next.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`)
       }} /></label>)}

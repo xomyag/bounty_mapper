@@ -1,3 +1,4 @@
+import { localizedFailure } from '../localizedTestFailure'
 import { legacyContextDocument } from './migrateProjectContext'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
@@ -37,7 +38,7 @@ describe('IndexedDB projects', () => {
       if (this.name === 'settings') throw new DOMException('Нет места', 'QuotaExceededError')
       return put.apply(this, args)
     })
-    await expect(repo.save({ ...saved, context: legacyContextDocument('Несохранённый текст') })).rejects.toThrow('Нет места')
+    await expect(localizedFailure(repo.save({ ...saved, context: legacyContextDocument('Несохранённый текст') }))).rejects.toThrow('Нет места')
     expect(await repo.restore()).toEqual(saved)
     expect(await repo.list()).toEqual([saved])
   })
@@ -56,7 +57,7 @@ describe('IndexedDB projects', () => {
 
   it('rejects a failed creation without leaving a project or active selection', async () => {
     vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => { throw new DOMException('Нет места', 'QuotaExceededError') })
-    await expect(repo.save(createProject('Черновик'))).rejects.toThrow('Нет места')
+    await expect(localizedFailure(repo.save(createProject('Черновик')))).rejects.toThrow('Нет места')
     expect(await repo.list()).toEqual([])
     expect(await repo.restore()).toBeUndefined()
   })
@@ -75,15 +76,15 @@ describe('IndexedDB projects', () => {
 
   it('reports unavailable storage and missing projects', async () => {
     const unavailable = new IndexedDbProjectRepository(() => { throw new DOMException('Запрещено', 'SecurityError') })
-    await expect(unavailable.restore()).rejects.toThrow('Запрещено')
-    await expect(repo.open('missing')).rejects.toThrow('Проект не найден')
+    await expect(localizedFailure(unavailable.restore())).rejects.toThrow('Запрещено')
+    await expect(localizedFailure(repo.open('missing'))).rejects.toThrow('Проект не найден')
     expect(await repo.restore()).toBeUndefined()
   })
 
   it('rejects empty names and unknown schema versions without changing data', async () => {
     const saved = await repo.save(createProject('Проект'))
-    await expect(repo.save({ ...saved, name: '  ' })).rejects.toThrow('Укажите название')
-    await expect(repo.save({ ...saved, schemaVersion: 99 })).rejects.toThrow('Версия проекта')
+    await expect(localizedFailure(repo.save({ ...saved, name: '  ' }))).rejects.toThrow('Укажите название')
+    await expect(localizedFailure(repo.save({ ...saved, schemaVersion: 99 }))).rejects.toThrow('Версия проекта')
     expect(await repo.restore()).toEqual(saved)
   })
 })

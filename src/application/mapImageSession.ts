@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import type { Asset } from '../domain/project'
 import type { MapImage, MapImageRepository } from './mapImageRepository'
 import type { ProjectSession } from './projectSession'
@@ -43,7 +44,7 @@ export class MapImageSession {
     } catch (error) {
       if (version !== this.loadVersion) return
       this.retryAction = () => this.load(projectId)
-      this.update({ ...this.state, phase: 'error', error: `Ошибка чтения карты. ${error instanceof Error ? error.message : ''}` })
+      this.update({ ...this.state, phase: 'error', error: message("ui.map.read.failed.value", { p0: error instanceof Error ? error.message : '' }) })
     }
   }
   upload = (file: Blob) => this.change(file)
@@ -73,7 +74,7 @@ export class MapImageSession {
       })
     } catch (error) {
       this.retryAction = () => this.change(file)
-      this.update({ ...this.state, phase: 'error', error: `${writing ? 'Ошибка записи изображения в хранилище.' : 'Ошибка загрузки изображения.'} ${error instanceof Error ? error.message : ''}` })
+      this.update({ ...this.state, phase: 'error', error: message(writing ? "errors.imageWrite" : "errors.imageLoad", { detail: error instanceof Error ? error.message : '' }) })
     }
   }
 }

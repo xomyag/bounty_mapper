@@ -1,3 +1,4 @@
+import { localizedFailure } from '../localizedTestFailure'
 import { legacyContextDocument } from './migrateProjectContext'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
@@ -48,7 +49,7 @@ describe('Atomic project backups in IndexedDB', () => {
       if (this.name === 'settings') throw new DOMException('Нет места', 'QuotaExceededError')
       return put.apply(this, args)
     })
-    await expect(backups.insertCopy(copy)).rejects.toThrow('Нет места')
+    await expect(localizedFailure(backups.insertCopy(copy))).rejects.toThrow('Нет места')
     spy.mockRestore()
     const projects = new IndexedDbProjectRepository(() => factory)
     expect(await projects.list()).toEqual([original.project])

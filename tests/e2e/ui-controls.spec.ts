@@ -1,5 +1,6 @@
 import { finishProjectCreation } from './controls'
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './testLocale'
 import type { Page } from '@playwright/test'
 import type Konva from 'konva'
 import { clickMenuAction, control } from './controls'
@@ -27,7 +28,7 @@ async function seed(page: Page) {
   await page.goto('/'); await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Проверка управления'); await control(page, 'Создать').click()
   await finishProjectCreation(page)
-  await control(page, 'Карты проекта').click(); await page.getByRole('menuitem', { name: 'New map', exact: true }).click()
+  await control(page, 'Карты проекта').click(); await page.getByRole('menuitem', { name: 'Новая карта', exact: true }).click()
   await page.getByLabel('Название новой карты').fill('Этаж 1'); await page.getByRole('dialog', { name: 'Новая карта' }).getByRole('button', { name: 'Создать карту', exact: true }).click(); await expect(control(page, 'Добавить область')).toBeEnabled()
   await page.evaluate(async (content) => {
     const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('bounty-mapper'); r.onsuccess = () => resolve(r.result) })
@@ -97,7 +98,7 @@ test('compact menus work by keyboard, overlays stay accessible beside panels and
   await control(page, 'Меню проекта').focus(); await page.keyboard.press('ArrowDown'); await expect(page.getByRole('menuitem', { name: 'Проекты', exact: true })).toBeFocused()
   await page.keyboard.press('ArrowDown'); await expect(page.getByRole('menuitem', { name: 'Импорт проекта', exact: true })).toBeFocused(); await page.keyboard.press('Escape')
   await expect(control(page, 'Меню проекта')).toBeFocused()
-  await control(page, 'Карты проекта').focus(); await page.keyboard.press('ArrowDown'); await expect(page.getByRole('menuitem', { name: 'New map', exact: true })).toBeFocused(); await page.keyboard.press('Escape')
+  await control(page, 'Карты проекта').focus(); await page.keyboard.press('ArrowDown'); await expect(page.getByRole('menuitem', { name: 'Новая карта', exact: true })).toBeFocused(); await page.keyboard.press('Escape')
   const initial = await stored(page); const view = await camera(page)
   await clickWorld(page, { x: 175, y: 225 }); await control(page, 'Навигация и поиск').click(); await paint(page)
   expect(await camera(page)).toEqual(view)
@@ -117,12 +118,12 @@ test('compact menus work by keyboard, overlays stay accessible beside panels and
   expect(await stored(page)).toEqual(initial)
   await control(page, 'Закрыть навигацию').click(); await control(page, 'Закрыть карточку области').click()
   await control(page, 'Добавить область').click(); await control(page, 'Увеличить масштаб').click()
-  await expect(page.getByRole('group', { name: 'Создание области' })).toContainText('Вершин: 0')
+  await expect(page.getByRole('group', { name: 'Создание области' })).toContainText('0 вершин')
   await control(page, 'Отменить контур').click()
   await control(page, 'Добавить маркер').click(); await page.getByRole('group', { name: 'Тип нового маркера' }).getByRole('button', { name: 'NPC', exact: true }).click()
   await control(page, 'Уменьшить масштаб').click(); await expect(page.getByRole('group', { name: 'Размещение маркера' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Карточка маркера' })).toHaveCount(0); expect(await stored(page)).toEqual(initial)
   await control(page, 'Отменить размещение').click()
   await control(page, 'Игра').click(); await expect(control(page, 'Добавить маркер')).toBeDisabled()
-  await control(page, 'Карты проекта').click(); await expect(page.getByRole('menuitem', { name: 'New map', exact: true })).toBeDisabled(); await expect(page.getByRole('menuitem', { name: 'Загрузить карту', exact: true })).toBeDisabled()
+  await control(page, 'Карты проекта').click(); await expect(page.getByRole('menuitem', { name: 'Новая карта', exact: true })).toBeDisabled(); await expect(page.getByRole('menuitem', { name: 'Загрузить карту', exact: true })).toBeDisabled()
 })

@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import type { Point } from './viewport'
 import { documentHasContent, emptyDocument, validateRichDocument } from './richText'
 import type { RichDocument } from './richText'
@@ -38,25 +39,25 @@ export function signedArea(vertices: Point[]): number {
 }
 
 export function validatePolygon(vertices: Point[]): void {
-  if (vertices.length < 3) throw new Error('Нужны минимум три различные вершины.')
-  if (vertices.length > MAX_REGION_VERTICES) throw new Error(`Допустимо не более ${MAX_REGION_VERTICES} вершин области.`)
-  if (vertices.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > 1e9 || Math.abs(p.y) > 1e9)) throw new Error('Некорректные координаты области.')
+  if (vertices.length < 3) throw new Error(message("ui.at.least.three.distinct.vertices.are.required"))
+  if (vertices.length > MAX_REGION_VERTICES) throw new Error(message("ui.a.region.can.have.at.most.value.vertices", { p0: MAX_REGION_VERTICES }))
+  if (vertices.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > 1e9 || Math.abs(p.y) > 1e9)) throw new Error(message("ui.invalid.region.coordinates"))
   for (let i = 0; i < vertices.length; i++) {
-    for (let j = i + 1; j < vertices.length; j++) if (samePoint(vertices[i], vertices[j])) throw new Error('Вершины области должны различаться.')
+    for (let j = i + 1; j < vertices.length; j++) if (samePoint(vertices[i], vertices[j])) throw new Error(message("ui.region.vertices.must.be.distinct"))
     const a = vertices[i]; const b = vertices[(i + 1) % vertices.length]; const c = vertices[(i + 2) % vertices.length]
-    if (Math.abs(cross(a, b, c)) < EPS && (b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) < 0) throw new Error('Контур не должен пересекать себя.')
+    if (Math.abs(cross(a, b, c)) < EPS && (b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) < 0) throw new Error(message("ui.the.outline.must.not.intersect.itself"))
     for (let j = i + 2; j < vertices.length; j++) {
       if (i === 0 && j === vertices.length - 1) continue
-      if (intersects(a, b, vertices[j], vertices[(j + 1) % vertices.length])) throw new Error('Контур не должен пересекать себя.')
+      if (intersects(a, b, vertices[j], vertices[(j + 1) % vertices.length])) throw new Error(message("ui.the.outline.must.not.intersect.itself"))
     }
   }
-  if (Math.abs(signedArea(vertices)) < EPS) throw new Error('Площадь области должна быть больше нуля.')
+  if (Math.abs(signedArea(vertices)) < EPS) throw new Error(message("ui.the.region.area.must.be.greater.than.zero"))
 }
 
 export function validateRegion(region: Region): void {
   if (!region.id || !region.mapId || !Number.isSafeInteger(region.number) || region.number < 1 ||
       !Number.isSafeInteger(region.order) || region.order < 0 || typeof region.title !== 'string' || !region.title.trim() ||
-      typeof region.titleCustomized !== 'boolean' || !/^#[a-f0-9]{6}$/i.test(region.color) || !Number.isFinite(region.fillOpacity) || region.fillOpacity < 0 || region.fillOpacity > 1) throw new Error('Некорректные свойства области.')
+      typeof region.titleCustomized !== 'boolean' || !/^#[a-f0-9]{6}$/i.test(region.color) || !Number.isFinite(region.fillOpacity) || region.fillOpacity < 0 || region.fillOpacity > 1) throw new Error(message("ui.invalid.region.properties"))
   validatePolygon(region.vertices)
   validateRegionContent(region)
 }
@@ -68,7 +69,7 @@ export function validateRegionContent(content: RegionContent): void {
       !Array.isArray(content.tags) || content.tags.length > 256 || content.tags.some((t) => typeof t !== 'string' || !t.trim() || t.length > 120) ||
       new Set(content.tags).size !== content.tags.length || content.checks.some((c) => !c || typeof c.id !== 'string' || !c.id ||
         !text(c.condition) || !text(c.ability) || !text(c.result) || (c.dc !== undefined && (!Number.isSafeInteger(c.dc) || c.dc < 0))) ||
-      new Set(content.checks.map((c) => c.id)).size !== content.checks.length) throw new Error('Некорректное содержимое области или превышен лимит текста, проверок и тегов.')
+      new Set(content.checks.map((c) => c.id)).size !== content.checks.length) throw new Error(message("ui.invalid.region.contents.or.text.check.or.tag.limit"))
 }
 export function regionHasUserContent(region: Region): boolean {
   return region.titleCustomized || !!region.shortDescription.trim() || documentHasContent(region.gmNotes) || documentHasContent(region.playerDescription) || !!region.checks.length || !!region.tags.length

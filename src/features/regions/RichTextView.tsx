@@ -1,3 +1,4 @@
+import { localize, message } from '../../i18n'
 import { createElement, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Asset } from '../../domain/project'
@@ -13,7 +14,7 @@ export function AssetImage({ asset, alt }: { asset?: Asset; alt: string }) {
     queueMicrotask(() => { if (active) setLoaded({ blob: asset.blob, url }) })
     return () => { active = false; URL.revokeObjectURL(url) }
   }, [asset])
-  return asset && loaded?.blob === asset.blob ? <img src={loaded.url} alt={alt || 'Изображение в тексте'} /> : <span role="status">{asset ? 'Подготовка изображения…' : 'Изображение недоступно'}</span>
+  return asset && loaded?.blob === asset.blob ? <img src={loaded.url} alt={alt || localize(message("ui.image.in.text"))} /> : <span role="status">{localize(asset ? message("ui.preparing.image") : message("ui.image.unavailable"))}</span>
 }
 export function RichTextView({ document, assets }: { document: RichDocument; assets: Record<string, Asset> }) {
   const render = (node: RichNode, index: number): ReactNode => {

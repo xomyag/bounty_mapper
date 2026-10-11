@@ -1,3 +1,4 @@
+import { localizedFailure } from '../../localizedTestFailure'
 import { describe, expect, it, vi } from 'vitest'
 import { prepareImage } from './prepareImage'
 
@@ -20,13 +21,13 @@ describe('Image preparation', () => {
   })
   it('rejects unsupported contents and a misleading MIME type before decoding', async () => {
     const decode = vi.fn().mockResolvedValue(decoded)
-    await expect(prepareImage(new Blob(['<svg/>'], { type: 'image/svg+xml' }), 'p', decode)).rejects.toThrow('Неподдерживаемый файл')
-    await expect(prepareImage(new Blob(['broken'], { type: 'image/png' }), 'p', decode)).rejects.toThrow('Неподдерживаемый файл')
-    await expect(prepareImage(new Blob([new Uint8Array(signatures[0][1])], { type: 'image/jpeg' }), 'p', decode)).rejects.toThrow('Неподдерживаемый файл')
+    await expect(localizedFailure(prepareImage(new Blob(['<svg/>'], { type: 'image/svg+xml' }), 'p', decode))).rejects.toThrow('Неподдерживаемый файл')
+    await expect(localizedFailure(prepareImage(new Blob(['broken'], { type: 'image/png' }), 'p', decode))).rejects.toThrow('Неподдерживаемый файл')
+    await expect(localizedFailure(prepareImage(new Blob([new Uint8Array(signatures[0][1])], { type: 'image/jpeg' }), 'p', decode))).rejects.toThrow('Неподдерживаемый файл')
     expect(decode).not.toHaveBeenCalled()
   })
   it('propagates a decoding failure without producing an asset', async () => {
     const decode = vi.fn().mockRejectedValue(new Error('Не удалось декодировать изображение'))
-    await expect(prepareImage(new Blob([new Uint8Array(signatures[0][1])], { type: 'image/png' }), 'p', decode)).rejects.toThrow('декодировать')
+    await expect(localizedFailure(prepareImage(new Blob([new Uint8Array(signatures[0][1])], { type: 'image/png' }), 'p', decode))).rejects.toThrow('декодировать')
   })
 })

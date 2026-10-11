@@ -1,3 +1,4 @@
+import { localizedFailure } from '../localizedTestFailure'
 import { legacyContextDocument } from './migrateProjectContext'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
@@ -57,8 +58,8 @@ describe('Map image storage', () => {
       if (this.name === 'projects') throw new DOMException('Нет места', 'QuotaExceededError')
       return put.apply(this, args)
     })
-    await expect(maps.replace(saved.project, testAsset(project.id, 900))).rejects.toThrow('Нет места')
-    await expect(maps.remove(saved.project)).rejects.toThrow('Нет места')
+    await expect(localizedFailure(maps.replace(saved.project, testAsset(project.id, 900)))).rejects.toThrow('Нет места')
+    await expect(localizedFailure(maps.remove(saved.project))).rejects.toThrow('Нет места')
     expect((await maps.load(project.id)).background?.asset.id).toBe(saved.image.background?.asset.id)
     expect((await projects.restore())?.revision).toBe(saved.project.revision)
     const db = new IndexedDb(() => factory)
@@ -67,7 +68,7 @@ describe('Map image storage', () => {
 
   it('does not leave a map or orphan asset after failed first upload', async () => {
     vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => { throw new Error('Ошибка записи') })
-    await expect(maps.replace(project, testAsset(project.id))).rejects.toThrow('Ошибка записи')
+    await expect(localizedFailure(maps.replace(project, testAsset(project.id)))).rejects.toThrow('Ошибка записи')
     expect(await maps.load(project.id)).toEqual({})
     const db = new IndexedDb(() => factory)
     expect(await db.transaction(['assets'], 'readonly', (tx) => requestResult(tx.objectStore('assets').count()))).toBe(0)
@@ -86,8 +87,8 @@ describe('Map image storage', () => {
   it('rejects stale image changes after another tab saves the project', async () => {
     const saved = await maps.replace(project, testAsset(project.id))
     await projects.save({ ...saved.project, context: legacyContextDocument('Новые заметки') })
-    await expect(maps.replace(saved.project, testAsset(project.id, 800))).rejects.toThrow('другой вкладке')
-    await expect(maps.remove(saved.project)).rejects.toThrow('другой вкладке')
+    await expect(localizedFailure(maps.replace(saved.project, testAsset(project.id, 800)))).rejects.toThrow('другой вкладке')
+    await expect(localizedFailure(maps.remove(saved.project))).rejects.toThrow('другой вкладке')
     expect((await maps.load(project.id)).background?.asset.id).toBe(saved.image.background?.asset.id)
   })
 

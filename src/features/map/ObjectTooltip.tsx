@@ -1,9 +1,10 @@
+import { t } from '../../i18n'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 export function TooltipTags({ tags }: { tags: string[] }) {
   if (!tags.length) return null
-  return <div className="tooltip-tags">{tags.slice(0, 5).map((tag) => <span key={tag} title={tag}>{tag}</span>)}{tags.length > 5 && <span>ещё {tags.length - 5}</span>}</div>
+  return <div className="tooltip-tags">{tags.slice(0, 5).map((tag) => <span key={tag} title={tag}>{tag}</span>)}{tags.length > 5 && <span>{t('counts.moreTags', { count: tags.length - 5 })}</span>}</div>
 }
 export function ObjectTooltip({ position, size, children }: { position: { x: number; y: number }; size: { width: number; height: number }; children: ReactNode }) {
   const element = useRef<HTMLElement>(null)

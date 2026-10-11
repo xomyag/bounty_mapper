@@ -1,3 +1,4 @@
+import { localizedFailure } from '../localizedTestFailure'
 import { legacyTestMetadata } from './backup/legacyTestMetadata'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
@@ -58,14 +59,14 @@ describe('Region persistence, migrations and archives', () => {
     const first = region(snapshot.maps[0].id); const second = { ...first, id: crypto.randomUUID(), number: 8 }
     const project = await repo.save(snapshot.project, first.mapId, [first, second])
     expect(await new IndexedDbRegionRepository(() => factory).load(first.mapId)).toHaveLength(2)
-    await expect(repo.save(snapshot.project, first.mapId, [])).rejects.toThrow('другой вкладке')
-    await expect(repo.save(project, 'missing-map', [])).rejects.toThrow('Карта')
+    await expect(localizedFailure(repo.save(snapshot.project, first.mapId, []))).rejects.toThrow('другой вкладке')
+    await expect(localizedFailure(repo.save(project, 'missing-map', []))).rejects.toThrow('Карта')
     const put = IDBObjectStore.prototype.put
     const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) {
       if (this.name === 'projects') throw new DOMException('Нет места', 'QuotaExceededError')
       return put.apply(this, args)
     })
-    await expect(repo.save(project, first.mapId, [{ ...first, vertices: translateVertices(vertices, { x: 10, y: 10 }) }])).rejects.toThrow('Нет места')
+    await expect(localizedFailure(repo.save(project, first.mapId, [{ ...first, vertices: translateVertices(vertices, { x: 10, y: 10 }) }]))).rejects.toThrow('Нет места')
     spy.mockRestore()
     expect(await repo.load(first.mapId)).toEqual([first, second].sort((a, b) => a.id.localeCompare(b.id)))
     expect((await snapshots.snapshot(project.id)).project.revision).toBe(project.revision)
@@ -136,7 +137,7 @@ describe('Region persistence, migrations and archives', () => {
       r.transaction!.objectStore('imagePlacements').createIndex('mapId', 'mapId', { unique: true }); r.transaction!.objectStore('regions').createIndex('mapId', 'mapId'); r.result.createObjectStore('settings')
     }; r.onsuccess = () => resolve(r.result) })
     await new Promise<void>((resolve) => { const tx = db.transaction(['projects', 'maps', 'regions'], 'readwrite'); tx.objectStore('projects').add(snapshot.project); tx.objectStore('maps').add(snapshot.maps[0]); tx.objectStore('regions').add(good); tx.objectStore('regions').add(bad); tx.oncomplete = () => resolve() }); db.close()
-    await expect(new IndexedDbRegionRepository(() => factory).load(good.mapId)).rejects.toThrow('Исходные данные не изменены')
+    await expect(localizedFailure(new IndexedDbRegionRepository(() => factory).load(good.mapId))).rejects.toThrow('Исходные данные не изменены')
     const original = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME); r.onsuccess = () => resolve(r.result) })
     expect(original.version).toBe(4); expect(original.objectStoreNames.contains('entities')).toBe(false)
     expect(await requestResult(original.transaction('regions').objectStore('regions').getAll())).toEqual([good, bad]); original.close()
@@ -161,7 +162,7 @@ describe('Region persistence, migrations and archives', () => {
     expect(restored.regions[0].gmNotes).toEqual(markdownToDocument(r.gmNotesMd))
     expect(restored.regions[0]).not.toHaveProperty('gmNotesMd')
     restored.regions[0].gmNotes = { type: 'doc', content: [{ type: 'image', attrs: { assetId: 'missing', alt: '' } }] }
-    await expect(buildArchive(restored)).rejects.toThrow('отсутствующее изображение')
+    await expect(localizedFailure(buildArchive(restored))).rejects.toThrow('отсутствующее изображение')
   })
   it('saves documents and new assets atomically, retains shared assets on image removal and remaps them in copies', async () => {
     const factory = new IDBFactory()
@@ -177,7 +178,7 @@ describe('Region persistence, migrations and archives', () => {
       if (this.name === 'projects') throw new DOMException('Нет места для картинки', 'QuotaExceededError')
       return put.apply(this, args)
     })
-    await expect(repo.save(snapshot.project, r.mapId, [r], [image])).rejects.toThrow('Нет места')
+    await expect(localizedFailure(repo.save(snapshot.project, r.mapId, [r], [image]))).rejects.toThrow('Нет места')
     spy.mockRestore()
     expect((await backups.snapshot(snapshot.project.id)).assets).toHaveLength(2)
     expect(await repo.load(r.mapId)).toEqual(snapshot.regions)
@@ -253,7 +254,7 @@ describe('Region persistence, migrations and archives', () => {
       if (this.name === 'settings') throw new DOMException('Нет места', 'QuotaExceededError')
       return put.apply(this, args)
     })
-    await expect(backups.insertCopy(copy)).rejects.toThrow('Нет места'); spy.mockRestore()
+    await expect(localizedFailure(backups.insertCopy(copy))).rejects.toThrow('Нет места'); spy.mockRestore()
     const db = new IndexedDb(() => factory)
     expect(await db.transaction(['regions'], 'readonly', (tx) => requestResult(tx.objectStore('regions').getAll()))).toEqual(snapshot.regions)
     expect(await new IndexedDbProjectRepository(() => factory).restore()).toEqual(snapshot.project)

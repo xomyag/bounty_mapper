@@ -1,3 +1,4 @@
+import { localizedFailure } from '../localizedTestFailure'
 import { legacyContextDocument } from '../storage/migrateProjectContext'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
@@ -33,8 +34,8 @@ describe('Project session', () => {
     session.edit({ name: 'Новое название', context: legacyContextDocument('Важный текст') })
     await session.save()
     expect(session.getSnapshot()).toMatchObject({ status: 'error', project: { name: 'Новое название', context: legacyContextDocument('Важный текст') } })
-    await expect(session.open('other')).rejects.toThrow('Сначала сохраните')
-    await expect(session.create('Другой')).rejects.toThrow('Сначала сохраните')
+    await expect(localizedFailure(session.open('other'))).rejects.toThrow('Сначала сохраните')
+    await expect(localizedFailure(session.create('Другой'))).rejects.toThrow('Сначала сохраните')
     expect((await repo.restore())?.context).toEqual(legacyContextDocument(''))
     await session.retry()
     expect(session.getSnapshot().status).toBe('saved')

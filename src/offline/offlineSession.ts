@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 export interface OfflineState { phase: 'disabled' | 'loading' | 'ready' | 'error' | 'applying'; updateAvailable: boolean; message?: string }
 export class OfflineSession {
   private state: OfflineState = { phase: 'disabled', updateAvailable: false }
@@ -22,7 +23,7 @@ export class OfflineSession {
     return this.initialization
   }
   private async start(container: ServiceWorkerContainer | undefined, base: string) {
-    if (!container) { this.update({ phase: 'error', message: 'Офлайн-запуск недоступен: требуется поддержка Service Worker и HTTPS или localhost.' }); return }
+    if (!container) { this.update({ phase: 'error', message: message("ui.offline.startup.is.unavailable.service.worker.support.and.https") }); return }
     this.container = container; this.base = base; this.hadController = !!container.controller
     this.update({ phase: 'loading', message: undefined })
     container.addEventListener('controllerchange', this.controllerChanged)
@@ -39,11 +40,11 @@ export class OfflineSession {
       if (registration.active) await this.probe(registration.active)
     } catch (error) { this.failure(error) }
   }
-  private failure(error: unknown) { ++this.failures; this.update({ phase: 'error', message: `Не удалось подготовить офлайн-запуск или обновление. ${error instanceof Error ? error.message : ''} Локальные проекты не изменены.` }) }
+  private failure(error: unknown) { ++this.failures; this.update({ phase: 'error', message: message("ui.could.not.prepare.offline.startup.or.the.update.value", { p0: error instanceof Error ? error.message : '' }) }) }
   private watch(worker: ServiceWorker) {
     const changed = () => {
       if (worker.state === 'installed' && this.container?.controller) { this.update({ updateAvailable: true }); void this.probe(worker) }
-      else if (worker.state === 'redundant') this.failure(new Error('Кэш оболочки не записан. Проверьте сеть и свободное место.'))
+      else if (worker.state === 'redundant') this.failure(new Error(message("ui.the.application.cache.was.not.saved.check.the.network")))
       else if (worker.state === 'activated') void this.probe(worker)
     }
     worker.addEventListener('statechange', changed)
@@ -56,11 +57,11 @@ export class OfflineSession {
     let timeout: ReturnType<typeof setTimeout> | undefined
     try {
       const ready = await new Promise<boolean>((resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error('Нет ответа от офлайн-кэша.')), 5000)
+        timeout = setTimeout(() => reject(new Error(message("ui.no.response.from.the.offline.cache"))), 5000)
         channel.port1.onmessage = (event: MessageEvent<{ ready: boolean }>) => { clearTimeout(timeout); resolve(event.data.ready === true) }
         worker.postMessage({ type: 'CACHE_STATUS' }, [channel.port2])
       })
-      if (!ready) throw new Error('Оболочка сохранена не полностью. Повторите подготовку с сетью.')
+      if (!ready) throw new Error(message("ui.the.application.was.not.completely.cached.retry.setup.while"))
       if (!this.disposed && failures === this.failures && this.state.phase !== 'applying') this.update({ phase: 'ready', message: undefined })
     } catch (error) { if (!this.disposed && this.state.phase !== 'applying') this.failure(error) }
     finally { clearTimeout(timeout); channel.port1.close(); channel.port2.close() }
@@ -88,7 +89,7 @@ export class OfflineSession {
     if (!this.registration?.waiting) { this.requested = false; this.reload(); return }
     try {
       this.registration.waiting.postMessage({ type: 'APPLY_UPDATE' })
-      this.applyTimeout = setTimeout(() => { this.requested = false; this.failure(new Error('Обновление пока не активировано. Можно повторить действие.')) }, 10000)
+      this.applyTimeout = setTimeout(() => { this.requested = false; this.failure(new Error(message("ui.the.update.has.not.been.activated.yet.you.can"))) }, 10000)
     } catch (error) { this.requested = false; this.failure(error) }
   }
   dispose = () => { this.disposed = true; this.requested = false; clearTimeout(this.applyTimeout); this.cleanups.forEach((cleanup) => cleanup()); this.cleanups = [] }

@@ -1,3 +1,5 @@
+import { localizedFailure } from '../localizedTestFailure'
+import { localize } from '../i18n'
 import { legacyContextDocument } from './migrateProjectContext'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
@@ -57,7 +59,7 @@ describe('Complete local recovery', () => {
     const factory = new IDBFactory(); const repo = new IndexedDbProjectBackupRepository(() => factory); const original = await fullProject(); await repo.insertCopy(original)
     const put = IDBObjectStore.prototype.put
     const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) { if (this.name === 'settings') throw new DOMException('Диск заполнен', 'QuotaExceededError'); return put.apply(this, args) })
-    await expect(repo.insertCopy(independentCopy(original))).rejects.toThrow('Недостаточно места'); spy.mockRestore()
+    await expect(localizedFailure(repo.insertCopy(independentCopy(original)))).rejects.toThrow('Недостаточно места'); spy.mockRestore()
     const db = new IndexedDb(() => factory)
     for (const [store, count] of [['projects', 1], ['maps', 3], ['assets', 2], ['imagePlacements', 2], ['regions', 3], ['entities', 2], ['markerPlacements', 2]] as const) expect(await db.transaction([store], 'readonly', (tx) => requestResult(tx.objectStore(store).count()))).toBe(count)
     expect((await new IndexedDbProjectRepository(() => factory).restore())?.id).toBe(original.project.id)
@@ -68,19 +70,19 @@ describe('Complete local recovery', () => {
     const put = IDBObjectStore.prototype.put; const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) { if (this.name === 'settings') throw new DOMException('Диск заполнен', 'QuotaExceededError'); return put.apply(this, args) })
     await session.save(); expect(session.getSnapshot()).toMatchObject({ status: 'error', project: { context: legacyContextDocument('Последний текст') } }); expect(await repo.restore()).toEqual(stale)
     spy.mockRestore(); await session.retry(); expect(session.getSnapshot().status).toBe('saved')
-    await expect(new IndexedDbProjectRepository(() => factory).save({ ...stale, context: legacyContextDocument('Старый текст') })).rejects.toThrow('другой вкладке'); expect((await repo.restore())?.context).toEqual(legacyContextDocument('Последний текст'))
+    await expect(localizedFailure(new IndexedDbProjectRepository(() => factory).save({ ...stale, context: legacyContextDocument('Старый текст') }))).rejects.toThrow('другой вкладке'); expect((await repo.restore())?.context).toEqual(legacyContextDocument('Последний текст'))
   })
   it('rejects missing images and checksum-valid broken rich-document references before inserting', async () => {
     const snapshot = await fullProject(); const bytes = await buildArchive(snapshot)
     const missing = unzipSync(bytes); delete missing['assets/0.png']; await expect(parseArchive(new Blob([new Uint8Array(zipSync(missing))]), testDecode)).rejects.toThrow()
     const broken = unzipSync(bytes); const doc = JSON.parse(new TextDecoder().decode(broken['project.json'])); doc.entities[0].description.content.push({ type: 'image', attrs: { assetId: 'missing', alt: '' } })
     broken['project.json'] = new TextEncoder().encode(JSON.stringify(doc)); const manifest = JSON.parse(new TextDecoder().decode(broken['manifest.json'])); const file = manifest.files.find((f: { path: string }) => f.path === 'project.json'); file.byteSize = broken['project.json'].length; file.sha256 = await sha256(broken['project.json']); broken['manifest.json'] = new TextEncoder().encode(JSON.stringify(manifest))
-    await expect(parseArchive(new Blob([new Uint8Array(zipSync(broken))]), testDecode)).rejects.toThrow('отсутствующее изображение')
+    await expect(localizedFailure(parseArchive(new Blob([new Uint8Array(zipSync(broken))]), testDecode))).rejects.toThrow('отсутствующее изображение')
   })
   it('refuses a newer database without clearing its content or creating an empty project', async () => {
     const factory = new IDBFactory(); const db = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME, 10); r.onupgradeneeded = () => r.result.createObjectStore('future'); r.onsuccess = () => resolve(r.result) })
     await new Promise<void>((resolve) => { const tx = db.transaction('future', 'readwrite'); tx.objectStore('future').put('Существующие данные', 'data'); tx.oncomplete = () => resolve() }); db.close()
-    const session = new ProjectSession(new IndexedDbProjectRepository(() => factory)); await session.initialize(); expect(session.getSnapshot().project).toBeUndefined(); expect(session.getSnapshot().error).toContain('новее')
+    const session = new ProjectSession(new IndexedDbProjectRepository(() => factory)); await session.initialize(); expect(session.getSnapshot().project).toBeUndefined(); expect(localize(session.getSnapshot().error)).toContain('новее')
     const untouched = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME); r.onsuccess = () => resolve(r.result) }); expect(untouched.version).toBe(10); expect(await requestResult(untouched.transaction('future').objectStore('future').get('data'))).toBe('Существующие данные'); untouched.close()
   })
 })

@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import { migrateProjectContext, migrateMapDescription } from './migrateProjectContext'
 import { migrateRegionText } from './migrateRegionText'
 import { migrateMarkerPlacement } from './migrateMarkerPlacements'
@@ -17,7 +18,7 @@ export function requestResult<T>(request: IDBRequest<T>): Promise<T> {
 function transactionDone(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve()
-    tx.onabort = () => reject(tx.error ?? new Error('Запись отменена.'))
+    tx.onabort = () => reject(tx.error ?? new Error(message("ui.write.cancelled")))
     tx.onerror = () => { /* onabort reports the final outcome */ }
   })
 }
@@ -33,7 +34,7 @@ export class IndexedDb {
   private connect(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
       const factory = this.factory()
-      if (!factory) throw new Error('IndexedDB недоступна в этом браузере.')
+      if (!factory) throw new Error(message("ui.indexeddb.is.unavailable.in.this.browser"))
       const request = factory.open(this.name, DATABASE_VERSION)
       let blocked = false
       let migrationError: Error | undefined
@@ -63,13 +64,13 @@ export class IndexedDb {
             const row = cursor.result
             if (!row) return
             try { row.update(migrateMarkerPlacement(row.value)); row.continue() }
-            catch (error) { migrationError = new Error(`Не удалось перенести привязки маркеров. Исходные данные не изменены. ${error instanceof Error ? error.message : ''}`); request.transaction!.abort() }
+            catch (error) { migrationError = new Error(message("ui.could.not.migrate.marker.bindings.original.data.is.unchanged", { p0: error instanceof Error ? error.message : '' })); request.transaction!.abort() }
           }
         }
         if (event.oldVersion < 9) {
           for (const name of ['projects', 'maps'] as const) {
             const cursor = request.transaction!.objectStore(name).openCursor()
-            cursor.onsuccess = () => { const row = cursor.result; if (!row) return; try { row.update(name === 'projects' ? migrateProjectContext(row.value) : migrateMapDescription(row.value)); row.continue() } catch (error) { migrationError = new Error(`Не удалось перенести контекст приключения и карты. Исходные данные не изменены. ${error instanceof Error ? error.message : ''}`); request.transaction!.abort() } }
+            cursor.onsuccess = () => { const row = cursor.result; if (!row) return; try { row.update(name === 'projects' ? migrateProjectContext(row.value) : migrateMapDescription(row.value)); row.continue() } catch (error) { migrationError = new Error(message("ui.could.not.migrate.adventure.and.map.context.original.data", { p0: error instanceof Error ? error.message : '' })); request.transaction!.abort() } }
           }
         }
         if (event.oldVersion < 8) {
@@ -78,20 +79,20 @@ export class IndexedDb {
             const row = cursor.result
             if (!row) return
             try { const migrated = event.oldVersion < 5 ? migrateRegionText(row.value) : { shortDescription: '', ...row.value }; validateRegion(migrated); row.update(migrated); row.continue() }
-            catch (error) { migrationError = new Error(`Не удалось перенести карточки областей. Исходные данные не изменены. ${error instanceof Error ? error.message : ''}`); request.transaction!.abort() }
+            catch (error) { migrationError = new Error(message("ui.could.not.migrate.region.cards.original.data.is.unchanged", { p0: error instanceof Error ? error.message : '' })); request.transaction!.abort() }
           }
           const entities = request.transaction!.objectStore('entities').openCursor()
           entities.onsuccess = () => {
             const row = entities.result
             if (!row) return
             try { const migrated = { checks: [], ...row.value }; validateEntity(migrated); row.update(migrated); row.continue() }
-            catch (error) { migrationError = new Error(`Не удалось перенести сущности маркеров. Исходные данные не изменены. ${error instanceof Error ? error.message : ''}`); request.transaction!.abort() }
+            catch (error) { migrationError = new Error(message("ui.could.not.migrate.marker.entities.original.data.is.unchanged", { p0: error instanceof Error ? error.message : '' })); request.transaction!.abort() }
           }
         }
       }
       request.onblocked = () => {
         blocked = true
-        reject(new Error('Закройте другие вкладки Bounty Mapper и повторите попытку.'))
+        reject(new Error(message("ui.close.other.bounty.mapper.tabs.and.try.again")))
       }
       request.onerror = () => reject(migrationError ?? request.error)
       request.onsuccess = () => {

@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { Asset, ImagePlacement, Map, Project } from '../domain/project'
 import type { Region } from '../domain/region'
 import { remapDocumentAssets } from '../domain/richText'
@@ -25,7 +26,7 @@ export function independentCopy(snapshot: ProjectSnapshot): ProjectSnapshot {
   const regionIds = new globalThis.Map(snapshot.regions.map((region) => [region.id, crypto.randomUUID()]))
   const entityIds = new globalThis.Map(snapshot.entities.map((entity) => [entity.id, crypto.randomUUID()]))
   return {
-    project: { ...snapshot.project, context: remapDocumentAssets(snapshot.project.context, assetIds), id: projectId, name: `${snapshot.project.name} (копия)`, revision: 1, createdAt: now, updatedAt: now },
+    project: { ...snapshot.project, context: remapDocumentAssets(snapshot.project.context, assetIds), id: projectId, name: t("ui.value.copy", { p0: snapshot.project.name }), revision: 1, createdAt: now, updatedAt: now },
     maps: snapshot.maps.map((map) => ({ ...map, description: remapDocumentAssets(map.description, assetIds), id: mapIds.get(map.id)!, projectId })),
     assets: snapshot.assets.map((asset) => ({ ...asset, id: assetIds.get(asset.id)!, projectId })),
     imagePlacements: snapshot.imagePlacements.map((placement) => ({ ...placement, id: crypto.randomUUID(), mapId: mapIds.get(placement.mapId)!, assetId: assetIds.get(placement.assetId)! })),

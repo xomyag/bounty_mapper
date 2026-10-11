@@ -1,3 +1,4 @@
+import { message } from '../../i18n/message'
 import type { Asset } from '../../domain/project'
 
 export async function decodeImage(blob: Blob): Promise<HTMLImageElement> {
@@ -6,10 +7,10 @@ export async function decodeImage(blob: Blob): Promise<HTMLImageElement> {
     const image = new Image()
     image.src = url
     await image.decode()
-    if (image.naturalWidth <= 0 || image.naturalHeight <= 0) throw new Error('Пустое изображение')
+    if (image.naturalWidth <= 0 || image.naturalHeight <= 0) throw new Error(message("ui.empty.image"))
     return image
   } catch {
-    throw new Error('Не удалось декодировать изображение. Выберите исправный PNG, JPEG или WebP.')
+    throw new Error(message("ui.could.not.decode.the.image.choose.a.valid.png"))
   } finally { URL.revokeObjectURL(url) }
 }
 
@@ -20,7 +21,7 @@ export async function prepareImage(file: Blob, projectId: string, decode = decod
     : matches(0, [255, 216, 255]) ? 'image/jpeg'
     : matches(0, [82, 73, 70, 70]) && matches(8, [87, 69, 66, 80]) ? 'image/webp' : undefined
   if (!mimeType || (file.type && file.type !== mimeType)) {
-    throw new Error('Неподдерживаемый файл. Допустимы PNG, JPEG и WebP; содержимое должно соответствовать типу файла.')
+    throw new Error(message("ui.unsupported.file.use.png.jpeg.or.webp.the.contents"))
   }
   const blob = file.slice(0, file.size, mimeType)
   const image = await decode(blob)

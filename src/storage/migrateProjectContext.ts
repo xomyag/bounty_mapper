@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import type { Map, Project } from '../domain/project'
 import { PROJECT_SCHEMA_VERSION, validateProject } from '../domain/project'
 import { validateRichDocument } from '../domain/richText'
@@ -23,14 +24,14 @@ export function legacyContextDocument(text: string): RichDocument {
 }
 export function migrateProjectContext(value: Record<string, unknown>): Project {
   const { contextMd, ...rest } = value
-  if (value.schemaVersion !== 1 && value.schemaVersion !== PROJECT_SCHEMA_VERSION) throw new Error('Версия проекта не поддерживается.')
-  if (value.schemaVersion === 1 && typeof contextMd !== 'string') throw new Error('Повреждённый контекст приключения.')
+  if (value.schemaVersion !== 1 && value.schemaVersion !== PROJECT_SCHEMA_VERSION) throw new Error(message("ui.unsupported.project.version"))
+  if (value.schemaVersion === 1 && typeof contextMd !== 'string') throw new Error(message("ui.corrupted.adventure.context"))
   const project = { ...rest, schemaVersion: PROJECT_SCHEMA_VERSION, context: value.schemaVersion === 1 ? legacyContextDocument(contextMd as string) : value.context } as Project
   validateProject(project); return project
 }
 export function migrateMapDescription(value: Record<string, unknown>): Map {
   const { notesMd, ...rest } = value
-  if (!Object.hasOwn(rest, 'description') && typeof notesMd !== 'string') throw new Error('Повреждённое описание карты.')
+  if (!Object.hasOwn(rest, 'description') && typeof notesMd !== 'string') throw new Error(message("ui.corrupted.map.description"))
   const description = Object.hasOwn(rest, 'description') ? rest.description : legacyContextDocument(notesMd as string)
   validateRichDocument(description)
   return { ...rest, description } as Map

@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import type { ProjectRepository } from '../application/projectRepository'
 import { RevisionConflictError } from '../application/projectRepository'
 import { validateProject } from '../domain/project'
@@ -37,7 +38,7 @@ export class IndexedDbProjectRepository implements ProjectRepository {
   open(id: string): Promise<Project> {
     return this.db.transaction(['settings', 'projects'], 'readwrite', async (tx) => {
       const value: unknown = await requestResult(tx.objectStore('projects').get(id))
-      if (value === undefined) throw new Error('Проект не найден.')
+      if (value === undefined) throw new Error(message("ui.project.not.found"))
       const project = readProject(value)
       await requestResult(tx.objectStore('settings').put(id, 'activeProjectId'))
       return project
@@ -46,7 +47,7 @@ export class IndexedDbProjectRepository implements ProjectRepository {
 
   save(project: Project, assets: Asset[] = []): Promise<Project> {
     return this.db.transaction(['projects', 'settings', 'assets'], 'readwrite', async (tx) => {
-      if (!project.name.trim()) throw new Error('Укажите название проекта.')
+      if (!project.name.trim()) throw new Error(message("ui.enter.a.project.name"))
       const store = tx.objectStore('projects')
       const value: unknown = await requestResult(store.get(project.id))
       const existing = value === undefined ? undefined : readProject(value)

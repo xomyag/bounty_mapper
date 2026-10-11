@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import type { Asset, Project } from '../domain/project'
 
 export interface ProjectRepository {
@@ -11,7 +12,7 @@ export interface ProjectRepository {
 
 export class RevisionConflictError extends Error {
   constructor() {
-    super('Проект изменён в другой вкладке. Скопируйте свой текст перед повторным открытием проекта.')
+    super(message("ui.the.project.changed.in.another.tab.copy.your.text"))
     this.name = 'RevisionConflictError'
   }
 }
