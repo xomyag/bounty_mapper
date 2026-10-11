@@ -9,6 +9,8 @@ import { IndexedDbMapImageRepository } from './storage/indexedDbMapImageReposito
 vi.mock('./features/map/MapCanvas', () => ({ MapCanvas: () => <div>Canvas</div> }))
 
 beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  vi.stubGlobal('indexedDB', new IDBFactory())
   // jsdom does not implement the native modal API or focus trapping.
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
   HTMLElement.prototype.hidePopover = function () {}

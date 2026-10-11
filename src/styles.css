@@ -228,7 +228,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .map-image-actions p, .offline-menu p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .map-workspace { --controls-left: 12px; --controls-right: 12px; }
 .map-workspace.search-open { --controls-left: 354px; }
-.map-workspace.card-open { --controls-right: 434px; }
+.map-workspace.card-open { --controls-right: calc(var(--card-width, 410px) + 24px); }
 .workspace-controls { position: absolute; z-index: 4; display: flex; gap: 4px; padding: 4px; border: 1px solid #62717c; border-radius: 8px; background: #202933; box-shadow: 0 4px 14px #0005; }
 .creation-controls { top: 12px; left: var(--controls-left); }
 .history-controls { bottom: 12px; left: var(--controls-left); }
@@ -255,3 +255,33 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   .map-menu-row { grid-template-columns: minmax(50px, 1fr) auto auto; gap: 3px; }
   .map-menu-row button { padding: 8px 5px; font-size: 11px; gap: 3px; }
 }
+
+/* UI-02: common card geometry is independent of the canvas viewport. */
+.card-panel { position: absolute; z-index: 2; top: 12px; right: 12px; bottom: 12px; width: var(--card-width, 410px); max-width: calc(100% - 24px); pointer-events: none; }
+.card-panel > .region-card { position: relative; inset: auto; width: 100%; height: 100%; max-height: 100%; pointer-events: auto; overflow-x: hidden; }
+.card-resizer { position: absolute; z-index: 3; left: -6px; top: 0; bottom: 0; width: 12px; pointer-events: auto; cursor: ew-resize; touch-action: none; border-radius: 6px; }
+.card-resizer:hover, .card-resizer:focus-visible { background: #d7ad6255; outline: 2px solid #d7ad62; }
+.card-resizer::before { content: ''; position: absolute; left: 5px; top: calc(50% - 22px); height: 44px; width: 3px; border-radius: 2px; background: #93a1ac; }
+.plain-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.format-toolbar { flex-wrap: nowrap; align-items: center; gap: 3px; }
+.region-card .format-toolbar > select { width: 108px; min-width: 0; flex: 1 1 108px; padding: 5px 2px; font-size: 12px; }
+.region-card .format-toolbar button { flex: 0 0 auto; width: 28px; height: 30px; padding: 4px; display: inline-flex; align-items: center; justify-content: center; }
+.format-toolbar svg { width: 17px; height: 17px; }
+.format-secondary { display: flex; gap: 3px; }
+.format-more { margin: 0; padding: 6px; border: 1px solid #62717c; border-radius: 6px; background: #202933; color: #e5e8eb; }
+.format-more:popover-open { display: flex; flex-direction: column; gap: 4px; }
+.region-card .format-more button { width: auto; justify-content: flex-start; gap: 8px; padding: 5px 8px; }
+.format-more button::after { content: attr(aria-label); }
+.format-toolbar button[aria-pressed=true] { border-color: #dfb577; background: #54452e; }
+.region-hover { max-height: 280px; }
+.tooltip-description { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; line-clamp: 4; }
+.tooltip-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.tooltip-tags span { padding: 2px 6px; border-radius: 4px; background: #39444f; max-width: calc(50% - 4px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.region-hover > strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tooltip-checks p { margin: 5px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-height: 18px; }
+.map-workspace.controls-strips { --controls-left: 12px; --controls-right: 12px; }
+.controls-strips .card-panel { top: 72px; bottom: 72px; }
+.controls-strips .navigation-panel { top: 72px; max-height: calc(100% - 144px); }
+.controls-strips .map-hint { display: none; }
+@media (max-width: 1100px) { .card-panel { top: 72px; bottom: 72px; } }
+@media (max-width: 360px) { .format-toolbar { gap: 1px; } .region-card .format-toolbar button { width: 24px; } .card-panel > .region-card { padding: 10px; } }

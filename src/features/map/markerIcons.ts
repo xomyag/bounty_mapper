@@ -10,6 +10,7 @@ export const markerIcons: Record<MarkerKind, string> = {
   hero: 'M12 2 L21 6 L20 14 Q17 20 12 22 Q7 20 4 14 L3 6 Z M12 6 L12 17 M7 11 L17 11',
   ally: 'M12 20 L3 11 Q0 2 7 3 Q10 3 12 7 Q14 3 17 3 Q24 2 21 11 Z M8 11 L16 11 M12 8 L12 14',
   npc: 'M12 3 A4 4 0 1 0 12 11 A4 4 0 1 0 12 3 M4 21 L4 19 Q4 14 12 14 Q20 14 20 19 L20 21 Z',
+  trap: 'M2 20 L5 13 L8 18 L12 10 L16 18 L19 13 L22 20 Z M12 2 L12 6 M7 4 L9 7 M17 4 L15 7',
 }
 
 export function markerScreenScale(cameraScale: number) { return 1 / cameraScale }

@@ -26,14 +26,16 @@ async function legacy(markers: unknown[]) {
     r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error)
   })
   const region = { ...emptyRegionContent(), id: 'r', mapId: 'map-0', vertices: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }], order: 0, number: 1, title: 'Старый зал', titleCustomized: true, color: '#d7ad62', fillOpacity: .4 }
-  const entity = { id: 'e', projectId: snapshot.project.id, kind: 'enemy' as const, name: 'Страж', status: 'hidden', description: emptyDocument(), tags: ['старый'] }
+  const entity = { checks: [], id: 'e', projectId: snapshot.project.id, kind: 'enemy' as const, name: 'Страж', status: 'hidden', description: emptyDocument(), tags: ['старый'] }
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(Array.from(db.objectStoreNames), 'readwrite')
     tx.objectStore('projects').add(snapshot.project)
     for (const m of snapshot.maps) tx.objectStore('maps').add(m)
     for (const a of snapshot.assets) tx.objectStore('assets').add(a)
     for (const p of snapshot.imagePlacements) tx.objectStore('imagePlacements').add(p)
-    tx.objectStore('regions').add(region); tx.objectStore('entities').add(entity)
+    const { shortDescription: _description, ...legacyRegion } = region; void _description
+    const { checks: _checks, ...legacyEntity } = entity; void _checks
+    tx.objectStore('regions').add(legacyRegion); tx.objectStore('entities').add(legacyEntity)
     for (const m of markers) tx.objectStore('markerPlacements').add(m)
     tx.objectStore('settings').put(snapshot.project.id, 'activeProjectId')
     tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error)

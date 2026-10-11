@@ -145,7 +145,7 @@ describe('Region persistence, migrations and archives', () => {
     const files = unzipSync(await buildArchive(snapshot))
     const document = JSON.parse(new TextDecoder().decode(files['project.json']))
     const r = document.regions[0]
-    delete r.gmNotes; delete r.playerDescription; delete r.titleCustomized
+    delete r.shortDescription; delete r.gmNotes; delete r.playerDescription; delete r.titleCustomized
     r.gmNotesMd = '# Старый зал\n**Тайна**'; r.playerDescriptionMd = '> Описание'
     files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
@@ -195,7 +195,7 @@ describe('Region persistence, migrations and archives', () => {
     const snapshot = await testSnapshot(); snapshot.regions = [region(snapshot.maps[0].id)]
     const files = unzipSync(await buildArchive(snapshot))
     const document = JSON.parse(new TextDecoder().decode(files['project.json']))
-    for (const region of document.regions) for (const field of ['gmNotes', 'playerDescription', 'titleCustomized', 'checks', 'tags']) delete region[field]
+    for (const region of document.regions) for (const field of ['shortDescription', 'gmNotes', 'playerDescription', 'titleCustomized', 'checks', 'tags']) delete region[field]
     files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
     manifest.formatVersion = 2

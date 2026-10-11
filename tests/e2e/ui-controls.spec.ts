@@ -35,7 +35,7 @@ async function seed(page: Page) {
       const map = request.result[0]
       tx.objectStore('maps').add({ ...map, id: 'other-map', name: 'Этаж 2', order: 1 })
       for (const [index, id] of ['a', 'b'].entries()) { const x = 100 + index * 300; tx.objectStore('regions').add({ ...content, id, mapId: map.id, number: index + 1, title: `Зал ${id}`, titleCustomized: true, color: '#d7ad62', fillOpacity: .4, order: index, vertices: [{ x, y: 150 }, { x: x + 150, y: 150 }, { x: x + 150, y: 300 }, { x, y: 300 }] }) }
-      tx.objectStore('entities').add({ id: 'npc', projectId: map.projectId, name: 'Страж', kind: 'enemy', status: 'alive', description: content.gmNotes, tags: [] })
+      tx.objectStore('entities').add({ checks: [], id: 'npc', projectId: map.projectId, name: 'Страж', kind: 'enemy', status: 'alive', description: content.gmNotes, tags: [] })
       tx.objectStore('markerPlacements').add({ id: 'npc-placement', entityId: 'npc', mapId: map.id, x: 600, y: 400, color: '#d7ad62', locked: false, order: 0, regionIds: ['a'] })
     }
     await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error) }); db.close()

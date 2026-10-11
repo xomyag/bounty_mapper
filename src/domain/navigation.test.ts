@@ -12,9 +12,9 @@ const data: NavigationData = {
     { ...emptyRegionContent(), id: 'r3', mapId: 'a', number: 3, title: 'Двор', titleCustomized: true, tags: [], color: '#ffffff', fillOpacity: .4, order: 1, vertices: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }] },
   ],
   entities: [
-    { id: 'e1', projectId: 'project', kind: 'enemy', name: 'Страж башни', tags: ['тайна', 'Север'], status: 'hidden', description: emptyDocument() },
-    { id: 'e2', projectId: 'project', kind: 'enemy', name: 'Страж ворот', tags: ['север'], status: 'alive', description: emptyDocument() },
-    { id: 'e3', projectId: 'project', kind: 'door', name: 'Ворота', tags: ['Тайна'], status: 'hidden', description: emptyDocument() },
+    { checks: [], id: 'e1', projectId: 'project', kind: 'enemy', name: 'Страж башни', tags: ['тайна', 'Север'], status: 'hidden', description: emptyDocument() },
+    { checks: [], id: 'e2', projectId: 'project', kind: 'enemy', name: 'Страж ворот', tags: ['север'], status: 'alive', description: emptyDocument() },
+    { checks: [], id: 'e3', projectId: 'project', kind: 'door', name: 'Ворота', tags: ['Тайна'], status: 'hidden', description: emptyDocument() },
   ],
   markers: [
     { id: 'm1', entityId: 'e1', mapId: 'a', x: 10, y: 10, regionIds: ['r1', 'r3'], color: '#ffffff', locked: false, order: 0 },

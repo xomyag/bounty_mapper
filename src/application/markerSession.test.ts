@@ -152,6 +152,8 @@ describe('BM-007 markers and entities', () => {
     session.beginMarkerEdit(); session.editMarkerDetails({ ...session.getSnapshot().markerDraft!.fields, regionIds: [r.id] }); await session.saveMarkerDetails(); await add(session, 'npc')
     const saved = await snapshot(); const files = unzipSync(await buildArchive(saved))
     const document = JSON.parse(new TextDecoder().decode(files['project.json']))
+    for (const r of document.regions) delete r.shortDescription
+    for (const e of document.entities) delete e.checks
     for (const marker of document.markerPlacements) { if (marker.regionIds.length) marker.regionId = marker.regionIds[0]; delete marker.regionIds }
     files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
@@ -304,6 +306,8 @@ describe('BM-007 markers and entities', () => {
     session.openCard(r.id); session.editDetails(r.id, { ...detailsOf(r), gmNotes: { type: 'doc', content: [...markdownToDocument('# Старая тайна').content, { type: 'image', attrs: { assetId: original.assets[0].id, alt: 'План' } }] } }); await session.saveDetails()
     const saved = await snapshot(); const files = unzipSync(await buildArchive(saved))
     const document = JSON.parse(new TextDecoder().decode(files['project.json']))
+    for (const r of document.regions) delete r.shortDescription
+    for (const e of document.entities) delete e.checks
     delete document.entities; delete document.markerPlacements
     files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))

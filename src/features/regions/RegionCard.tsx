@@ -32,6 +32,7 @@ export function RegionCard({ region, state, session, disabled, geometryDisabled,
     {state.imageError && <p className="form-error" role="alert">{state.imageError} Текст карточки остаётся в черновике.</p>}
     {editing ? <fieldset disabled={busy}>
       <div className="card-identity"><label>Номер<input aria-label="Номер области" type="number" min="1" step="1" value={fields.number} onChange={(event) => edit({ number: event.target.value })} /></label><label>Название<input aria-label="Название области" value={fields.title} onChange={(event) => edit({ title: event.target.value })} /></label></div>
+      <label>Краткое описание<textarea aria-label="Краткое описание" rows={3} maxLength={262144} value={fields.shortDescription} onChange={(event) => edit({ shortDescription: event.target.value })} /></label>
       <Suspense fallback={<p role="status">Подготовка редактора…</p>}>
         <RichTextEditor label="Заметки ведущего" value={fields.gmNotes} assets={assets} disabled={busy} onChange={(gmNotes) => edit({ gmNotes })} insertImage={insertImage} onError={session.reportImageError} />
         <RichTextEditor label="Описание для игроков" value={fields.playerDescription} assets={assets} disabled={busy} onChange={(playerDescription) => edit({ playerDescription })} insertImage={insertImage} onError={session.reportImageError} />
@@ -56,6 +57,7 @@ export function RegionCard({ region, state, session, disabled, geometryDisabled,
       <div className="card-actions"><button type="button" onClick={() => { void session.saveDetails() }}>Сохранить</button><button type="button" onClick={session.cancelEdit}>Отмена</button></div>
     </fieldset> : <>
       {playing && !regionHasUserContent(region) && <p className="form-hint">Карточка пока не заполнена. Для редактирования перейдите в «Подготовку».</p>}
+      {region.shortDescription.trim() && <section aria-label="Краткое описание области"><h3>Краткое описание</h3><p className="plain-description">{region.shortDescription}</p></section>}
       <section className="region-player-description" aria-label="Описание для игроков области"><h3>Описание для игроков</h3>{documentHasContent(region.playerDescription) ? <RichTextView document={region.playerDescription} assets={state.assets} /> : <p>Описание пока не заполнено</p>}</section>
       <section className="region-gm-notes" aria-label="Заметки ведущего области"><h3>Заметки ведущего</h3>{documentHasContent(region.gmNotes) ? <RichTextView document={region.gmNotes} assets={state.assets} /> : <p>Заметки пока не заполнены</p>}</section>
       <h3>Проверки</h3>{!region.checks.length && <p>Нет проверок</p>}{region.checks.map((c) => <div className="region-check" key={c.id}><strong>{c.condition || 'Без условия'}</strong><p>{c.ability}{c.dc === undefined ? '' : ` · СЛ ${c.dc}`}</p><p>{c.result}</p></div>)}

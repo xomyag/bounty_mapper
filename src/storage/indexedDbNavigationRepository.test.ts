@@ -31,7 +31,7 @@ describe('Project maps and navigation storage', () => {
     const backgroundA = await images.replace(second.project, testAsset(project.id), first.map.id)
     const backgroundB = await images.replace(backgroundA.project, testAsset(project.id, 800), second.map.id)
     const repo = new IndexedDbRegionRepository(() => factory)
-    const entity: Entity = { id: 'shared-entity', projectId: project.id, kind: 'enemy', name: 'Страж', description: { type: 'doc', content: [{ type: 'image', attrs: { assetId: backgroundA.image.background!.asset.id, alt: '' } }] }, status: 'alive', tags: [] }
+    const entity: Entity = { checks: [], id: 'shared-entity', projectId: project.id, kind: 'enemy', name: 'Страж', description: { type: 'doc', content: [{ type: 'image', attrs: { assetId: backgroundA.image.background!.asset.id, alt: '' } }] }, status: 'alive', tags: [] }
     const marker = (id: string, mapId: string, regionId: string): MarkerPlacement => ({ id, mapId, entityId: entity.id, x: 10, y: 20, regionIds: [regionId], color: '#d7ad62', locked: false, order: 0 })
     const r1 = makeRegion(first.map.id, 'r1'); const r2 = makeRegion(second.map.id, 'r2')
     let current = await repo.save(backgroundB.project, first.map.id, [r1], [], { entities: [entity], markers: [marker('m1', first.map.id, r1.id)] })
@@ -61,7 +61,7 @@ describe('Project maps and navigation storage', () => {
     const region = { ...makeRegion(first.map.id, 'r1'), tags: ['Ловушка', 'Тайна'] }
     let current = await repo.save(first.project, first.map.id, [region], [], undefined, region.tags)
     expect((await new IndexedDbNavigationRepository(() => factory).load(project.id)).tagHistory).toEqual(['Тайна', 'Ловушка'])
-    const entity: Entity = { id: 'e1', projectId: project.id, kind: 'enemy', name: 'Страж', description: emptyDocument(), status: 'alive', tags: ['Ловушка', 'Ключ'] }
+    const entity: Entity = { checks: [], id: 'e1', projectId: project.id, kind: 'enemy', name: 'Страж', description: emptyDocument(), status: 'alive', tags: ['Ловушка', 'Ключ'] }
     const put = IDBObjectStore.prototype.put
     const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) { if (this.name === 'projects') throw new Error('Нет места'); return put.apply(this, args) })
     try { await expect(repo.save(current, first.map.id, [region], [], { entities: [entity], markers: [] }, entity.tags)).rejects.toThrow('Нет места') } finally { spy.mockRestore() }

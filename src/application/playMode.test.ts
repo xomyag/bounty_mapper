@@ -25,7 +25,7 @@ async function setup() {
   const original = await testSnapshot()
   const r: Region = { ...emptyRegionContent(), id: 'r1', mapId: original.maps[0].id, number: 1, title: 'Зал', titleCustomized: true, order: 0, color: '#d7ad62', fillOpacity: .4, vertices: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }] }
   original.regions = [r, { ...r, id: 'empty', number: 2, title: 'Область 2', titleCustomized: false }]
-  original.entities = [0, 1].map((n) => ({ id: `e${n}`, projectId: original.project.id, kind: 'enemy', name: `Страж ${n}`, description: { type: 'doc', content: [{ type: 'image', attrs: { assetId: original.assets[0].id, alt: 'Портрет' } }] }, status: 'alive', tags: ['бой'] }))
+  original.entities = [0, 1].map((n) => ({ checks: [], id: `e${n}`, projectId: original.project.id, kind: 'enemy', name: `Страж ${n}`, description: { type: 'doc', content: [{ type: 'image', attrs: { assetId: original.assets[0].id, alt: 'Портрет' } }] }, status: 'alive', tags: ['бой'] }))
   original.markerPlacements = [0, 1].map((n) => ({ id: `m${n}`, entityId: `e${n}`, mapId: r.mapId, x: 20 + n * 20, y: 5, regionIds: [r.id], color: '#d7ad62', locked: false, order: n }))
   original.markerPlacements.push({ ...original.markerPlacements[0], id: 'shared', mapId: original.maps[1].id, regionIds: [] })
   await backups.insertCopy(original)

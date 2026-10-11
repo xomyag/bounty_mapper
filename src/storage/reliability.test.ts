@@ -20,7 +20,7 @@ async function fullProject() {
   const document = markdownToDocument('# Тайна\n\n**Страж** и *ключ*\n\n> Подсказка\n\n- Один\n- Два\n\n| Навык | СЛ |\n| --- | --- |\n| Сила | 12 |')
   document.content.push({ type: 'image', attrs: { assetId: snapshot.assets[0].id, alt: 'Схема' } })
   snapshot.regions = [0, 1, 2].map((n) => ({ ...emptyRegionContent(), id: `region-${n}`, mapId: snapshot.maps[n === 2 ? 1 : 0].id, number: n + 1, title: `Зал ${n}`, titleCustomized: true, order: n, color: '#ee3344', fillOpacity: .65, vertices: [{ x: -10, y: 5 }, { x: 50, y: 5 }, { x: 20, y: 50 }], gmNotes: structuredClone(document), playerDescription: markdownToDocument('## Для игроков\n[Ключ](https://example.org/)'), tags: ['Ловушка', 'золото'], checks: [{ id: `check-${n}`, condition: 'Открытие', ability: 'Сила', dc: 12, result: 'Открыто' }] }))
-  snapshot.entities = [0, 1].map((n) => ({ id: `entity-${n}`, projectId: snapshot.project.id, kind: 'enemy' as const, name: `Страж ${n}`, status: n ? 'defeated' : 'hidden', tags: ['Ловушка'], description: structuredClone(document) }))
+  snapshot.entities = [0, 1].map((n) => ({ checks: [], id: `entity-${n}`, projectId: snapshot.project.id, kind: 'enemy' as const, name: `Страж ${n}`, status: n ? 'defeated' : 'hidden', tags: ['Ловушка'], description: structuredClone(document) }))
   snapshot.markerPlacements = [0, 1].map((n) => ({ id: `marker-${n}`, entityId: snapshot.entities[n].id, mapId: snapshot.maps[0].id, x: n * 50, y: -25, regionIds: snapshot.regions.slice(0, 2).map((r) => r.id), color: '#44aabb', locked: !!n, order: n }))
   return snapshot
 }
@@ -77,9 +77,9 @@ describe('Complete local recovery', () => {
     await expect(parseArchive(new Blob([new Uint8Array(zipSync(broken))]), testDecode)).rejects.toThrow('отсутствующее изображение')
   })
   it('refuses a newer database without clearing its content or creating an empty project', async () => {
-    const factory = new IDBFactory(); const db = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME, 8); r.onupgradeneeded = () => r.result.createObjectStore('future'); r.onsuccess = () => resolve(r.result) })
+    const factory = new IDBFactory(); const db = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME, 9); r.onupgradeneeded = () => r.result.createObjectStore('future'); r.onsuccess = () => resolve(r.result) })
     await new Promise<void>((resolve) => { const tx = db.transaction('future', 'readwrite'); tx.objectStore('future').put('Существующие данные', 'data'); tx.oncomplete = () => resolve() }); db.close()
     const session = new ProjectSession(new IndexedDbProjectRepository(() => factory)); await session.initialize(); expect(session.getSnapshot().project).toBeUndefined(); expect(session.getSnapshot().error).toContain('новее')
-    const untouched = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME); r.onsuccess = () => resolve(r.result) }); expect(untouched.version).toBe(8); expect(await requestResult(untouched.transaction('future').objectStore('future').get('data'))).toBe('Существующие данные'); untouched.close()
+    const untouched = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME); r.onsuccess = () => resolve(r.result) }); expect(untouched.version).toBe(9); expect(await requestResult(untouched.transaction('future').objectStore('future').get('data'))).toBe('Существующие данные'); untouched.close()
   })
 })

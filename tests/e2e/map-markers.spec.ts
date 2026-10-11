@@ -322,7 +322,7 @@ test('camera never resets on marker drag, region/marker save, cleared inputs or 
   await page.getByRole('button', { name: 'Показать всю карту' }).click(); await expect.poll(() => currentCamera(page)).not.toEqual(camera)
 })
 
-test('context menu has all eight types; new marker drag is a draft, multiple links survive save/reload and region undo', async ({ page }) => {
+test('context menu has every type; new marker drag is a draft, multiple links survive save/reload and region undo', async ({ page }) => {
   const { box } = await seed(page)
   await page.getByRole('button', { name: 'Добавить область', exact: true }).click()
   for (const [x, y] of [[120, 130], [320, 130], [320, 330], [120, 330]]) await page.mouse.click(box.x + x, box.y + y)
@@ -334,7 +334,7 @@ test('context menu has all eight types; new marker drag is a draft, multiple lin
   await expect(menu.getByRole('menuitem', { name: 'Добавить область', exact: true })).toBeVisible()
   const add = menu.getByRole('menuitem', { name: 'Добавить маркер', exact: true }); await add.hover()
   const types = page.getByRole('menu', { name: 'Тип маркера', exact: true })
-  await expect(types.getByRole('menuitem')).toHaveCount(8)
+  await expect(types.getByRole('menuitem')).toHaveCount(9)
   for (const kind of ['Противник', 'Босс', 'Дверь', 'Проход', 'Награда', 'Герой', 'Союзник', 'NPC']) await expect(types.getByRole('menuitem', { name: kind, exact: true })).toBeVisible()
   await add.click(); await expect(types).toBeVisible()
   await types.getByRole('menuitem', { name: 'Босс', exact: true }).click(); await expect(menu).toHaveCount(0)

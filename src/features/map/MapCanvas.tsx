@@ -6,7 +6,7 @@ import type { Camera, Point } from '../../domain/viewport'
 import { centerOn, fitBounds, screenToWorld, zoomAt } from '../../domain/viewport'
 import { labelAnchor, projectOnEdge } from '../../domain/region'
 import type { Region } from '../../domain/region'
-import { documentText } from '../../domain/richText'
+import { ObjectTooltip, TooltipTags } from './ObjectTooltip'
 import type { RegionSession, RegionState } from '../../application/regionSession'
 import { cachedBitmap, prepareBitmap } from './bitmapCache'
 import type { ViewportMemory } from '../../application/viewportMemory'
@@ -42,7 +42,6 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
   const hoverRegion = !markerHover && !regions.markerTool && !regions.draft && !regions.vertexMode && !preview && hover ? regions.regions.find((r) => r.id === hover.id) : undefined
   const hoverMarker = !regions.markerTool && !regions.draft && !regions.vertexMode && markerHover ? regions.markers.find((m) => m.id === markerHover.id) : undefined
   const hoverEntity = hoverMarker ? regions.entities.find((e) => e.id === hoverMarker.entityId) : undefined
-  const hoverNotes = hoverRegion ? documentText(hoverRegion.gmNotes) : ''
   const asset = image.background?.asset
   const placement = image.background?.placement
   const mapId = image.map?.id
@@ -300,8 +299,8 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
       {asset && !visibleBitmap && !decodeError && <p className="map-overlay" role="status">Подготовка изображения…</p>}
       {decodeError && <p className="map-overlay form-error" role="alert">{decodeError}</p>}
       {menu && !readOnly && <MapContextMenu position={menu} size={size} disabled={!editable} onClose={() => setMenu(undefined)} onRegion={() => { session.start(menu.point); setMenu(undefined); focus() }} onMarker={(kind) => { session.startMarker(kind); session.placeMarker(menu.point); setMenu(undefined); focus() }} />}
-      {hoverRegion && hover && hoverNotes && <aside className="region-hover" role="tooltip" style={{ left: hover.x, top: hover.y }}><strong>{hoverRegion.number}. {hoverRegion.title}</strong><p>{hoverNotes.length > 450 ? `${hoverNotes.slice(0, 450)}…` : hoverNotes}</p><small>Полный текст — в карточке по клику</small></aside>}
-      {hoverEntity && markerHover && <aside className="region-hover" role="tooltip" style={{ left: markerHover.x, top: markerHover.y }}><strong>{hoverEntity.name}</strong><p>{markerTypes[hoverEntity.kind].label} · {statusBadge(hoverEntity.status)} {statusLabel(hoverEntity)}{hoverMarker?.locked ? ' · Закреплён' : ''}</p></aside>}
+      {hoverRegion && hover && <ObjectTooltip position={hover} size={size}><strong>{hoverRegion.number}. {hoverRegion.title}</strong>{hoverRegion.shortDescription.trim() && <p className="tooltip-description">{hoverRegion.shortDescription}</p>}<TooltipTags tags={hoverRegion.tags} /></ObjectTooltip>}
+      {hoverEntity && markerHover && <ObjectTooltip position={markerHover} size={size}><strong>{hoverEntity.name}</strong><p>{markerTypes[hoverEntity.kind].label} · {statusBadge(hoverEntity.status)} {statusLabel(hoverEntity)}{hoverMarker?.locked ? ' · Закреплён' : ''}</p><TooltipTags tags={hoverEntity.tags} />{hoverEntity.kind === 'trap' && <div className="tooltip-checks">{hoverEntity.checks.slice(0, 3).map((c) => <p key={c.id}>{c.condition} — {c.ability}, СЛ {c.dc}</p>)}{hoverEntity.checks.length > 3 && <small>Ещё проверок: {hoverEntity.checks.length - 3}</small>}</div>}</ObjectTooltip>}
       <p id="map-controls-hint" className="map-hint">{playing ? 'Игра: геометрия заблокирована · Перемещение вида / масштаб · Ctrl+Z / Ctrl+Shift+Z — статус' : regions.markerTool ? 'Клик или тап — положение маркера · Esc — отмена' : regions.draft ? 'Клик — вершина · Ручки — перемещение · Двойной клик по ручке — удалить · Enter / двойной клик по фону — готово · Esc — отмена' : regions.vertexMode ? 'Перетащите вершину · Клик по ребру — добавить · Двойной клик по ручке / Delete — удалить' : 'Фон — перемещение вида · Колесо — масштаб · Ctrl+Z / Ctrl+Shift+Z — отмена / повтор'}</p>
     </div>
   )
