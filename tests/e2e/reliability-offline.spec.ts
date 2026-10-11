@@ -28,7 +28,7 @@ async function seed(page: Page, origin: string) {
         const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Тайна офлайн', marks: [{ type: 'bold' }] }] }, { type: 'image', attrs: { assetId: asset.result[0].id, alt: 'Локальная схема' } }] }
         const region = { ...content, id: 'room', mapId: map.id, number: 9, title: 'Зал офлайн', titleCustomized: true, order: 0, color: '#d7ad62', fillOpacity: .4, vertices: [{ x: 20, y: 20 }, { x: 250, y: 20 }, { x: 250, y: 200 }], gmNotes: doc, tags: ['Тайна'] }
         tx.objectStore('regions').add(region)
-        tx.objectStore('entities').add({ id: 'guard', projectId: map.projectId, name: 'Страж офлайн', kind: 'enemy', status: 'alive', description: doc, tags: ['Тайна'] })
+        tx.objectStore('entities').add({ checks: [], id: 'guard', projectId: map.projectId, name: 'Страж офлайн', kind: 'enemy', status: 'alive', description: doc, tags: ['Тайна'] })
         tx.objectStore('markerPlacements').add({ id: 'guard-placement', entityId: 'guard', mapId: map.id, x: 300, y: 250, color: '#d7ad62', locked: false, order: 0, regionIds: ['room'] })
         const p = tx.objectStore('projects').get(map.projectId); p.onsuccess = () => tx.objectStore('projects').put({ ...p.result, revision: p.result.revision + 1 })
       }

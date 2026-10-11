@@ -49,5 +49,5 @@ export function markdownToDocument(markdown: string): RichDocument {
 }
 export function migrateRegionText(value: Record<string, unknown>): Region {
   const { gmNotesMd, playerDescriptionMd, ...rest } = value
-  return { checks: [], tags: [], ...rest, titleCustomized: value.title !== `Область ${value.number}`, gmNotes: markdownToDocument(typeof gmNotesMd === 'string' ? gmNotesMd : ''), playerDescription: markdownToDocument(typeof playerDescriptionMd === 'string' ? playerDescriptionMd : '') } as unknown as Region
+  return { shortDescription: '', checks: [], tags: [], ...rest, titleCustomized: value.title !== `Область ${value.number}`, gmNotes: markdownToDocument(typeof gmNotesMd === 'string' ? gmNotesMd : ''), playerDescription: markdownToDocument(typeof playerDescriptionMd === 'string' ? playerDescriptionMd : '') } as unknown as Region
 }

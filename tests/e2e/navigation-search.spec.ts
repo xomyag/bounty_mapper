@@ -86,9 +86,9 @@ async function seed(page: Page) {
   ]
   const projectId = a.projectId
   const entities: Entity[] = [
-    { id: 'e1', projectId, kind: 'enemy', name: 'Страж башни', description: emptyDocument(), status: 'hidden', tags: ['Тайна', 'Север'] },
-    { id: 'e2', projectId, kind: 'enemy', name: 'Другой страж', description: emptyDocument(), status: 'alive', tags: ['Север'] },
-    { id: 'e3', projectId, kind: 'door', name: 'Ворота', description: emptyDocument(), status: 'hidden', tags: ['Ключ'] },
+    { checks: [], id: 'e1', projectId, kind: 'enemy', name: 'Страж башни', description: emptyDocument(), status: 'hidden', tags: ['Тайна', 'Север'] },
+    { checks: [], id: 'e2', projectId, kind: 'enemy', name: 'Другой страж', description: emptyDocument(), status: 'alive', tags: ['Север'] },
+    { checks: [], id: 'e3', projectId, kind: 'door', name: 'Ворота', description: emptyDocument(), status: 'hidden', tags: ['Ключ'] },
   ]
   const markers: MarkerPlacement[] = [
     { id: 'm1', entityId: 'e1', mapId: a.id, x: 260, y: 210, regionIds: ['a1', 'a2'], color: '#d7ad62', locked: false, order: 0 },

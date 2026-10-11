@@ -30,7 +30,7 @@ export function independentCopy(snapshot: ProjectSnapshot): ProjectSnapshot {
     assets: snapshot.assets.map((asset) => ({ ...asset, id: assetIds.get(asset.id)!, projectId })),
     imagePlacements: snapshot.imagePlacements.map((placement) => ({ ...placement, id: crypto.randomUUID(), mapId: mapIds.get(placement.mapId)!, assetId: assetIds.get(placement.assetId)! })),
     regions: snapshot.regions.map((region) => ({ ...region, id: regionIds.get(region.id)!, mapId: mapIds.get(region.mapId)!, vertices: region.vertices.map((point) => ({ ...point })), tags: [...region.tags], checks: region.checks.map((check) => ({ ...check, id: crypto.randomUUID() })), gmNotes: remapDocumentAssets(region.gmNotes, assetIds), playerDescription: remapDocumentAssets(region.playerDescription, assetIds) })),
-    entities: snapshot.entities.map((entity) => ({ ...entity, id: entityIds.get(entity.id)!, projectId, tags: [...entity.tags], description: remapDocumentAssets(entity.description, assetIds) })),
+    entities: snapshot.entities.map((entity) => ({ ...entity, id: entityIds.get(entity.id)!, projectId, tags: [...entity.tags], checks: entity.checks.map((check) => ({ ...check, id: crypto.randomUUID() })), description: remapDocumentAssets(entity.description, assetIds) })),
     markerPlacements: snapshot.markerPlacements.map((marker) => ({ ...marker, id: crypto.randomUUID(), mapId: mapIds.get(marker.mapId)!, entityId: entityIds.get(marker.entityId)!, regionIds: marker.regionIds.map((id) => regionIds.get(id)!) })),
   }
 }

@@ -49,7 +49,7 @@ function bounds(value: unknown) {
 }
 function unique(items: { id: string }[]) { if (new Set(items.map((item) => item.id)).size !== items.length) return invalid() }
 
-export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_LIMITS, formatVersion = 6): BackupDocument {
+export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_LIMITS, formatVersion = 7): BackupDocument {
   const root = record(value, ['project', 'maps', 'imagePlacements', 'assets', ...(formatVersion === 1 ? [] : ['regions']), ...(formatVersion < 5 ? [] : ['entities', 'markerPlacements'])])
   const p = record(root.project, ['id', 'name', 'contextMd', 'schemaVersion', 'revision', 'createdAt', 'updatedAt'])
   if (p.schemaVersion !== PROJECT_SCHEMA_VERSION) throw new Error('Версия данных проекта не поддерживается.')
@@ -78,7 +78,7 @@ export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_L
   })
   let vertexCount = 0
   const regions: Region[] = (formatVersion === 1 ? [] : array(root.regions, MAX_REGIONS)).map((value) => {
-    const r = record(value, ['id', 'mapId', 'vertices', 'order', 'number', 'title', 'color', 'fillOpacity', ...(formatVersion < 3 ? [] : formatVersion === 3 ? ['gmNotesMd', 'playerDescriptionMd', 'checks', 'tags'] : ['gmNotes', 'playerDescription', 'titleCustomized', 'checks', 'tags'])])
+    const r = record(value, ['id', 'mapId', 'vertices', 'order', 'number', 'title', 'color', 'fillOpacity', ...(formatVersion < 3 ? [] : formatVersion === 3 ? ['gmNotesMd', 'playerDescriptionMd', 'checks', 'tags'] : ['gmNotes', 'playerDescription', 'titleCustomized', 'checks', 'tags']), ...(formatVersion < 7 ? [] : ['shortDescription'])])
     const vertices = array(r.vertices, MAX_REGION_VERTICES).map((value) => {
       const p = record(value, ['x', 'y'])
       return { x: number(p.x), y: number(p.y) }
@@ -93,14 +93,16 @@ export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_L
         return { id: string(c.id, true), condition: string(c.condition), ability: string(c.ability), result: string(c.result), ...(c.dc === undefined ? {} : { dc: integer(c.dc) }) }
       }),
     }
-    const region: Region = { ...content, titleCustomized: formatVersion < 4 ? r.title !== `Область ${r.number}` : boolean(r.titleCustomized), id: string(r.id, true), mapId: string(r.mapId, true), vertices, order: integer(r.order), number: integer(r.number, 1), title: string(r.title, true), color: string(r.color), fillOpacity: number(r.fillOpacity) }
+    const region: Region = { ...content, shortDescription: formatVersion < 7 ? '' : string(r.shortDescription), titleCustomized: formatVersion < 4 ? r.title !== `Область ${r.number}` : boolean(r.titleCustomized), id: string(r.id, true), mapId: string(r.mapId, true), vertices, order: integer(r.order), number: integer(r.number, 1), title: string(r.title, true), color: string(r.color), fillOpacity: number(r.fillOpacity) }
     validateRegion(region)
     return region
   })
   const entities: Entity[] = (formatVersion < 5 ? [] : array(root.entities, MAX_ENTITIES)).map((value) => {
-    const e = record(value, ['id', 'projectId', 'kind', 'name', 'description', 'status', 'tags'])
+    const e = record(value, ['id', 'projectId', 'kind', 'name', 'description', 'status', 'tags', ...(formatVersion < 7 ? [] : ['checks'])])
     validateRichDocument(e.description)
-    const entity: Entity = { id: string(e.id, true), projectId: string(e.projectId, true), kind: string(e.kind) as MarkerKind, name: string(e.name, true), description: e.description, status: string(e.status, true), tags: array(e.tags, 256).map((tag) => string(tag, true)) }
+    if (formatVersion < 7 && e.kind === 'trap') return invalid()
+    const checks = formatVersion < 7 ? [] : array(e.checks, 256).map((value) => { const c = record(value, ['id', 'condition', 'ability', 'result'], ['dc']); return { id: string(c.id, true), condition: string(c.condition), ability: string(c.ability), result: string(c.result), ...(c.dc === undefined ? {} : { dc: integer(c.dc, 1) }) } })
+    const entity: Entity = { checks, id: string(e.id, true), projectId: string(e.projectId, true), kind: string(e.kind) as MarkerKind, name: string(e.name, true), description: e.description, status: string(e.status, true), tags: array(e.tags, 256).map((tag) => string(tag, true)) }
     validateEntity(entity); return entity
   })
   const markerPlacements: MarkerPlacement[] = (formatVersion < 5 ? [] : array(root.markerPlacements, MAX_MARKERS)).map((value) => {
@@ -127,11 +129,11 @@ export function documentFromSnapshot(snapshot: ProjectSnapshot): BackupDocument 
   const p = snapshot.project
   return validateDocument({
     project: { id: p.id, name: p.name, contextMd: p.contextMd, schemaVersion: p.schemaVersion, revision: p.revision, createdAt: p.createdAt, updatedAt: p.updatedAt },
-    entities: snapshot.entities.map((e) => ({ id: e.id, projectId: e.projectId, kind: e.kind, name: e.name, description: e.description, status: e.status, tags: [...e.tags] })),
+    entities: snapshot.entities.map((e) => ({ id: e.id, projectId: e.projectId, kind: e.kind, name: e.name, description: e.description, status: e.status, tags: [...e.tags], checks: e.checks.map((c) => ({ id: c.id, condition: c.condition, ability: c.ability, result: c.result, ...(c.dc === undefined ? {} : { dc: c.dc }) })) })),
     markerPlacements: snapshot.markerPlacements.map((m) => ({ id: m.id, mapId: m.mapId, entityId: m.entityId, x: m.x, y: m.y, color: m.color, locked: m.locked, order: m.order, regionIds: [...m.regionIds] })),
     maps: snapshot.maps.map((m) => ({ id: m.id, projectId: m.projectId, name: m.name, notesMd: m.notesMd, order: m.order, coordinateBounds: { x: m.coordinateBounds.x, y: m.coordinateBounds.y, width: m.coordinateBounds.width, height: m.coordinateBounds.height } })),
     imagePlacements: snapshot.imagePlacements.map((i) => ({ id: i.id, mapId: i.mapId, assetId: i.assetId, x: i.x, y: i.y, width: i.width, height: i.height, rotation: i.rotation, order: i.order, locked: i.locked, visible: i.visible })),
-    regions: snapshot.regions.map((r) => ({ id: r.id, mapId: r.mapId, vertices: r.vertices.map((p) => ({ x: p.x, y: p.y })), order: r.order, number: r.number, title: r.title, titleCustomized: r.titleCustomized, color: r.color, fillOpacity: r.fillOpacity, gmNotes: r.gmNotes, playerDescription: r.playerDescription, tags: [...r.tags], checks: r.checks.map((c) => ({ id: c.id, condition: c.condition, ability: c.ability, result: c.result, ...(c.dc === undefined ? {} : { dc: c.dc }) })) })),
+    regions: snapshot.regions.map((r) => ({ shortDescription: r.shortDescription, id: r.id, mapId: r.mapId, vertices: r.vertices.map((p) => ({ x: p.x, y: p.y })), order: r.order, number: r.number, title: r.title, titleCustomized: r.titleCustomized, color: r.color, fillOpacity: r.fillOpacity, gmNotes: r.gmNotes, playerDescription: r.playerDescription, tags: [...r.tags], checks: r.checks.map((c) => ({ id: c.id, condition: c.condition, ability: c.ability, result: c.result, ...(c.dc === undefined ? {} : { dc: c.dc }) })) })),
     assets: snapshot.assets.map((a, index) => ({ id: a.id, projectId: a.projectId, mimeType: a.mimeType, byteSize: a.byteSize, pixelWidth: a.pixelWidth, pixelHeight: a.pixelHeight, checksum: a.checksum, tags: [...a.tags], ...(a.caption === undefined ? {} : { caption: a.caption }), path: `assets/${index}.${a.mimeType === 'image/jpeg' ? 'jpg' : a.mimeType === 'image/png' ? 'png' : 'webp'}` })),
   })
 }

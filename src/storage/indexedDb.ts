@@ -1,9 +1,10 @@
 import { migrateRegionText } from './migrateRegionText'
 import { migrateMarkerPlacement } from './migrateMarkerPlacements'
 import { validateRegion } from '../domain/region'
+import { validateEntity } from '../domain/marker'
 import { storageError } from './storageError'
 export const DATABASE_NAME = 'bounty-mapper'
-export const DATABASE_VERSION = 7
+export const DATABASE_VERSION = 8
 
 export function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -64,13 +65,20 @@ export class IndexedDb {
             catch (error) { migrationError = new Error(`Не удалось перенести привязки маркеров. Исходные данные не изменены. ${error instanceof Error ? error.message : ''}`); request.transaction!.abort() }
           }
         }
-        if (event.oldVersion < 5) {
+        if (event.oldVersion < 8) {
           const cursor = request.transaction!.objectStore('regions').openCursor()
           cursor.onsuccess = () => {
             const row = cursor.result
             if (!row) return
-            try { const migrated = migrateRegionText(row.value); validateRegion(migrated); row.update(migrated); row.continue() }
+            try { const migrated = event.oldVersion < 5 ? migrateRegionText(row.value) : { shortDescription: '', ...row.value }; validateRegion(migrated); row.update(migrated); row.continue() }
             catch (error) { migrationError = new Error(`Не удалось перенести карточки областей. Исходные данные не изменены. ${error instanceof Error ? error.message : ''}`); request.transaction!.abort() }
+          }
+          const entities = request.transaction!.objectStore('entities').openCursor()
+          entities.onsuccess = () => {
+            const row = entities.result
+            if (!row) return
+            try { const migrated = { checks: [], ...row.value }; validateEntity(migrated); row.update(migrated); row.continue() }
+            catch (error) { migrationError = new Error(`Не удалось перенести сущности маркеров. Исходные данные не изменены. ${error instanceof Error ? error.message : ''}`); request.transaction!.abort() }
           }
         }
       }

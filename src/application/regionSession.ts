@@ -15,9 +15,10 @@ import type { ModeRepository } from './modeRepository'
 
 export interface RegionDetails extends RegionContent { number: string; title: string; color: string; fillOpacity: number; vertices: Point[] }
 interface DetailsDraft { fields: RegionDetails; assets: Asset[]; version: number; phase: 'dirty' | 'saving' | 'error'; error?: string; geometryUndo?: Point[][]; geometryRedo?: Point[][] }
-export const detailsOf = (region: Region): RegionDetails => ({ number: String(region.number), title: region.title, color: region.color, fillOpacity: region.fillOpacity, vertices: structuredClone(region.vertices), gmNotes: structuredClone(region.gmNotes), playerDescription: structuredClone(region.playerDescription), checks: structuredClone(region.checks), tags: [...region.tags] })
-export interface MarkerDetails { name: string; description: Entity['description']; tags: string[]; status: string; color: string; regionIds: string[]; locked: boolean }
-export const markerDetailsOf = (entity: Entity, marker: MarkerPlacement): MarkerDetails => ({ name: entity.name, description: structuredClone(entity.description), tags: [...entity.tags], status: entity.status, color: marker.color, regionIds: [...marker.regionIds], locked: marker.locked })
+export const detailsOf = (region: Region): RegionDetails => ({ shortDescription: region.shortDescription, number: String(region.number), title: region.title, color: region.color, fillOpacity: region.fillOpacity, vertices: structuredClone(region.vertices), gmNotes: structuredClone(region.gmNotes), playerDescription: structuredClone(region.playerDescription), checks: structuredClone(region.checks), tags: [...region.tags] })
+export type MarkerCheckDraft = Omit<Region['checks'][number], 'dc'> & { dc: string }
+export interface MarkerDetails { checks: MarkerCheckDraft[]; name: string; description: Entity['description']; tags: string[]; status: string; color: string; regionIds: string[]; locked: boolean }
+export const markerDetailsOf = (entity: Entity, marker: MarkerPlacement): MarkerDetails => ({ checks: (entity.checks ?? []).map((c) => ({ ...c, dc: c.dc === undefined ? '' : String(c.dc) })), name: entity.name, description: structuredClone(entity.description), tags: [...entity.tags], status: entity.status, color: marker.color, regionIds: [...marker.regionIds], locked: marker.locked })
 export interface MarkerDraft { entity: Entity; marker: MarkerPlacement; fields: MarkerDetails; assets: Asset[]; isNew: boolean; version: number; phase: 'dirty' | 'saving' | 'error'; error?: string }
 type CardIntent = { kind: 'open'; id: string; center?: boolean } | { kind: 'marker'; id: string; center?: boolean } | { kind: 'close' } | { kind: 'vertices' } | { kind: 'map'; target: NavigationTarget } | { kind: 'mode'; mode: WorkspaceMode }
 interface StatusCommand { entityId: string; before: string; after: string }
@@ -394,7 +395,7 @@ export class RegionSession {
     if (!this.ready() || !this.state.markerTool) return
     if (this.state.markers.length >= MAX_MARKERS || this.state.entities.length >= MAX_ENTITIES) { this.fail(new Error('Достигнут лимит маркеров или сущностей проекта.')); return }
     const kind = this.state.markerTool
-    const entity: Entity = { id: crypto.randomUUID(), projectId: this.getProjectId()!, kind, name: markerTypes[kind].label, description: emptyDocument(), status: Object.keys(statusesOf(kind))[0], tags: [] }
+    const entity: Entity = { checks: [], id: crypto.randomUUID(), projectId: this.getProjectId()!, kind, name: markerTypes[kind].label, description: emptyDocument(), status: Object.keys(statusesOf(kind))[0], tags: [] }
     const marker: MarkerPlacement = { id: crypto.randomUUID(), entityId: entity.id, mapId: this.state.mapId!, x: point.x, y: point.y, regionIds: [], color: '#d7ad62', locked: false, order: Math.max(-1, ...this.state.markers.map((m) => m.order)) + 1 }
     try { validateMarker(marker) } catch (error) { this.fail(error); return }
     this.update({ markerTool: undefined, markerCardId: marker.id, selectedMarkerId: marker.id, cardId: undefined, selectedId: undefined, vertexMode: false, cardMode: 'edit', markerDraft: { entity, marker, fields: markerDetailsOf(entity, marker), assets: [], isNew: true, phase: 'dirty', version: 0 } })
@@ -444,7 +445,7 @@ export class RegionSession {
       const draft = this.state.markerDraft
       const fields = structuredClone(draft.fields)
       fields.tags = canonicalTags(fields.tags, this.tagCatalog)
-      const entity: Entity = { ...draft.entity, name: fields.name.trim(), description: fields.description, tags: fields.tags, status: fields.status }
+      const entity: Entity = { ...draft.entity, checks: fields.checks.map((c) => ({ ...c, dc: c.dc.trim() ? Number(c.dc) : undefined })), name: fields.name.trim(), description: fields.description, tags: fields.tags, status: fields.status }
       const marker: MarkerPlacement = { ...draft.marker, color: fields.color, locked: fields.locked, regionIds: [...fields.regionIds] }
       try {
         validateEntity(entity); validateMarker(marker)

@@ -1,4 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import type { CSSProperties } from 'react'
+import { CardLayoutSession, clampCardWidth } from './application/cardLayoutSession'
+import { IndexedDbCardWidthRepository } from './storage/indexedDbCardWidthRepository'
+import { CardResizer } from './features/controls/CardResizer'
 import { ProjectSession } from './application/projectSession'
 import type { ProjectRepository } from './application/projectRepository'
 import { IndexedDbProjectRepository } from './storage/indexedDbProjectRepository'
@@ -51,6 +55,12 @@ const statusLabels = {
 }
 
 export function App({ repository = defaultRepository, mapRepository = defaultMapRepository, backupRepository = defaultBackupRepository, regionRepository = defaultRegionRepository, navigationRepository = defaultNavigationRepository, modeRepository = defaultModeRepository }: { repository?: ProjectRepository; mapRepository?: MapImageRepository; backupRepository?: ProjectBackupRepository; regionRepository?: RegionRepository; navigationRepository?: NavigationRepository; modeRepository?: ModeRepository }) {
+  const [cardLayout] = useState(() => new CardLayoutSession(new IndexedDbCardWidthRepository()))
+  const layout = useSyncExternalStore(cardLayout.subscribe, cardLayout.getSnapshot)
+  const workspace = useRef<HTMLElement>(null)
+  const [workspaceWidth, setWorkspaceWidth] = useState(window.innerWidth)
+  useEffect(() => { void cardLayout.initialize(); const observer = new ResizeObserver(() => { if (workspace.current) setWorkspaceWidth(workspace.current.clientWidth) }); if (workspace.current) observer.observe(workspace.current); return () => observer.disconnect() }, [cardLayout])
+  const cardWidth = clampCardWidth(layout.width, workspaceWidth)
   const [session] = useState(() => new ProjectSession(repository, projectLocksEnabled ? new BrowserProjectAccess() : undefined))
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot)
   const [dialog, setDialog] = useState<'projects' | 'edit' | null>(null)
@@ -207,7 +217,8 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
       {mapState.error && <div className="error-banner" role="alert"><span>{mapState.error} Ранее сохранённое изображение не изменено.</span><button type="button" disabled={mapBusy || state.loading} onClick={() => { void maps.retry() }}>Повторить загрузку карты</button></div>}
       {backupState.message && <div className={backupState.phase === 'error' ? 'error-banner' : 'backup-message'}><span role={backupState.phase === 'error' ? 'alert' : 'status'}>{backupState.message}</span><button type="button" onClick={backups.dismiss} aria-label="Закрыть сообщение об архиве">Закрыть</button></div>}
       {regionState.error && <div className="error-banner" role="alert"><span>{regionState.error}</span>{regionState.canRetry && <button type="button" disabled={mapBusy || state.loading || backupBusy} onClick={() => { void regions.retry() }}>{regions.hasLoaded() ? 'Повторить запись объектов карты' : 'Повторить чтение объектов карты'}</button>}<button type="button" disabled={regionBusy || !regions.hasLoaded()} onClick={regions.dismiss}>Закрыть ошибку карты</button></div>}
-      <main id="map-workspace" className={`map-workspace ${navigationProject === navigationKey && projectId ? 'search-open' : ''} ${cardRegion || cardMarker ? 'card-open' : ''}`} aria-label="Рабочая область карты" tabIndex={-1}>
+      {layout.phase === 'error' && <div className="error-banner" role="alert"><span>{layout.error}</span><button type="button" onClick={() => { void cardLayout.save() }}>Повторить сохранение ширины</button></div>}
+      <main ref={workspace} style={{ '--card-width': cardWidth + 'px' } as CSSProperties} id="map-workspace" className={`map-workspace ${navigationProject === navigationKey && projectId ? 'search-open' : ''} ${cardRegion || cardMarker ? 'card-open' : ''} ${workspaceWidth - (navigationProject === navigationKey && projectId ? 354 : 12) - (cardRegion || cardMarker ? cardWidth + 24 : 12) < 250 ? 'controls-strips' : ''}`} aria-label="Рабочая область карты" tabIndex={-1}>
         <div className="workspace-controls creation-controls" role="group" aria-label="Создание объектов">
           <IconButton icon={Pentagon} label="Добавить область" disabled={!canEditRegion || !!regionState.draft} onClick={startRegion} />
           <IconButton icon={MapPinPlus} label="Добавить маркер" disabled={!canEditRegion || !!regionState.draft} aria-expanded={!!mapId && markerPicker === mapId} onClick={() => setMarkerPicker((current) => current === mapId ? undefined : mapId)} />
@@ -232,8 +243,10 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
         </div>}
         {regionState.draft && <div className="region-draft-tools" role="group" aria-label="Создание области"><span>Вершин: {regionState.draft.length}</span><button type="button" disabled={!canEditRegion} onClick={() => { void regions.finish() }}>Готово</button><button type="button" disabled={regionBusy} onClick={regions.cancel}>Отменить контур</button></div>}
         {regionState.markerTool && <div className="region-draft-tools" role="group" aria-label="Размещение маркера"><span>{markerTypes[regionState.markerTool].label}: укажите место на карте</span><button type="button" onClick={regions.cancelMarkerTool}>Отменить размещение</button></div>}
+        {(cardRegion || cardMarker) && <div id="object-card" className="card-panel"><CardResizer width={cardWidth} viewWidth={workspaceWidth} session={cardLayout} />
         {cardRegion && <RegionCard key={cardRegion.id} region={cardRegion} state={regionState} session={regions} disabled={mapBusy || backupBusy || (state.loading && !detailsSaving) || session.hasUnsavedChanges()} geometryDisabled={!canEditRegion} tagCatalog={tags} />}
         {cardMarker && cardEntity && <MarkerCard key={cardMarker.id} entity={cardEntity} marker={cardMarker} state={regionState} session={regions} disabled={mapBusy || backupBusy || (state.loading && !detailsSaving) || session.hasUnsavedChanges()} geometryDisabled={!canEditRegion} tagCatalog={tags} />}
+        </div>}
       </main>
       {dialog && <ProjectDialog key={dialog} mode={dialog} repository={repository} session={session} onClose={() => setDialog(null)} onEdit={() => setDialog('edit')} />}
       {mapAction && <MapActionDialog action={mapAction} disabled={mapWritesDisabled} onSubmit={changeMap} onClose={() => { setMapAction(undefined); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.map-menu-trigger')?.focus()) }} />}
