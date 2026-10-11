@@ -6,6 +6,8 @@ import { MAX_REGIONS, validateRegion } from '../domain/region'
 import type { Region } from '../domain/region'
 import { DATABASE_NAME, IndexedDb, requestResult } from './indexedDb'
 import { readProject } from './indexedDbProjectRepository'
+import { MAX_ENTITIES, MAX_MARKERS, validateEntity, validateMarker } from '../domain/marker'
+import type { Entity, MapObjects, MarkerPlacement } from '../domain/marker'
 
 export class IndexedDbRegionRepository implements RegionRepository {
   private readonly db: IndexedDb
@@ -23,8 +25,19 @@ export class IndexedDbRegionRepository implements RegionRepository {
       return map ? requestResult(tx.objectStore('assets').index('projectId').getAll(map.projectId)) as Promise<Asset[]> : []
     })
   }
-  save(project: Project, mapId: string, regions: Region[], newAssets: Asset[] = []): Promise<Project> {
-    return this.db.transaction(['projects', 'maps', 'regions', 'assets'], 'readwrite', async (tx) => {
+  loadObjects(mapId: string): Promise<MapObjects> {
+    return this.db.transaction(['maps', 'entities', 'markerPlacements'], 'readonly', async (tx) => {
+      const map = await requestResult(tx.objectStore('maps').get(mapId)) as Map | undefined
+      if (!map) throw new Error('Карта не найдена.')
+      const entities = await requestResult(tx.objectStore('entities').index('projectId').getAll(map.projectId)) as Entity[]
+      const markers = await requestResult(tx.objectStore('markerPlacements').index('mapId').getAll(mapId)) as MarkerPlacement[]
+      entities.forEach(validateEntity); markers.forEach(validateMarker)
+      if (markers.some((m) => !entities.some((e) => e.id === m.entityId))) throw new Error('Сущность маркера не найдена.')
+      return { entities, markers: markers.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)) }
+    })
+  }
+  save(project: Project, mapId: string, regions: Region[], newAssets: Asset[] = [], objects?: MapObjects): Promise<Project> {
+    return this.db.transaction(['projects', 'maps', 'regions', 'assets', 'entities', 'markerPlacements'], 'readwrite', async (tx) => {
       const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
       if (stored.revision !== project.revision) throw new RevisionConflictError()
       const map = await requestResult(tx.objectStore('maps').get(mapId)) as Map | undefined
@@ -50,6 +63,29 @@ export class IndexedDbRegionRepository implements RegionRepository {
       const previous = await requestResult(store.index('mapId').getAllKeys(mapId))
       for (const id of previous) await requestResult(store.delete(id))
       for (const region of regions) await requestResult(store.add(region))
+      const entityStore = tx.objectStore('entities')
+      const markerStore = tx.objectStore('markerPlacements')
+      const entities = objects?.entities ?? await requestResult(entityStore.index('projectId').getAll(project.id)) as Entity[]
+      const previousMarkers = await requestResult(markerStore.index('mapId').getAll(mapId)) as MarkerPlacement[]
+      const markers: MarkerPlacement[] = objects?.markers ?? previousMarkers.map((m) => ({ ...m, regionIds: m.regionIds.filter((id) => regions.some((r) => r.id === id)) }))
+      if (entities.length > MAX_ENTITIES || markers.length > MAX_MARKERS || new Set(entities.map((e) => e.id)).size !== entities.length || new Set(markers.map((m) => m.id)).size !== markers.length) throw new Error('Превышен лимит или повторяются ID объектов карты.')
+      for (const entity of entities) {
+        validateEntity(entity)
+        const old = await requestResult(entityStore.get(entity.id)) as Entity | undefined
+        if (entity.projectId !== project.id || (old && old.projectId !== project.id)) throw new Error('Сущность принадлежит другому проекту.')
+        for (const id of documentAssetIds(entity.description)) {
+          const asset = await requestResult(tx.objectStore('assets').get(id)) as Asset | undefined
+          if (!asset || asset.projectId !== project.id) throw new Error('Изображение описания отсутствует или принадлежит другому проекту.')
+        }
+        await requestResult(entityStore.put(entity))
+      }
+      for (const marker of markers) {
+        validateMarker(marker)
+        const old = await requestResult(markerStore.get(marker.id)) as MarkerPlacement | undefined
+        if (marker.mapId !== mapId || (old && old.mapId !== mapId) || !entities.some((e) => e.id === marker.entityId) || marker.regionIds.some((id) => !regions.some((r) => r.id === id))) throw new Error('Некорректная ссылка маркера на карту, сущность или область.')
+      }
+      for (const marker of previousMarkers) await requestResult(markerStore.delete(marker.id))
+      for (const marker of markers) await requestResult(markerStore.add(marker))
       const next = { ...stored, revision: stored.revision + 1, updatedAt: new Date().toISOString() }
       await requestResult(tx.objectStore('projects').put(next))
       return next

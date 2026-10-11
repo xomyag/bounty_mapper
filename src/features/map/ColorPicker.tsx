@@ -17,7 +17,7 @@ function palettePosition(trigger: HTMLElement) {
   }
 }
 
-export function ColorPicker({ value, onChange, disabled }: { value: string; onChange: (color: string) => void; disabled: boolean }) {
+export function ColorPicker({ value, onChange, disabled, label = 'Цвет области', paletteLabel = 'Палитра цвета области' }: { value: string; onChange: (color: string) => void; disabled: boolean; label?: string; paletteLabel?: string }) {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState({ left: 0, top: 0, maxHeight: 0 })
   const [hex, setHex] = useState(value)
@@ -51,12 +51,12 @@ export function ColorPicker({ value, onChange, disabled }: { value: string; onCh
 
   return <div className="region-color-picker">
     <span>Цвет</span>
-    <button ref={trigger} className="color-trigger" type="button" aria-label="Цвет области" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} disabled={disabled}
+    <button ref={trigger} className="color-trigger" type="button" aria-label={label} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} disabled={disabled}
       onClick={() => { setPosition(palettePosition(trigger.current!)); setOpen((current) => !current) }}>
       <span style={{ backgroundColor: value }} aria-hidden="true" />
     </button>
-    {open && createPortal(<div ref={palette} id={id} className="color-palette" role="dialog" aria-label="Палитра цвета области" style={position}>
-      <strong>Цвет области</strong>
+    {open && createPortal(<div ref={palette} id={id} className="color-palette" role="dialog" aria-label={paletteLabel} style={position}>
+      <strong>{label}</strong>
       <div className="color-swatches" role="group" aria-label="Готовые цвета">
         {swatches.map(([name, color]) => <button key={color} type="button" aria-label={`${name} (${color})`} title={`${name} (${color})`} aria-pressed={value.toLowerCase() === color} disabled={disabled} style={{ backgroundColor: color }} onClick={() => choose(color)} />)}
       </div>

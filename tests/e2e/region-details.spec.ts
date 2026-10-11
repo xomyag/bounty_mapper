@@ -196,7 +196,7 @@ test('pastes cleaned HTML/plain text and a screenshot; assets survive failed wri
   const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: 'Экспорт проекта', exact: true }).click()
   const path = info.outputPath('visual-details.zip'); await (await downloading).saveAs(path)
   const entries = unzipSync(new Uint8Array(await readFile(path)))
-  expect(JSON.parse(new TextDecoder().decode(entries['manifest.json'])).formatVersion).toBe(4)
+  expect(JSON.parse(new TextDecoder().decode(entries['manifest.json'])).formatVersion).toBe(6)
   await page.getByLabel('Архив проекта', { exact: true }).setInputFiles(path)
   await expect(page.getByText('Копия проекта импортирована и сохранена на устройстве.')).toBeVisible()
   await page.getByRole('button', { name: 'Закрыть сообщение об архиве' }).click()

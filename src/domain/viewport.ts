@@ -10,6 +10,9 @@ export function screenToWorld(point: Point, camera: Camera): Point {
 export function worldToScreen(point: Point, camera: Camera): Point {
   return { x: point.x * camera.scale + camera.x, y: point.y * camera.scale + camera.y }
 }
+export function centerOn(camera: Camera, point: Point, view: { width: number; height: number }): Camera {
+  return { scale: camera.scale, x: view.width / 2 - point.x * camera.scale, y: view.height / 2 - point.y * camera.scale }
+}
 export function zoomAt(camera: Camera, pointer: Point, requestedScale: number): Camera {
   const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, requestedScale))
   const world = screenToWorld(pointer, camera)

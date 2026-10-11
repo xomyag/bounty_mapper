@@ -11,7 +11,7 @@ export async function testSnapshot(): Promise<ProjectSnapshot> {
   for (const asset of assets) asset.checksum = await sha256(bytes)
   const maps = [0, 1, 2].map((n) => ({ id: `map-${n}`, projectId: project.id, name: `Этаж ${n}`, notesMd: `Заметки карты ${n}`, order: n, coordinateBounds: { x: n ? n * -10 : 0, y: 12, width: 2, height: 2 } }))
   const imagePlacements = assets.map((asset, n) => ({ id: `placement-${n}`, mapId: maps[n].id, assetId: asset.id, x: n ? n * -10 : 0, y: 12, width: 2, height: 2, rotation: 15, order: n, locked: true, visible: n === 0 }))
-  return { project, maps, assets, imagePlacements, regions: [] }
+  return { project, maps, assets, imagePlacements, regions: [], entities: [], markerPlacements: [] }
 }
 
 export async function testDecode(blob: Blob, projectId: string): Promise<Asset> {

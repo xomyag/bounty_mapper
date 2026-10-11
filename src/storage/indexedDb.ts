@@ -1,6 +1,7 @@
 import { migrateRegionText } from './migrateRegionText'
+import { migrateMarkerPlacement } from './migrateMarkerPlacements'
 export const DATABASE_NAME = 'bounty-mapper'
-export const DATABASE_VERSION = 5
+export const DATABASE_VERSION = 7
 
 export function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -44,6 +45,21 @@ export class IndexedDb {
         }
         if (event.oldVersion < 3) {
           db.createObjectStore('regions', { keyPath: 'id' }).createIndex('mapId', 'mapId')
+        }
+        if (event.oldVersion < 6) {
+          db.createObjectStore('entities', { keyPath: 'id' }).createIndex('projectId', 'projectId')
+          const markers = db.createObjectStore('markerPlacements', { keyPath: 'id' })
+          markers.createIndex('mapId', 'mapId')
+          markers.createIndex('entityId', 'entityId')
+        }
+        if (event.oldVersion < 7) {
+          const cursor = request.transaction!.objectStore('markerPlacements').openCursor()
+          cursor.onsuccess = () => {
+            const row = cursor.result
+            if (!row) return
+            try { row.update(migrateMarkerPlacement(row.value)); row.continue() }
+            catch { request.transaction!.abort() }
+          }
         }
         if (event.oldVersion < 5) {
           const cursor = request.transaction!.objectStore('regions').openCursor()

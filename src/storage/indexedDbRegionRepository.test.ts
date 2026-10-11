@@ -87,12 +87,12 @@ describe('Region persistence, migrations and archives', () => {
     await new IndexedDbRegionRepository(() => factory).save(copy.project, copy.regions[0].mapId, [{ ...copy.regions[0], title: 'Только копия', vertices: translateVertices(vertices, { x: 5, y: 10 }) }])
     expect((await backups.snapshot(snapshot.project.id)).regions).toEqual(snapshot.regions)
   })
-  it.each([3, 4])('migrates a real v%s database without changing geometry, notes or project revision', async (version) => {
+  it.each([3, 4, 5])('migrates a real v%s database without changing geometry, notes or project revision', async (version) => {
     const factory = new IDBFactory()
     const snapshot = await testSnapshot()
     const old = region(snapshot.maps[0].id)
     const markdown = '# Старая тайна\n\n- **Золото**\n\n| Навык | СЛ |\n| --- | --- |\n| Сила | 15 |'
-    if (version === 4) old.gmNotes = markdownToDocument(markdown)
+    if (version >= 4) old.gmNotes = markdownToDocument(markdown)
     const { gmNotes: _gm, playerDescription: _player, checks: _checks, tags: _tags, titleCustomized: _custom, ...legacy } = old
     void [_gm, _player, _checks, _tags, _custom]
     if (version === 4) Object.assign(legacy, { gmNotesMd: markdown, playerDescriptionMd: '', checks: [], tags: [] })
@@ -111,10 +111,11 @@ describe('Region persistence, migrations and archives', () => {
     })
     await new Promise<void>((resolve) => {
       const tx = db.transaction(['projects', 'maps', 'regions'], 'readwrite')
-      tx.objectStore('projects').add(snapshot.project); tx.objectStore('maps').add(snapshot.maps[0]); tx.objectStore('regions').add(legacy)
+      tx.objectStore('projects').add(snapshot.project); tx.objectStore('maps').add(snapshot.maps[0]); tx.objectStore('regions').add(version === 5 ? old : legacy)
       tx.oncomplete = () => resolve()
     }); db.close()
     expect(await new IndexedDbRegionRepository(() => factory).load(old.mapId)).toEqual([old])
+    expect(await new IndexedDbRegionRepository(() => factory).loadObjects(old.mapId)).toEqual({ entities: [], markers: [] })
     expect((await new IndexedDbProjectBackupRepository(() => factory).snapshot(snapshot.project.id)).project).toEqual(snapshot.project)
   })
   it('imports v3 Markdown into one visual document and validates image references in v4', async () => {
@@ -127,6 +128,8 @@ describe('Region persistence, migrations and archives', () => {
     files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
     manifest.formatVersion = 3
+    delete document.entities; delete document.markerPlacements
+    files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const entry = manifest.files.find((f: { path: string }) => f.path === 'project.json')
     entry.byteSize = files['project.json'].length; entry.sha256 = await sha256(files['project.json'])
     files['manifest.json'] = new TextEncoder().encode(JSON.stringify(manifest))
@@ -174,6 +177,8 @@ describe('Region persistence, migrations and archives', () => {
     files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
     manifest.formatVersion = 2
+    delete document.entities; delete document.markerPlacements
+    files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const entry = manifest.files.find((f: { path: string }) => f.path === 'project.json')
     entry.byteSize = files['project.json'].length; entry.sha256 = await sha256(files['project.json'])
     files['manifest.json'] = new TextEncoder().encode(JSON.stringify(manifest))
@@ -188,6 +193,8 @@ describe('Region persistence, migrations and archives', () => {
     files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json'])) as { formatVersion: number; files: { path: string; byteSize: number; sha256: string }[] }
     manifest.formatVersion = 1
+    delete document.entities; delete document.markerPlacements
+    files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const entry = manifest.files.find((f) => f.path === 'project.json')!
     entry.byteSize = files['project.json'].length; entry.sha256 = await sha256(files['project.json'])
     files['manifest.json'] = new TextEncoder().encode(JSON.stringify(manifest))

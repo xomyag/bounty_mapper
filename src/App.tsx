@@ -15,6 +15,10 @@ import { RegionSession } from './application/regionSession'
 import type { RegionRepository } from './application/regionRepository'
 import { IndexedDbRegionRepository } from './storage/indexedDbRegionRepository'
 import { RegionCard } from './features/regions/RegionCard'
+import { MarkerCard } from './features/markers/MarkerCard'
+import { markerTypes } from './domain/marker'
+import type { MarkerKind } from './domain/marker'
+import { markerIcons } from './features/map/markerIcons'
 
 const MapCanvas = lazy(() => import('./features/map/MapCanvas').then((module) => ({ default: module.MapCanvas })))
 
@@ -39,18 +43,22 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   const unsavedDetails = regions.hasUnsavedDetails()
   const detailsSaving = regions.detailsSaving()
   const detailsError = Object.values(regionState.details).find((draft) => draft.phase === 'error')
+  const markerError = regionState.markerDraft?.phase === 'error'
   const fileInput = useRef<HTMLInputElement>(null)
   const archiveInput = useRef<HTMLInputElement>(null)
   const [backups] = useState(() => new ProjectBackupSession(session, backupRepository))
   const backupState = useSyncExternalStore(backups.subscribe, backups.getSnapshot)
   const backupBusy = backups.busy()
   const [fitVersion, setFitVersion] = useState(0)
+  const [markerPicker, setMarkerPicker] = useState<string>()
   const mapBusy = maps.busy() || regionBusy
   const projectId = state.project?.id
   const openVersion = session.getOpenVersion()
   const canWriteImage = !!state.project && !state.loading && !mapBusy && !unsavedDetails && state.status === 'saved' && mapState.projectId === projectId
   const mapId = mapState.projectId === projectId ? mapState.image.map?.id : undefined
   const cardRegion = regionState.mapId === mapId ? regionState.regions.find((region) => region.id === regionState.cardId) : undefined
+  const cardMarker = regionState.mapId === mapId && regionState.markerCardId ? regionState.markerDraft?.marker ?? regionState.markers.find((m) => m.id === regionState.markerCardId) : undefined
+  const cardEntity = cardMarker ? regionState.markerDraft?.entity ?? regionState.entities.find((e) => e.id === cardMarker.entityId) : undefined
   const canEditRegion = regions.ready() && !maps.busy() && !backupBusy && regionState.mapId === mapId
   const startRegion = () => {
     regions.start()
@@ -91,7 +99,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
         </a>
         <div className="project-state">
           {state.project && <span className="project-name" title={state.project.name}>{state.project.name}</span>}
-          <span role="status">{detailsSaving ? 'Сохранение карточек…' : detailsError ? 'Ошибка сохранения карточки' : unsavedDetails ? 'Есть изменения в карточках' : regionState.phase === 'saving' ? 'Сохранение областей…' : regionState.phase === 'loading' ? 'Чтение областей…' : regionState.error ? 'Ошибка области' : backupBusy ? backupState.phase === 'exporting' ? 'Экспорт проекта…' : backupState.phase === 'validating' ? 'Проверка архива…' : 'Сохранение копии…' : mapState.phase === 'error' ? 'Ошибка изображения карты' : mapState.phase === 'uploading' ? 'Загрузка изображения…' : mapState.phase === 'saving' ? 'Сохранение изображения…' : mapState.phase === 'loading' ? 'Чтение карты…' : state.loading ? 'Открытие…' : !state.project && state.error ? 'Ошибка открытия хранилища' : statusLabels[state.status]}</span>
+          <span role="status">{detailsSaving ? 'Сохранение карточек…' : detailsError || markerError ? 'Ошибка сохранения карточки' : unsavedDetails ? 'Есть изменения в карточках' : regionState.phase === 'saving' ? 'Сохранение объектов карты…' : regionState.phase === 'loading' ? 'Чтение объектов карты…' : regionState.error ? 'Ошибка объектов карты' : backupBusy ? backupState.phase === 'exporting' ? 'Экспорт проекта…' : backupState.phase === 'validating' ? 'Проверка архива…' : 'Сохранение копии…' : mapState.phase === 'error' ? 'Ошибка изображения карты' : mapState.phase === 'uploading' ? 'Загрузка изображения…' : mapState.phase === 'saving' ? 'Сохранение изображения…' : mapState.phase === 'loading' ? 'Чтение карты…' : state.loading ? 'Открытие…' : !state.project && state.error ? 'Ошибка открытия хранилища' : statusLabels[state.status]}</span>
         </div>
         <nav className="panel-actions" aria-label="Панель управления">
           <button type="button" disabled={state.loading || mapBusy || backupBusy || unsavedDetails} onClick={() => setDialog('projects')}>Проекты</button>
@@ -109,6 +117,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
             }}>Удалить изображение</button>}
           </>}
           <button type="button" disabled={!canEditRegion || !!regionState.draft} onClick={startRegion}>Добавить область</button>
+          <button type="button" disabled={!canEditRegion || !!regionState.draft} aria-expanded={!!mapId && markerPicker === mapId} onClick={() => setMarkerPicker((current) => current === mapId ? undefined : mapId)}>Добавить маркер</button>
           <button type="button" disabled={!canEditRegion || !!regionState.draft || !regionState.canUndo} onClick={() => { void regions.undo() }}>Отменить</button>
           <button type="button" disabled={!canEditRegion || !!regionState.draft || !regionState.canRedo} onClick={() => { void regions.redo() }}>Повторить</button>
           <button type="button" disabled={!state.project || state.loading || mapBusy || backupBusy || unsavedDetails} onClick={() => { void backups.export(downloadArchive, regions.flushDetails) }}>Экспорт проекта</button>
@@ -118,7 +127,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
             if (file) void backups.import(file)
           }} />
           <button type="button" disabled={state.loading || mapBusy || backupBusy || unsavedDetails || session.hasUnsavedChanges()} onClick={() => archiveInput.current?.click()}>Импорт проекта</button>
-          <button type="button" disabled title="Навигация станет доступна после добавления объектов">
+          <button type="button" disabled title="Навигация с фильтрами — следующий этап">
             Навигация
           </button>
         </nav>
@@ -131,8 +140,9 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
       )}
       {mapState.error && <div className="error-banner" role="alert"><span>{mapState.error} Ранее сохранённое изображение не изменено.</span><button type="button" disabled={mapBusy || state.loading} onClick={() => { void maps.retry() }}>Повторить загрузку карты</button></div>}
       {backupState.message && <div className={backupState.phase === 'error' ? 'error-banner' : 'backup-message'}><span role={backupState.phase === 'error' ? 'alert' : 'status'}>{backupState.message}</span><button type="button" onClick={backups.dismiss} aria-label="Закрыть сообщение об архиве">Закрыть</button></div>}
-      {regionState.error && <div className="error-banner" role="alert"><span>{regionState.error}</span>{regionState.canRetry && <button type="button" disabled={mapBusy || state.loading || backupBusy} onClick={() => { void regions.retry() }}>{regions.hasLoaded() ? 'Повторить запись областей' : 'Повторить чтение областей'}</button>}<button type="button" disabled={regionBusy || !regions.hasLoaded()} onClick={regions.dismiss}>Закрыть ошибку области</button></div>}
+      {regionState.error && <div className="error-banner" role="alert"><span>{regionState.error}</span>{regionState.canRetry && <button type="button" disabled={mapBusy || state.loading || backupBusy} onClick={() => { void regions.retry() }}>{regions.hasLoaded() ? 'Повторить запись объектов карты' : 'Повторить чтение объектов карты'}</button>}<button type="button" disabled={regionBusy || !regions.hasLoaded()} onClick={regions.dismiss}>Закрыть ошибку карты</button></div>}
       <main id="map-workspace" className="map-workspace" aria-label="Рабочая область карты" tabIndex={-1}>
+        {mapId && markerPicker === mapId && <div className="marker-type-menu" role="group" aria-label="Тип нового маркера"><strong>Выберите тип маркера</strong>{Object.entries(markerTypes).map(([kind, type]) => <button type="button" key={kind} disabled={!canEditRegion} onClick={() => { regions.startMarker(kind as MarkerKind); setMarkerPicker(undefined); requestAnimationFrame(() => document.querySelector<HTMLElement>('[aria-label="Карта приключения"]')?.focus()) }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={markerIcons[kind as MarkerKind]} /></svg>{type.label}</button>)}<button type="button" onClick={() => setMarkerPicker(undefined)}>Закрыть выбор типа</button></div>}
         {detailsError && regionState.details[cardRegion?.id ?? '']?.phase !== 'error' && <div className="error-banner details-error-overlay" role="alert"><span>{detailsError.error} Тексты сохранены в черновиках карточек.</span><button type="button" disabled={state.loading || backupBusy} onClick={() => { void regions.saveDetails() }}>Повторить запись карточек</button></div>}
         {mapId && <Suspense fallback={<p className="map-overlay" role="status">Подготовка карты…</p>}><MapCanvas key={projectId} image={mapState.image} fitVersion={fitVersion} regions={regionState} session={regions} editable={canEditRegion} /></Suspense>}
         {!mapId && <div className="empty-state">
@@ -141,7 +151,9 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
           <p>{state.project ? 'Загрузите PNG, JPEG или WebP через верхнюю панель.' : 'Создайте или откройте проект в верхней панели.'}</p>
         </div>}
         {regionState.draft && <div className="region-draft-tools" role="group" aria-label="Создание области"><span>Вершин: {regionState.draft.length}</span><button type="button" disabled={!canEditRegion} onClick={() => { void regions.finish() }}>Готово</button><button type="button" disabled={regionBusy} onClick={regions.cancel}>Отменить контур</button></div>}
+        {regionState.markerTool && <div className="region-draft-tools" role="group" aria-label="Размещение маркера"><span>{markerTypes[regionState.markerTool].label}: укажите место на карте</span><button type="button" onClick={regions.cancelMarkerTool}>Отменить размещение</button></div>}
         {cardRegion && <RegionCard key={cardRegion.id} region={cardRegion} state={regionState} session={regions} disabled={mapBusy || backupBusy || (state.loading && !detailsSaving) || session.hasUnsavedChanges()} geometryDisabled={!canEditRegion} />}
+        {cardMarker && cardEntity && <MarkerCard key={cardMarker.id} entity={cardEntity} marker={cardMarker} state={regionState} session={regions} disabled={mapBusy || backupBusy || (state.loading && !detailsSaving) || session.hasUnsavedChanges()} geometryDisabled={!canEditRegion} />}
       </main>
       {dialog && <ProjectDialog key={dialog} mode={dialog} repository={repository} session={session} onClose={() => setDialog(null)} onEdit={() => setDialog('edit')} />}
     </div>
