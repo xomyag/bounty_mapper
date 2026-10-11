@@ -37,6 +37,21 @@ export class IndexedDbRegionRepository implements RegionRepository {
       return { entities, markers: markers.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)) }
     })
   }
+  saveStatus(project: Project, entityId: string, expectedStatus: string, status: string): Promise<{ project: Project; entity: Entity }> {
+    return this.db.transaction(['projects', 'entities'], 'readwrite', async (tx) => {
+      const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
+      if (stored.revision !== project.revision) throw new RevisionConflictError()
+      const previous = await requestResult(tx.objectStore('entities').get(entityId)) as Entity | undefined
+      if (!previous || previous.projectId !== project.id) throw new Error('Сущность не найдена в текущем проекте.')
+      if (previous.status !== expectedStatus) throw new Error('Статус уже изменился. Откройте сохранённую версию проекта.')
+      const entity = { ...previous, status }
+      validateEntity(entity)
+      const next = { ...stored, revision: stored.revision + 1, updatedAt: new Date().toISOString() }
+      await requestResult(tx.objectStore('entities').put(entity))
+      await requestResult(tx.objectStore('projects').put(next))
+      return { project: next, entity }
+    })
+  }
   save(project: Project, mapId: string, regions: Region[], newAssets: Asset[] = [], objects?: MapObjects, usedTags?: string[]): Promise<Project> {
     return this.db.transaction(['projects', 'maps', 'regions', 'assets', 'entities', 'markerPlacements', 'settings'], 'readwrite', async (tx) => {
       const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))

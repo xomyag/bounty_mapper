@@ -3,7 +3,7 @@ import type { Map } from '../../domain/project'
 
 export type MapAction = { kind: 'create' } | { kind: 'rename' | 'delete'; map: Map }
 
-export function MapMenu({ maps, currentMapId, disabled, writesDisabled, onNavigate, onAction }: { maps: Map[]; currentMapId?: string; disabled: boolean; writesDisabled: boolean; onNavigate: (mapId: string) => void; onAction: (action: MapAction) => void }) {
+export function MapMenu({ maps, currentMapId, disabled, writesDisabled, playing = false, onNavigate, onAction }: { maps: Map[]; currentMapId?: string; disabled: boolean; writesDisabled: boolean; playing?: boolean; onNavigate: (mapId: string) => void; onAction: (action: MapAction) => void }) {
   const id = useId()
   const popover = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -26,7 +26,7 @@ export function MapMenu({ maps, currentMapId, disabled, writesDisabled, onNaviga
         <button type="button" role="menuitem" aria-label={`Переименовать карту «${map.name}»`} disabled={writesDisabled} onClick={() => action({ kind: 'rename', map })}>Переименовать</button>
         <button type="button" role="menuitem" aria-label={`Удалить карту «${map.name}»`} disabled={writesDisabled} onClick={() => action({ kind: 'delete', map })}>Удалить</button>
       </li>)}</ul>
-      {writesDisabled && <p className="form-hint">Для изменения карт сохраните или отмените правки карточки и завершите текущую операцию.</p>}
+      {writesDisabled && <p className="form-hint">{playing ? 'Изменение карт доступно в режиме «Подготовка». Переключение карт доступно в игре.' : 'Для изменения карт сохраните или отмените правки карточки и завершите текущую операцию.'}</p>}
     </div>
   </div>
 }

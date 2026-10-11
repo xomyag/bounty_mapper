@@ -8,6 +8,8 @@ import { prepareCardImage } from './cardImage'
 import { CardConfirmation } from './CardConfirmation'
 import { statusLabel } from '../../domain/marker'
 import { TagsInput } from '../tags/TagsInput'
+import { documentHasContent } from '../../domain/richText'
+import { regionHasUserContent } from '../../domain/region'
 
 const RichTextEditor = lazy(() => import('./RichTextEditor').then((module) => ({ default: module.RichTextEditor })))
 
@@ -15,7 +17,8 @@ export function RegionCard({ region, state, session, disabled, geometryDisabled,
   const draft = state.details[region.id]
   const fields = draft?.fields ?? detailsOf(region)
   const assets = { ...state.assets, ...Object.fromEntries((draft?.assets ?? []).map((a) => [a.id, a])) }
-  const editing = state.cardMode === 'edit'
+  const playing = state.mode === 'play'
+  const editing = !playing && state.cardMode === 'edit'
   const busy = disabled || session.detailsSaving() || !!state.imagePending
   const edit = (change: Partial<RegionDetails>) => session.editDetails(region.id, { ...fields, ...change })
   const insertImage = (file: Blob) => prepareCardImage(file, session, (asset) => session.addDraftAsset(region.id, asset))
@@ -51,20 +54,20 @@ export function RegionCard({ region, state, session, disabled, geometryDisabled,
       <div className="region-appearance"><ColorPicker value={fields.color} onChange={(color) => edit({ color })} disabled={busy} /><label>Заливка: {Math.round(fields.fillOpacity * 100)}%<input aria-label="Непрозрачность заливки" type="range" min="0" max="100" value={Math.round(fields.fillOpacity * 100)} onChange={(event) => edit({ fillOpacity: Number(event.target.value) / 100 })} /></label></div>
       <div className="card-actions"><button type="button" onClick={() => { void session.saveDetails() }}>Сохранить</button><button type="button" onClick={session.cancelEdit}>Отмена</button></div>
     </fieldset> : <>
-      <h3>Заметки ведущего</h3><RichTextView document={region.gmNotes} assets={state.assets} />
-      <h3>Описание для игроков</h3><RichTextView document={region.playerDescription} assets={state.assets} />
-      <h3>Проверки</h3>{region.checks.map((c) => <div className="region-check" key={c.id}><strong>{c.condition || 'Без условия'}</strong><p>{c.ability}{c.dc === undefined ? '' : ` · СЛ ${c.dc}`}</p><p>{c.result}</p></div>)}
+      {playing && !regionHasUserContent(region) && <p className="form-hint">Карточка пока не заполнена. Для редактирования перейдите в «Подготовку».</p>}
+      <section className="region-player-description" aria-label="Описание для игроков области"><h3>Описание для игроков</h3>{documentHasContent(region.playerDescription) ? <RichTextView document={region.playerDescription} assets={state.assets} /> : <p>Описание пока не заполнено</p>}</section>
+      <section className="region-gm-notes" aria-label="Заметки ведущего области"><h3>Заметки ведущего</h3>{documentHasContent(region.gmNotes) ? <RichTextView document={region.gmNotes} assets={state.assets} /> : <p>Заметки пока не заполнены</p>}</section>
+      <h3>Проверки</h3>{!region.checks.length && <p>Нет проверок</p>}{region.checks.map((c) => <div className="region-check" key={c.id}><strong>{c.condition || 'Без условия'}</strong><p>{c.ability}{c.dc === undefined ? '' : ` · СЛ ${c.dc}`}</p><p>{c.result}</p></div>)}
       <h3>Теги</h3><p>{region.tags.join(', ') || 'Нет тегов'}</p>
-      <button type="button" disabled={disabled || state.vertexMode} onClick={session.beginEdit}>Редактировать</button>
-      <button type="button" disabled={geometryDisabled} onClick={() => { void session.remove() }}>Удалить область</button>
+      {!playing && <><button type="button" disabled={disabled || state.vertexMode} onClick={session.beginEdit}>Редактировать</button><button type="button" disabled={geometryDisabled} onClick={() => { void session.remove() }}>Удалить область</button></>}
     </>}
     <section aria-label="Связанные маркеры"><h3>Связанные маркеры</h3><ul className="linked-markers">{state.markers.filter((m) => m.regionIds.includes(region.id)).map((m) => {
       const entity = state.entities.find((e) => e.id === m.entityId)!
       return <li key={m.id}><button type="button" disabled={busy || state.vertexMode} onClick={() => session.navigate({ mapId: m.mapId, kind: 'marker', id: m.id })}>{entity.name} · {statusLabel(entity)}</button></li>
     })}</ul>{!state.markers.some((m) => m.regionIds.includes(region.id)) && <p>Нет связанных маркеров</p>}</section>
-    <div className="card-map-tools"><button type="button" disabled={busy} aria-pressed={state.vertexMode} onClick={() => { session.setVertexMode(!state.vertexMode); focusMap() }}>{state.vertexMode ? 'Закончить правку вершин' : 'Редактировать вершины'}</button>
+    {!playing && <div className="card-map-tools"><button type="button" disabled={busy} aria-pressed={state.vertexMode} onClick={() => { session.setVertexMode(!state.vertexMode); focusMap() }}>{state.vertexMode ? 'Закончить правку вершин' : 'Редактировать вершины'}</button>
       {state.vertexMode && <button type="button" disabled={geometryDisabled || state.selectedVertex === undefined || region.vertices.length <= 3} onClick={() => { void session.removeVertex() }}>Удалить вершину</button>}
-    </div>
-    <CardConfirmation state={state} session={session} label="Несохранённые изменения области" error={draft?.error} />
+    </div>}
+    <CardConfirmation state={state} session={session} label="Несохранённые изменения области" error={draft?.error ?? state.modeError} />
   </section>
 }

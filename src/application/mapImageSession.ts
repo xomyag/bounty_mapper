@@ -17,7 +17,7 @@ export class MapImageSession {
   private readonly repository: MapImageRepository
   private readonly projects: ProjectSession
   private readonly prepare: (file: Blob, projectId: string) => Promise<Asset>
-  constructor(repository: MapImageRepository, projects: ProjectSession, prepare: (file: Blob, projectId: string) => Promise<Asset>) {
+  constructor(repository: MapImageRepository, projects: ProjectSession, prepare: (file: Blob, projectId: string) => Promise<Asset>, private readonly canEdit: () => boolean = () => true) {
     this.repository = repository
     this.projects = projects
     this.prepare = prepare
@@ -56,7 +56,7 @@ export class MapImageSession {
     this.update({ projectId: this.projects.getSnapshot().project!.id, image, phase: 'saved' })
   }
   private async change(file?: Blob) {
-    if (this.busy()) return
+    if (this.busy() || !this.canEdit()) return
     const project = this.projects.getSnapshot().project
     if (!project || project.id !== this.state.projectId) return
     let writing = false

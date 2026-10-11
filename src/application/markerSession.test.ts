@@ -13,6 +13,7 @@ import { independentCopy } from './projectBackupRepository'
 import { markerTypes } from '../domain/marker'
 import type { MarkerKind } from '../domain/marker'
 import { markdownToDocument } from '../storage/migrateRegionText'
+import { IndexedDbModeRepository } from '../storage/indexedDbModeRepository'
 
 async function setup() {
   const factory = new IDBFactory()
@@ -20,7 +21,7 @@ async function setup() {
   const original = await testSnapshot(); await backups.insertCopy(original)
   const projects = new ProjectSession(new IndexedDbProjectRepository(() => factory)); await projects.initialize()
   const repo = new IndexedDbRegionRepository(() => factory)
-  const session = new RegionSession(repo, projects); await session.load(original.maps[0].id)
+  const session = new RegionSession(repo, projects, new IndexedDbModeRepository(() => factory)); await session.load(original.maps[0].id)
   const snapshot = () => backups.snapshot(original.project.id)
   return { factory, backups, projects, repo, session, snapshot, original }
 }

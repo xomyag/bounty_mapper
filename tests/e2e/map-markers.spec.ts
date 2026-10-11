@@ -120,7 +120,7 @@ test('new marker cancel is empty; independent enemies, shared panel, explicit bi
   await page.reload(); await expect(page.getByRole('button', { name: 'Добавить маркер', exact: true })).toBeEnabled(); await expect(page.locator('.region-card')).toHaveCount(0)
   const fresh = (await page.getByRole('region', { name: 'Карта приключения' }).boundingBox())!
   await page.mouse.click(fresh.x + 220, fresh.y + 230)
-  await expect(card(page).getByText('Скрыт', { exact: false })).toBeVisible()
+  await expect(card(page).locator('.marker-status')).toContainText('Скрыт')
   expect((await stored(page)).entities).toEqual(saved.entities); expect(errors).toEqual([])
 })
 

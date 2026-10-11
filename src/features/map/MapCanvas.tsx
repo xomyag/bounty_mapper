@@ -18,7 +18,9 @@ interface Props { image: MapImage; fitVersion: number; regions: RegionState; ses
 const flat = (points: Point[]) => points.flatMap((p) => [p.x, p.y])
 const fill = (region: Region) => `${region.color}${Math.round(region.fillOpacity * 255).toString(16).padStart(2, '0')}`
 
-export function MapCanvas({ image, fitVersion, regions, session, editable, viewports }: Props) {
+export function MapCanvas({ image, fitVersion, regions, session, editable: editingAllowed, viewports }: Props) {
+  const playing = regions.mode === 'play'
+  const editable = editingAllowed && session.isPreparation()
   const host = useRef<HTMLDivElement>(null)
   const stage = useRef<Konva.Stage>(null)
   const doubleClickTarget = useRef<{ kind: 'draft' | 'region'; index: number; regionId?: string } | undefined>(undefined)
@@ -94,6 +96,17 @@ export function MapCanvas({ image, fitVersion, regions, session, editable, viewp
     void session.change(region).finally(() => setPreview(undefined))
   }
   const focus = () => host.current?.focus({ preventScroll: true })
+  useEffect(() => {
+    let previous = session.getSnapshot().mode
+    return session.subscribe(() => {
+      const mode = session.getSnapshot().mode
+      if (mode === 'play' && previous !== mode) {
+        stage.current?.find((node: Konva.Node) => node.isDragging()).forEach((node) => node.stopDrag())
+        setMenu(undefined); setPreview(undefined); setPointer(undefined); draggingRegion.current = false; draggedMarker.current = undefined; doubleClickTarget.current = undefined; blockStagePan.current = false
+      }
+      previous = mode
+    })
+  }, [session])
   return (
     <div ref={host} data-map-id={mapId} className={`canvas-host${regions.draft || regions.markerTool ? ' drawing' : ''}`} tabIndex={0} role="region" aria-label="Карта приключения" aria-describedby="map-controls-hint"
       onContextMenu={(event) => {
@@ -134,6 +147,8 @@ export function MapCanvas({ image, fitVersion, regions, session, editable, viewp
         if (event.target !== host.current) return
         if (event.key === 'Escape') { setMenu(undefined); if (regions.draft) session.cancel(); else if (regions.markerTool) session.cancelMarkerTool(); else if (regions.cardId || regions.markerCardId) session.closeCard(); else session.select() }
         else if (event.key === 'Enter' && regions.draft && editable) void session.finish()
+        else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && playing) { if (event.shiftKey) void session.redoStatus(); else void session.undoStatus() }
+        else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && playing) void session.redoStatus()
         else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && editable) { if (event.shiftKey) void session.redo(); else void session.undo() }
         else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && editable) void session.redo()
         else if (event.key === 'Delete' && editable && regions.selectedMarkerId) void session.removeMarker()
@@ -172,12 +187,12 @@ export function MapCanvas({ image, fitVersion, regions, session, editable, viewp
           <Layer>
             {placement && visibleBitmap && <CanvasImage listening={false} image={visibleBitmap} x={placement.x} y={placement.y} width={placement.width} height={placement.height} rotation={placement.rotation} visible={placement.visible} />}
             {regions.regions.map((saved) => {
-              const region = preview?.id === saved.id ? preview : saved
+              const region = !playing && preview?.id === saved.id ? preview : saved
               const selected = region.id === regions.selectedId
-              const vertices = selected && regions.vertexMode && !regions.draft
+              const vertices = !playing && selected && regions.vertexMode && !regions.draft
               const anchor = labelAnchor(region.vertices)
-              return <Group key={region.id} draggable={editable && !regions.markerTool && !regions.draft && !regions.vertexMode}
-                onMouseDown={(event) => { if (!regions.draft && !regions.vertexMode && !regions.markerTool) { event.cancelBubble = true; focus() } }}
+              return <Group key={region.id} _useStrictMode={playing} x={playing ? 0 : undefined} y={playing ? 0 : undefined} draggable={editable && !regions.markerTool && !regions.draft && !regions.vertexMode}
+                onMouseDown={(event) => { if (!regions.draft && !regions.vertexMode && !regions.markerTool) { event.cancelBubble = !playing; focus() } }}
                 onClick={(event) => { if (!regions.draft && !regions.markerTool) { event.cancelBubble = true; if (event.evt.button === 0 && !regions.vertexMode) { setHover(undefined); session.openCard(region.id) } } }}
                 onTap={(event) => { if (!regions.markerTool) { event.cancelBubble = true; if (!regions.draft && !regions.vertexMode) { setHover(undefined); session.openCard(region.id) } } }}
                 onMouseMove={() => { const p = stage.current?.getPointerPosition(); if (p && !draggingRegion.current) setHover({ id: region.id, x: Math.max(8, Math.min(p.x + 16, size.width - 320)), y: Math.max(8, Math.min(p.y + 16, size.height - 180)) }) }}
@@ -189,6 +204,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable, viewp
                   draggingRegion.current = false
                   const offset = { x: event.target.x(), y: event.target.y() }
                   event.target.position({ x: 0, y: 0 })
+                  if (!editable) return
                   savePreview({ ...saved, vertices: translateVertices(saved.vertices, offset) })
                 }}>
                 <Line points={flat(region.vertices)} closed fill={fill(region)} stroke={selected ? '#fff5cb' : region.color} strokeWidth={selected ? 3 : 1.5} strokeScaleEnabled={false} listening={!regions.draft} />
@@ -230,8 +246,8 @@ export function MapCanvas({ image, fitVersion, regions, session, editable, viewp
               const active = marker.id === regions.selectedMarkerId
               const isNew = !!regions.markerDraft?.isNew && regions.markerDraft.marker.id === marker.id
               const locked = isNew ? regions.markerDraft!.fields.locked : marker.locked
-              const canDrag = isNew ? session.canMoveMarkerDraft(marker.id) : editable && !locked
-              return <Group key={marker.id} name="map-marker" x={marker.x} y={marker.y} scaleX={scale} scaleY={scale} draggable={canDrag && !regions.draft && !regions.markerTool && !regions.vertexMode} listening={!regions.draft && !regions.markerTool && !regions.vertexMode}
+              const canDrag = session.isPreparation() && (isNew ? session.canMoveMarkerDraft(marker.id) : editable && !locked)
+              return <Group key={marker.id} name="map-marker" _useStrictMode={playing} x={marker.x} y={marker.y} scaleX={scale} scaleY={scale} draggable={canDrag && !regions.draft && !regions.markerTool && !regions.vertexMode} listening={!regions.draft && !regions.markerTool && !regions.vertexMode}
                 onMouseDown={(event) => { event.cancelBubble = true; focus() }}
                 onClick={(event) => { event.cancelBubble = true; if (event.evt.button === 0 && draggedMarker.current !== marker.id) { setMarkerHover(undefined); setHover(undefined); session.openMarkerCard(marker.id) } }}
                 onTap={(event) => { event.cancelBubble = true; if (draggedMarker.current !== marker.id) { setMarkerHover(undefined); setHover(undefined); session.openMarkerCard(marker.id) } }}
@@ -268,10 +284,10 @@ export function MapCanvas({ image, fitVersion, regions, session, editable, viewp
       )}
       {asset && !visibleBitmap && !decodeError && <p className="map-overlay" role="status">Подготовка изображения…</p>}
       {decodeError && <p className="map-overlay form-error" role="alert">{decodeError}</p>}
-      {menu && <MapContextMenu position={menu} size={size} disabled={!editable} onClose={() => setMenu(undefined)} onRegion={() => { session.start(menu.point); setMenu(undefined); focus() }} onMarker={(kind) => { session.startMarker(kind); session.placeMarker(menu.point); setMenu(undefined); focus() }} />}
+      {menu && !playing && <MapContextMenu position={menu} size={size} disabled={!editable} onClose={() => setMenu(undefined)} onRegion={() => { session.start(menu.point); setMenu(undefined); focus() }} onMarker={(kind) => { session.startMarker(kind); session.placeMarker(menu.point); setMenu(undefined); focus() }} />}
       {hoverRegion && hover && hoverNotes && <aside className="region-hover" role="tooltip" style={{ left: hover.x, top: hover.y }}><strong>{hoverRegion.number}. {hoverRegion.title}</strong><p>{hoverNotes.length > 450 ? `${hoverNotes.slice(0, 450)}…` : hoverNotes}</p><small>Полный текст — в карточке по клику</small></aside>}
       {hoverEntity && markerHover && <aside className="region-hover" role="tooltip" style={{ left: markerHover.x, top: markerHover.y }}><strong>{hoverEntity.name}</strong><p>{markerTypes[hoverEntity.kind].label} · {statusBadge(hoverEntity.status)} {statusLabel(hoverEntity)}{hoverMarker?.locked ? ' · Закреплён' : ''}</p></aside>}
-      <p id="map-controls-hint" className="map-hint">{regions.markerTool ? 'Клик или тап — положение маркера · Esc — отмена' : regions.draft ? 'Клик — вершина · Ручки — перемещение · Двойной клик по ручке — удалить · Enter / двойной клик по фону — готово · Esc — отмена' : regions.vertexMode ? 'Перетащите вершину · Клик по ребру — добавить · Двойной клик по ручке / Delete — удалить' : 'Фон — перемещение вида · Колесо — масштаб · Ctrl+Z / Ctrl+Shift+Z — отмена / повтор'}</p>
+      <p id="map-controls-hint" className="map-hint">{playing ? 'Игра: геометрия заблокирована · Перемещение вида / масштаб · Ctrl+Z / Ctrl+Shift+Z — статус' : regions.markerTool ? 'Клик или тап — положение маркера · Esc — отмена' : regions.draft ? 'Клик — вершина · Ручки — перемещение · Двойной клик по ручке — удалить · Enter / двойной клик по фону — готово · Esc — отмена' : regions.vertexMode ? 'Перетащите вершину · Клик по ребру — добавить · Двойной клик по ручке / Delete — удалить' : 'Фон — перемещение вида · Колесо — масштаб · Ctrl+Z / Ctrl+Shift+Z — отмена / повтор'}</p>
     </div>
   )
 }
