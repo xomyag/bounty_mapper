@@ -8,7 +8,10 @@ const card = (page: Page, key: MessageKey) => page.getByRole('region', { name: t
 const canvas = (page: Page) => page.locator('[data-map-canvas]')
 async function projectMenu(page: Page) {
   const trigger = button(page, 'ui.project.menu')
-  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.click()
+  const menu = page.getByRole('menu', { name: t('ui.project.menu'), exact: true })
+  if (!await menu.isVisible()) await trigger.click()
+  await expect(menu).toBeVisible()
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true')
 }
 async function chooseLanguage(page: Page, language: Language) {
   await projectMenu(page)
@@ -16,6 +19,8 @@ async function chooseLanguage(page: Page, language: Language) {
   setLanguage(language, { setItem: () => {} })
   await expect(page.locator('html')).toHaveAttribute('lang', language)
   await button(page, 'ui.project.menu').click()
+  await expect(page.getByRole('menu', { name: t('ui.project.menu'), exact: true })).toBeHidden()
+  await expect(button(page, 'ui.project.menu')).toHaveAttribute('aria-expanded', 'false')
 }
 async function menuAction(page: Page, key: MessageKey) {
   await projectMenu(page)
