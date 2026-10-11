@@ -1,3 +1,4 @@
+import { clickMenuAction, control } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import { unzipSync } from 'fflate'
@@ -14,7 +15,7 @@ import { emptyDocument } from '../../src/domain/richText'
 import type { RichDocument } from '../../src/domain/richText'
 
 type TestWindow = { Konva: { stages: Konva.Stage[] }; originalPut: typeof IDBObjectStore.prototype.put; frames: Camera[]; recording: boolean; originalCanvas: HTMLCanvasElement | null }
-const button = (page: Page, name: string) => page.getByRole('button', { name, exact: true })
+const button = control
 const modeButton = (page: Page, name: string) => page.getByRole('group', { name: 'Режим работы', exact: true }).getByRole('button', { name, exact: true })
 const canvas = (page: Page) => page.getByRole('region', { name: 'Карта приключения', exact: true })
 const regionCard = (page: Page) => page.getByRole('region', { name: 'Карточка области', exact: true })
@@ -60,7 +61,7 @@ async function find(page: Page, kind: 'Области' | 'Маркеры', id: s
   await paint(page); await expect(page.locator('.region-card')).toHaveCount(1)
 }
 async function seed(page: Page) {
-  await page.goto('/'); await button(page, 'Проекты').click()
+  await page.goto('/'); await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Игра')
   await button(page, 'Создать').click()
   await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
@@ -143,7 +144,7 @@ test('play locks buttons/canvas/context/keyboard and unfinished tools; cards ren
   await modeButton(page, 'Игра').click(); await expect(modeButton(page, 'Игра')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.locator('.drawing-toolbar')).toHaveCount(0)
   for (const name of ['Добавить область', 'Добавить маркер', 'Заменить изображение', 'Удалить изображение']) await expect(button(page, name)).toBeDisabled()
-  await canvas(page).click({ position: { x: 30, y: 40 }, button: 'right' }); await expect(page.getByRole('menu', { name: /Действия на карте/ })).toHaveCount(0)
+  await canvas(page).click({ position: { x: 200, y: 40 }, button: 'right' }); await expect(page.getByRole('menu', { name: /Действия на карте/ })).toHaveCount(0)
   await canvas(page).focus(); for (const key of ['Enter', 'Delete', 'Control+z', 'Control+Shift+z', 'Control+y']) await page.keyboard.press(key)
   await button(page, 'Карты проекта').click()
   const menu = page.getByRole('menu', { name: 'Карты проекта' }); await expect(menu.getByRole('menuitem', { name: 'New map' })).toBeDisabled()
@@ -212,7 +213,7 @@ test('quick status/undo/redo are atomic, update every representation, preserve c
   await switchMap(page, a.id); await expect(page.locator('.region-card')).toHaveCount(0)
   const saved = await stored(page)
   for (const key of ['regions', 'markers', 'images', 'assets', 'maps'] as const) expect(saved[key]).toEqual(before[key])
-  const download = page.waitForEvent('download'); await button(page, 'Экспорт проекта').click(); const archive = await download
+  const download = page.waitForEvent('download'); await clickMenuAction(page, 'Экспорт проекта'); const archive = await download
   const bytes = await readFile((await archive.path())!); const files = unzipSync(bytes)
   const document = JSON.parse(new TextDecoder().decode(files['project.json']))
   expect(document.entities.find((e: Entity) => e.id === 'e1').status).toBe('defeated'); expect(document).not.toHaveProperty('mode')

@@ -69,6 +69,6 @@ describe('Project session', () => {
     await session.initialize()
     expect(session.getSnapshot()).toMatchObject({ status: 'error', loading: false })
     await session.retry()
-    expect(session.getSnapshot()).toEqual({ project: undefined, status: 'idle', loading: false })
+    expect(session.getSnapshot()).toMatchObject({ project: undefined, status: 'idle', loading: false, readOnly: false })
   })
 })

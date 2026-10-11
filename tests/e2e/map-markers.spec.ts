@@ -1,3 +1,4 @@
+import { clickMenuAction } from './controls'
 import { Buffer } from 'node:buffer'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
@@ -29,7 +30,7 @@ async function stored(page: Page) {
   })
 }
 async function seed(page: Page, withArea = true) {
-  await page.goto('/'); await page.getByRole('button', { name: 'Проекты', exact: true }).click()
+  await page.goto('/'); await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Маркеры')
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
   await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
@@ -253,7 +254,7 @@ test('marker rich text/image drafts survive errors and archive copy; every type 
   await expect(description.locator('strong')).toHaveText('Указывает путь'); await expect(description.locator('img')).toBeVisible()
   await page.evaluate(() => { IDBObjectStore.prototype.put = (window as unknown as { __markerPut: typeof IDBObjectStore.prototype.put }).__markerPut })
   await save(page); const before = await stored(page)
-  const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: 'Экспорт проекта', exact: true }).click()
+  const downloading = page.waitForEvent('download'); await clickMenuAction(page, 'Экспорт проекта')
   const archive = info.outputPath('markers.zip'); await (await downloading).saveAs(archive)
   await page.getByLabel('Архив проекта', { exact: true }).setInputFiles(archive)
   await expect(page.getByText('Копия проекта импортирована и сохранена на устройстве.')).toBeVisible(); await page.getByRole('button', { name: 'Закрыть сообщение об архиве' }).click()

@@ -28,11 +28,10 @@ export class ProjectBackupSession {
     try {
       await beforeSnapshot()
       await this.projects.flush()
-      await this.projects.mutateProject(async (project) => {
+      await this.projects.inspectProject(async (project) => {
         const snapshot = await this.repository.snapshot(project.id)
         const bytes = await this.encode(snapshot)
         await download(bytes, `bounty-mapper-${project.id.replace(/[^a-zA-Z0-9_-]/g, '_')}.zip`)
-        return project
       })
       this.update({ phase: 'done', message: 'Архив подготовлен и передан браузеру для скачивания.' })
     } catch (error) { this.update({ phase: 'error', message: `Ошибка экспорта. ${error instanceof Error ? error.message : 'Не удалось создать архив.'}` }) }

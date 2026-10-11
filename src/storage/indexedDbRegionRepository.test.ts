@@ -95,7 +95,10 @@ describe('Region persistence, migrations and archives', () => {
     if (version >= 4) old.gmNotes = markdownToDocument(markdown)
     const { gmNotes: _gm, playerDescription: _player, checks: _checks, tags: _tags, titleCustomized: _custom, ...legacy } = old
     void [_gm, _player, _checks, _tags, _custom]
-    if (version === 4) Object.assign(legacy, { gmNotesMd: markdown, playerDescriptionMd: '', checks: [], tags: [] })
+    if (version === 4) {
+      old.tags = ['Старый тег']; old.checks = [{ id: 'legacy-check', condition: 'Шум', ability: 'Мудрость', dc: 13, result: 'Слышно стража' }]
+      Object.assign(legacy, { gmNotesMd: markdown, playerDescriptionMd: '', checks: old.checks, tags: old.tags })
+    }
     const db = await new Promise<IDBDatabase>((resolve) => {
       const request = factory.open(DATABASE_NAME, version)
       request.onupgradeneeded = () => {
@@ -110,13 +113,32 @@ describe('Region persistence, migrations and archives', () => {
       request.onsuccess = () => resolve(request.result)
     })
     await new Promise<void>((resolve) => {
-      const tx = db.transaction(['projects', 'maps', 'regions'], 'readwrite')
-      tx.objectStore('projects').add(snapshot.project); tx.objectStore('maps').add(snapshot.maps[0]); tx.objectStore('regions').add(version === 5 ? old : legacy)
+      const tx = db.transaction(['projects', 'maps', 'regions', 'assets', 'imagePlacements'], 'readwrite')
+      tx.objectStore('projects').add(snapshot.project); snapshot.maps.forEach((m) => tx.objectStore('maps').add(m)); tx.objectStore('regions').add(version === 5 ? old : legacy)
+      snapshot.assets.forEach((a) => tx.objectStore('assets').add(a)); snapshot.imagePlacements.forEach((p) => tx.objectStore('imagePlacements').add(p))
       tx.oncomplete = () => resolve()
     }); db.close()
     expect(await new IndexedDbRegionRepository(() => factory).load(old.mapId)).toEqual([old])
     expect(await new IndexedDbRegionRepository(() => factory).loadObjects(old.mapId)).toEqual({ entities: [], markers: [] })
-    expect((await new IndexedDbProjectBackupRepository(() => factory).snapshot(snapshot.project.id)).project).toEqual(snapshot.project)
+    const migrated = await new IndexedDbProjectBackupRepository(() => factory).snapshot(snapshot.project.id)
+    expect(migrated.project).toEqual(snapshot.project); expect(migrated.maps).toEqual(snapshot.maps); expect(migrated.imagePlacements).toEqual(snapshot.imagePlacements)
+    for (let i = 0; i < snapshot.assets.length; i++) expect(await migrated.assets[i].blob.arrayBuffer()).toEqual(await snapshot.assets[i].blob.arrayBuffer())
+  })
+  it('rolls back a Markdown migration and its earlier writes when a legacy contour is invalid', async () => {
+    const factory = new IDBFactory(); const snapshot = await testSnapshot()
+    const { gmNotes, playerDescription, titleCustomized, ...identity } = region(snapshot.maps[0].id); void [gmNotes, playerDescription, titleCustomized]
+    const good = { ...identity, id: 'a', gmNotesMd: '# Сохранить', playerDescriptionMd: '', tags: ['старый'] }
+    const bad = { ...good, id: 'z', vertices: [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }] }
+    const db = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME, 4); r.onupgradeneeded = () => {
+      for (const name of ['projects', 'maps', 'assets', 'imagePlacements', 'regions']) r.result.createObjectStore(name, { keyPath: 'id' })
+      for (const name of ['maps', 'assets']) r.transaction!.objectStore(name).createIndex('projectId', 'projectId')
+      r.transaction!.objectStore('imagePlacements').createIndex('mapId', 'mapId', { unique: true }); r.transaction!.objectStore('regions').createIndex('mapId', 'mapId'); r.result.createObjectStore('settings')
+    }; r.onsuccess = () => resolve(r.result) })
+    await new Promise<void>((resolve) => { const tx = db.transaction(['projects', 'maps', 'regions'], 'readwrite'); tx.objectStore('projects').add(snapshot.project); tx.objectStore('maps').add(snapshot.maps[0]); tx.objectStore('regions').add(good); tx.objectStore('regions').add(bad); tx.oncomplete = () => resolve() }); db.close()
+    await expect(new IndexedDbRegionRepository(() => factory).load(good.mapId)).rejects.toThrow('Исходные данные не изменены')
+    const original = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME); r.onsuccess = () => resolve(r.result) })
+    expect(original.version).toBe(4); expect(original.objectStoreNames.contains('entities')).toBe(false)
+    expect(await requestResult(original.transaction('regions').objectStore('regions').getAll())).toEqual([good, bad]); original.close()
   })
   it('imports v3 Markdown into one visual document and validates image references in v4', async () => {
     const snapshot = await testSnapshot(); snapshot.regions = [region(snapshot.maps[0].id)]

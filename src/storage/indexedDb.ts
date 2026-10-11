@@ -1,5 +1,7 @@
 import { migrateRegionText } from './migrateRegionText'
 import { migrateMarkerPlacement } from './migrateMarkerPlacements'
+import { validateRegion } from '../domain/region'
+import { storageError } from './storageError'
 export const DATABASE_NAME = 'bounty-mapper'
 export const DATABASE_VERSION = 7
 
@@ -32,6 +34,7 @@ export class IndexedDb {
       if (!factory) throw new Error('IndexedDB недоступна в этом браузере.')
       const request = factory.open(this.name, DATABASE_VERSION)
       let blocked = false
+      let migrationError: Error | undefined
       request.onupgradeneeded = (event) => {
         const db = request.result
         if (event.oldVersion < 1) {
@@ -58,7 +61,7 @@ export class IndexedDb {
             const row = cursor.result
             if (!row) return
             try { row.update(migrateMarkerPlacement(row.value)); row.continue() }
-            catch { request.transaction!.abort() }
+            catch (error) { migrationError = new Error(`Не удалось перенести привязки маркеров. Исходные данные не изменены. ${error instanceof Error ? error.message : ''}`); request.transaction!.abort() }
           }
         }
         if (event.oldVersion < 5) {
@@ -66,8 +69,8 @@ export class IndexedDb {
           cursor.onsuccess = () => {
             const row = cursor.result
             if (!row) return
-            try { row.update(migrateRegionText(row.value)); row.continue() }
-            catch { request.transaction!.abort() }
+            try { const migrated = migrateRegionText(row.value); validateRegion(migrated); row.update(migrated); row.continue() }
+            catch (error) { migrationError = new Error(`Не удалось перенести карточки областей. Исходные данные не изменены. ${error instanceof Error ? error.message : ''}`); request.transaction!.abort() }
           }
         }
       }
@@ -75,7 +78,7 @@ export class IndexedDb {
         blocked = true
         reject(new Error('Закройте другие вкладки Bounty Mapper и повторите попытку.'))
       }
-      request.onerror = () => reject(request.error)
+      request.onerror = () => reject(migrationError ?? request.error)
       request.onsuccess = () => {
         const db = request.result
         if (blocked) { db.close(); return }
@@ -86,7 +89,7 @@ export class IndexedDb {
   }
 
   async transaction<T>(stores: string[], mode: IDBTransactionMode, work: (tx: IDBTransaction) => Promise<T>): Promise<T> {
-    const db = await this.connect()
+    const db = await this.connect().catch((error: unknown) => { throw storageError(error) })
     try {
       const tx = db.transaction(stores, mode)
       const done = transactionDone(tx)
@@ -98,7 +101,7 @@ export class IndexedDb {
       } catch (error) {
         try { tx.abort() } catch { /* already completed or aborted */ }
         await done.catch(() => {})
-        throw error
+        throw storageError(error)
       }
     } finally { db.close() }
   }

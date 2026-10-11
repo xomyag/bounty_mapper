@@ -1,3 +1,4 @@
+import { clickMenuAction } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import { unzipSync } from 'fflate'
@@ -17,7 +18,7 @@ async function stored(page: Page): Promise<Region[]> {
 }
 async function seed(page: Page) {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Проекты', exact: true }).click()
+  await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Карточки')
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
   await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
@@ -193,7 +194,7 @@ test('pastes cleaned HTML/plain text and a screenshot; assets survive failed wri
   await expect(card(page).locator('img')).toHaveCount(2)
   const sizes = await card(page).locator('img').first().evaluate((img: HTMLImageElement) => ({ width: img.width, height: img.height, naturalWidth: img.naturalWidth }))
   expect(sizes.naturalWidth).toBe(80); expect(sizes.width / sizes.height).toBeCloseTo(2)
-  const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: 'Экспорт проекта', exact: true }).click()
+  const downloading = page.waitForEvent('download'); await clickMenuAction(page, 'Экспорт проекта')
   const path = info.outputPath('visual-details.zip'); await (await downloading).saveAs(path)
   const entries = unzipSync(new Uint8Array(await readFile(path)))
   expect(JSON.parse(new TextDecoder().decode(entries['manifest.json'])).formatVersion).toBe(6)

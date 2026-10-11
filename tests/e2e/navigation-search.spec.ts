@@ -1,3 +1,4 @@
+import { clickMenuAction, control } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import { unzipSync } from 'fflate'
@@ -52,14 +53,14 @@ async function stored(page: Page) {
 }
 async function seed(page: Page) {
   await page.goto('/'); await expect(nav(page)).toHaveCount(0)
-  await page.getByRole('button', { name: 'Проекты', exact: true }).click()
+  await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Навигация')
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
   await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
   await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
   async function upload(color: string) {
     const png = await page.evaluate((color) => { const c = document.createElement('canvas'); c.width = 600; c.height = 400; const ctx = c.getContext('2d')!; ctx.fillStyle = color; ctx.fillRect(0, 0, 600, 400); return c.toDataURL().split(',')[1] }, color)
-    await expect(page.getByRole('button', { name: 'Загрузить карту', exact: true })).toBeEnabled()
+    await expect(control(page, 'Загрузить карту')).toBeEnabled()
     await page.getByLabel('Файл изображения карты').setInputFiles({ name: 'map.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
     await expect(page.getByRole('button', { name: 'Добавить область', exact: true })).toBeEnabled()
   }
@@ -308,7 +309,7 @@ test('shared tag suggestions normalize spelling, consume keyboard actions, persi
   expect(await tagHistory(page, a.projectId)).toEqual(['ловушка', 'Ключ', 'Север', 'Тайна'])
   await page.getByRole('button', { name: 'Навигация и поиск', exact: true }).click(); await nav(page).locator('[data-object-id="a2"]').click(); await regionCard(page).getByRole('button', { name: 'Редактировать', exact: true }).click()
   await tag.focus(); await expect(page.getByRole('listbox', { name: 'Подсказки тегов' }).getByRole('option').first()).toHaveText('ловушка'); await regionCard(page).getByRole('button', { name: 'Отмена', exact: true }).click()
-  const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: 'Экспорт проекта', exact: true }).click()
+  const downloading = page.waitForEvent('download'); await clickMenuAction(page, 'Экспорт проекта')
   const path = info.outputPath('tags.zip'); await (await downloading).saveAs(path)
   const entries = unzipSync(new Uint8Array(await readFile(path))); const document = JSON.parse(new TextDecoder().decode(entries['project.json']))
   expect(document.regions.find((r: Region) => r.id === 'a1').tags).toEqual(['Тайна', 'Север', 'ловушка', 'Ключ']); expect(document.entities.find((e: Entity) => e.id === 'e3').tags).toEqual(['Ключ', 'ловушка']); expect(document.settings).toBeUndefined()

@@ -247,7 +247,7 @@ describe('BM-007 markers and entities', () => {
     const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) { if (this.name === 'projects') throw new DOMException('Нет места', 'QuotaExceededError'); return put.apply(this, args) })
     try { await session.resolveCardIntent('save') } finally { spy.mockRestore() }
     expect(await snapshot()).toEqual(before)
-    expect(session.getSnapshot().markerDraft?.error).toBe('Нет места')
+    expect(session.getSnapshot().markerDraft?.error).toContain('Нет места')
     expect(session.getSnapshot().markerDraft?.fields.name).toBe('Дверь с текстом')
     expect(session.getSnapshot().viewFocus).toBeUndefined()
     await expect(session.flushDetails()).rejects.toThrow('Сначала сохраните')

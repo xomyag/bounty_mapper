@@ -1,3 +1,4 @@
+import { clickMenuAction } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import { unzipSync } from 'fflate'
@@ -10,7 +11,7 @@ import { fitBounds, screenToWorld, worldToScreen, zoomAt } from '../../src/domai
 
 async function seed(page: Page) {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Проекты', exact: true }).click()
+  await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Карта с областями')
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
   await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
@@ -58,7 +59,13 @@ test('polygon drag/vertices stay in world coordinates, one drag is one undo; met
   const box = await createSquare(page)
   const original = (await stored(page)).regions[0]
   expect(original).toMatchObject({ fillOpacity: 0.4, number: 1, title: 'Область 1' })
+  await page.mouse.click(box.x + 200, box.y + 220)
+  await expect(page.getByRole('region', { name: 'Карточка области', exact: true })).toBeVisible()
   await drag(page, { x: box.x + 200, y: box.y + 220 }, { x: box.x + 240, y: box.y + 250 })
+  expect((await stored(page)).regions[0]).toEqual(original)
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Карточка области', exact: true }).getByRole('status')).toHaveText('Сохранено на устройстве')
+  await page.getByRole('button', { name: 'Закрыть карточку области', exact: true }).click()
   const moved = (await stored(page)).regions[0]
   await expect(page.getByRole('region', { name: 'Карточка области', exact: true })).toHaveCount(0)
   expect(moved.vertices[0].x).toBeGreaterThan(original.vertices[0].x)
@@ -123,7 +130,7 @@ test('polygon drag/vertices stay in world coordinates, one drag is one undo; met
   await expect(page.getByRole('region', { name: 'Свойства области' })).toHaveCount(0)
   expect((await stored(page)).regions[0]).toEqual(saved)
 
-  const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: 'Экспорт проекта' }).click()
+  const downloading = page.waitForEvent('download'); await clickMenuAction(page, 'Экспорт проекта')
   const path = info.outputPath('regions.zip'); await (await downloading).saveAs(path)
   const files = unzipSync(new Uint8Array(await readFile(path)))
   const document = JSON.parse(new TextDecoder().decode(files['project.json'])) as { regions: Region[] }
@@ -135,7 +142,7 @@ test('polygon drag/vertices stay in world coordinates, one drag is one undo; met
   expect(copy.vertices).toEqual(saved.vertices); expect(copy.mapId).not.toBe(saved.mapId)
   await page.getByRole('button', { name: 'Закрыть сообщение об архиве' }).click()
   page.once('dialog', (dialog) => dialog.accept())
-  await page.getByRole('button', { name: 'Удалить изображение', exact: true }).click()
+  await clickMenuAction(page, 'Удалить изображение')
   await expect(page.getByRole('button', { name: 'Добавить область', exact: true })).toBeEnabled()
   await expect(page.getByRole('region', { name: 'Карта приключения' })).toBeVisible()
   expect((await stored(page)).regions.find((r) => r.id === copy.id)).toEqual(copy)
@@ -153,7 +160,7 @@ test('double-click finishes without duplicate, Esc/draft export, context menu an
   await page.getByRole('region', { name: 'Карта приключения' }).focus(); await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Добавить область', exact: true }).click()
   await page.mouse.click(box.x + 500, box.y + 100); await page.mouse.click(box.x + 650, box.y + 100)
-  const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: 'Экспорт проекта' }).click()
+  const downloading = page.waitForEvent('download'); await clickMenuAction(page, 'Экспорт проекта')
   const path = info.outputPath('no-draft.zip'); await (await downloading).saveAs(path)
   const files = unzipSync(new Uint8Array(await readFile(path)))
   expect((JSON.parse(new TextDecoder().decode(files['project.json'])) as { regions: Region[] }).regions).toHaveLength(1)
@@ -190,6 +197,8 @@ test('double-click finishes without duplicate, Esc/draft export, context menu an
 })
 
 test('rejects self-crossing drafts and rereads the same project after a revision conflict', async ({ page, context }) => {
+  // Exercise the revision fallback used by browsers without Web Locks.
+  await context.addInitScript(() => { Object.defineProperty(navigator, 'locks', { value: undefined }) })
   await seed(page)
   const box = await createSquare(page)
   const other = await context.newPage(); await other.goto('/')
@@ -207,7 +216,7 @@ test('rejects self-crossing drafts and rereads the same project after a revision
   await expect(other.getByLabel('Название области', { exact: true })).toHaveValue('Несохранённый текст второй вкладки')
   // Discard is explicit; an unsuccessful card write must not silently lose its draft on reopen.
   await other.getByRole('button', { name: 'Отмена', exact: true }).click()
-  await other.getByRole('button', { name: 'Проекты', exact: true }).click()
+  await clickMenuAction(other, 'Проекты')
   await other.getByRole('button', { name: 'Открыть проект «Карта с областями»' }).click()
   await expect(other.getByRole('button', { name: 'Добавить область', exact: true })).toBeEnabled()
   await expect(other.getByRole('region', { name: 'Свойства области' })).toHaveCount(0)

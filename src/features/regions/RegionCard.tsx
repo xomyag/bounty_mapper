@@ -18,7 +18,8 @@ export function RegionCard({ region, state, session, disabled, geometryDisabled,
   const fields = draft?.fields ?? detailsOf(region)
   const assets = { ...state.assets, ...Object.fromEntries((draft?.assets ?? []).map((a) => [a.id, a])) }
   const playing = state.mode === 'play'
-  const editing = !playing && state.cardMode === 'edit'
+  const readOnly = playing || !session.canEditProject()
+  const editing = !readOnly && state.cardMode === 'edit'
   const busy = disabled || session.detailsSaving() || !!state.imagePending
   const edit = (change: Partial<RegionDetails>) => session.editDetails(region.id, { ...fields, ...change })
   const insertImage = (file: Blob) => prepareCardImage(file, session, (asset) => session.addDraftAsset(region.id, asset))
@@ -59,13 +60,13 @@ export function RegionCard({ region, state, session, disabled, geometryDisabled,
       <section className="region-gm-notes" aria-label="Заметки ведущего области"><h3>Заметки ведущего</h3>{documentHasContent(region.gmNotes) ? <RichTextView document={region.gmNotes} assets={state.assets} /> : <p>Заметки пока не заполнены</p>}</section>
       <h3>Проверки</h3>{!region.checks.length && <p>Нет проверок</p>}{region.checks.map((c) => <div className="region-check" key={c.id}><strong>{c.condition || 'Без условия'}</strong><p>{c.ability}{c.dc === undefined ? '' : ` · СЛ ${c.dc}`}</p><p>{c.result}</p></div>)}
       <h3>Теги</h3><p>{region.tags.join(', ') || 'Нет тегов'}</p>
-      {!playing && <><button type="button" disabled={disabled || state.vertexMode} onClick={session.beginEdit}>Редактировать</button><button type="button" disabled={geometryDisabled} onClick={() => { void session.remove() }}>Удалить область</button></>}
+      {!readOnly && <><button type="button" disabled={disabled || state.vertexMode} onClick={session.beginEdit}>Редактировать</button><button type="button" disabled={geometryDisabled} onClick={() => { void session.remove() }}>Удалить область</button></>}
     </>}
     <section aria-label="Связанные маркеры"><h3>Связанные маркеры</h3><ul className="linked-markers">{state.markers.filter((m) => m.regionIds.includes(region.id)).map((m) => {
       const entity = state.entities.find((e) => e.id === m.entityId)!
       return <li key={m.id}><button type="button" disabled={busy || state.vertexMode} onClick={() => session.navigate({ mapId: m.mapId, kind: 'marker', id: m.id })}>{entity.name} · {statusLabel(entity)}</button></li>
     })}</ul>{!state.markers.some((m) => m.regionIds.includes(region.id)) && <p>Нет связанных маркеров</p>}</section>
-    {!playing && <div className="card-map-tools"><button type="button" disabled={busy} aria-pressed={state.vertexMode} onClick={() => { session.setVertexMode(!state.vertexMode); focusMap() }}>{state.vertexMode ? 'Закончить правку вершин' : 'Редактировать вершины'}</button>
+    {!readOnly && <div className="card-map-tools"><button type="button" disabled={busy} aria-pressed={state.vertexMode} onClick={() => { session.setVertexMode(!state.vertexMode); focusMap() }}>{state.vertexMode ? 'Закончить правку вершин' : 'Редактировать вершины'}</button>
       {state.vertexMode && <button type="button" disabled={geometryDisabled || state.selectedVertex === undefined || region.vertices.length <= 3} onClick={() => { void session.removeVertex() }}>Удалить вершину</button>}
     </div>}
     <CardConfirmation state={state} session={session} label="Несохранённые изменения области" error={draft?.error ?? state.modeError} />
