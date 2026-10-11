@@ -14,7 +14,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
-  webServer: {
+  webServer: process.env.BM_PAGES_TEST_BASE ? undefined : {
     command: preview ? 'npm run preview' : 'npm run dev', url: baseURL, reuseExistingServer: !process.env.CI,
   },
 })

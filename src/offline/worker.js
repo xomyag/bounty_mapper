@@ -1,5 +1,6 @@
 const manifest = JSON.parse('__BM_PRECACHE__')
-const prefix = 'bounty-mapper-shell-'
+const scopePath = new URL(self.registration.scope).pathname
+const prefix = `bounty-mapper-shell-${scopePath === '/' ? '' : `${encodeURIComponent(scopePath)}-`}`
 const cacheName = `${prefix}${manifest.version}`
 const urls = manifest.urls.map((path) => new URL(path, self.registration.scope).href)
 const shell = urls.find((url) => new URL(url).pathname.endsWith('/index.html'))
