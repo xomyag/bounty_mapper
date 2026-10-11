@@ -9,9 +9,10 @@ import type { Entity } from '../domain/marker'
 
 const stores = ['projects', 'maps', 'assets', 'imagePlacements', 'regions', 'entities']
 
-async function loadMap(tx: IDBTransaction, projectId: string): Promise<MapImage> {
+async function loadMap(tx: IDBTransaction, projectId: string, mapId?: string): Promise<MapImage> {
   const maps = await requestResult(tx.objectStore('maps').index('projectId').getAll(projectId)) as Map[]
-  const map = maps.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))[0]
+  const map = mapId ? maps.find((m) => m.id === mapId) : maps.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))[0]
+  if (mapId && !map) throw new Error('Карта не найдена в текущем проекте.')
   if (!map) return {}
   const placement = await requestResult(tx.objectStore('imagePlacements').index('mapId').get(map.id)) as ImagePlacement | undefined
   if (!placement) return { map }
@@ -29,16 +30,16 @@ export class IndexedDbMapImageRepository implements MapImageRepository {
     this.db = new IndexedDb(factory, name)
   }
 
-  load(projectId: string): Promise<MapImage> {
-    return this.db.transaction(stores, 'readonly', (tx) => loadMap(tx, projectId))
+  load(projectId: string, mapId?: string): Promise<MapImage> {
+    return this.db.transaction(stores, 'readonly', (tx) => loadMap(tx, projectId, mapId))
   }
 
-  private mutate(project: Project, asset?: Asset): Promise<MapImageResult> {
+  private mutate(project: Project, asset?: Asset, mapId?: string): Promise<MapImageResult> {
     return this.db.transaction(stores, 'readwrite', async (tx) => {
       const projectStore = tx.objectStore('projects')
       const stored = readProject(await requestResult(projectStore.get(project.id)))
       if (stored.revision !== project.revision) throw new RevisionConflictError()
-      const previous = await loadMap(tx, project.id)
+      const previous = await loadMap(tx, project.id, mapId)
       const nextProject = { ...stored, revision: stored.revision + 1, updatedAt: new Date().toISOString() }
       if (!asset && !previous.background) return { project: stored, image: previous }
       let image: MapImage
@@ -78,6 +79,6 @@ export class IndexedDbMapImageRepository implements MapImageRepository {
     })
   }
 
-  replace(project: Project, asset: Asset) { return this.mutate(project, asset) }
-  remove(project: Project) { return this.mutate(project) }
+  replace(project: Project, asset: Asset, mapId?: string) { return this.mutate(project, asset, mapId) }
+  remove(project: Project, mapId?: string) { return this.mutate(project, undefined, mapId) }
 }

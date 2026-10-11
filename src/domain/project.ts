@@ -1,4 +1,5 @@
 export const PROJECT_SCHEMA_VERSION = 1
+export const MAX_PROJECT_MAPS = 128
 
 export interface Project {
   id: string

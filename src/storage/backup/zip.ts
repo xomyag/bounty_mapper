@@ -1,4 +1,5 @@
 import { Unzip, UnzipInflate } from 'fflate'
+import { MAX_PROJECT_MAPS } from '../../domain/project'
 
 export const BACKUP_LIMITS = {
   archiveBytes: 128 * 1024 * 1024,
@@ -7,7 +8,7 @@ export const BACKUP_LIMITS = {
   projectBytes: 4 * 1024 * 1024,
   manifestBytes: 512 * 1024,
   files: 512,
-  maps: 128,
+  maps: MAX_PROJECT_MAPS,
   assets: 256,
 }
 export type BackupLimits = typeof BACKUP_LIMITS

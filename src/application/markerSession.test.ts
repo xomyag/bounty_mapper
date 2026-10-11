@@ -37,6 +37,49 @@ async function area(session: RegionSession) {
 }
 
 describe('BM-007 markers and entities', () => {
+  it('uses the same dirty-card intent for another map, keeping old data visible until the destination is ready', async () => {
+    const { session, original } = await setup(); const r = await area(session); await add(session)
+    session.closeCard(); session.openCard(r.id)
+    session.editDetails(r.id, { ...detailsOf(r), title: 'Текст перед переходом' })
+    const target = { mapId: original.maps[1].id }
+    let finish!: () => void
+    session.setMapNavigator(async (next) => { const data = await session.readMap(next.mapId); await new Promise<void>((resolve) => { finish = resolve }); session.adoptMap(next, data) })
+    session.navigate(target)
+    expect(session.getSnapshot().pendingIntent).toEqual({ kind: 'map', target })
+    await session.resolveCardIntent('stay')
+    expect(session.getSnapshot().details[r.id].fields.title).toBe('Текст перед переходом')
+    session.navigate(target); const moving = session.resolveCardIntent('save')
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    expect(session.busy()).toBe(true)
+    expect(session.getSnapshot().mapId).toBe(r.mapId)
+    expect(session.getSnapshot().regions.find((x) => x.id === r.id)?.title).toBe('Текст перед переходом')
+    finish(); await moving
+    expect(session.getSnapshot()).toMatchObject({ mapId: target.mapId, transitioning: false, regions: [], markers: [], cardMode: 'view' })
+    expect(session.getSnapshot().cardId).toBeUndefined()
+  })
+  it('preserves the source card and its text on failed cross-map preparation, and atomically opens/focuses a destination object', async () => {
+    const { session, original } = await setup(); const r = await area(session); const id = await add(session, 'npc', 40)
+    const sourceData = await session.readMap(r.mapId)
+    session.setMapNavigator(async () => { throw new Error('Не удалось прочитать другую карту') })
+    session.beginMarkerEdit(); session.editMarkerDetails({ ...session.getSnapshot().markerDraft!.fields, name: 'Оставить черновик' })
+    session.navigate({ mapId: original.maps[1].id }); await session.resolveCardIntent('discard')
+    expect(session.getSnapshot().mapId).toBe(r.mapId)
+    expect(session.getSnapshot().markerDraft?.fields.name).toBe('Оставить черновик')
+    expect(session.getSnapshot().error).toContain('другую карту')
+    session.cancelMarkerEdit(); session.adoptMap({ mapId: original.maps[1].id }, await session.readMap(original.maps[1].id))
+    session.setMapNavigator(async (target) => session.adoptMap(target, sourceData))
+    const transitions: ReturnType<typeof session.getSnapshot>[] = []
+    const unsubscribe = session.subscribe(() => transitions.push(session.getSnapshot()))
+    session.navigate({ mapId: r.mapId, kind: 'marker', id })
+    await vi.waitFor(() => expect(session.getSnapshot().mapId).toBe(r.mapId)); unsubscribe()
+    for (const next of transitions.filter((next) => next.mapId === r.mapId)) {
+      expect(next.markerCardId).toBe(id); expect(next.selectedMarkerId).toBe(id); expect(next.viewFocus?.point).toEqual({ x: 40, y: 5 })
+      expect(next.cardId).toBeUndefined()
+    }
+    const focus = session.getSnapshot().viewFocus
+    session.navigate({ mapId: r.mapId, kind: 'marker', id })
+    expect(session.getSnapshot().viewFocus).not.toBe(focus)
+  })
   it('focuses card links in both directions only after a confirmed transition, without changing project data', async () => {
     const { session, snapshot } = await setup(); const r = await area(session); const id = await add(session, 'npc', 40)
     const before = await snapshot()

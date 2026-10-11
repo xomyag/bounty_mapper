@@ -8,6 +8,8 @@ import type { Asset } from '../domain/project'
 import { markerTypes, statusesOf, validateEntity, validateMarker, MAX_MARKERS, MAX_ENTITIES } from '../domain/marker'
 import type { Entity, MarkerPlacement, MarkerKind } from '../domain/marker'
 import { emptyDocument } from '../domain/richText'
+import type { NavigationTarget } from '../domain/navigation'
+import { canonicalTags } from '../domain/tags'
 
 export interface RegionDetails extends RegionContent { number: string; title: string; color: string; fillOpacity: number }
 interface DetailsDraft { fields: RegionDetails; assets: Asset[]; version: number; phase: 'dirty' | 'saving' | 'error'; error?: string }
@@ -15,7 +17,8 @@ export const detailsOf = (region: Region): RegionDetails => ({ number: String(re
 export interface MarkerDetails { name: string; description: Entity['description']; tags: string[]; status: string; color: string; regionIds: string[]; locked: boolean }
 export const markerDetailsOf = (entity: Entity, marker: MarkerPlacement): MarkerDetails => ({ name: entity.name, description: structuredClone(entity.description), tags: [...entity.tags], status: entity.status, color: marker.color, regionIds: [...marker.regionIds], locked: marker.locked })
 export interface MarkerDraft { entity: Entity; marker: MarkerPlacement; fields: MarkerDetails; assets: Asset[]; isNew: boolean; version: number; phase: 'dirty' | 'saving' | 'error'; error?: string }
-type CardIntent = { kind: 'open'; id: string; center?: boolean } | { kind: 'marker'; id: string; center?: boolean } | { kind: 'close' } | { kind: 'vertices' }
+type CardIntent = { kind: 'open'; id: string; center?: boolean } | { kind: 'marker'; id: string; center?: boolean } | { kind: 'close' } | { kind: 'vertices' } | { kind: 'map'; target: NavigationTarget }
+export interface LoadedMapObjects { regions: Region[]; assets: Asset[]; entities: Entity[]; markers: MarkerPlacement[] }
 
 export interface RegionState {
   mapId?: string
@@ -32,6 +35,7 @@ export interface RegionState {
   cardMode: 'view' | 'edit'
   pendingIntent?: CardIntent
   viewFocus?: { point: Point }
+  transitioning?: boolean
   imagePending: number
   imageError?: string
   assets: Record<string, Asset>
@@ -56,6 +60,9 @@ export class RegionSession {
   private redoStack: Command[] = []
   private retryWork?: () => Promise<void>
   private loaded = false
+  private mapNavigator?: (target: NavigationTarget) => Promise<void>
+  private tagCatalog: string[] = []
+  setTagCatalog = (catalog: string[]) => { this.tagCatalog = catalog }
   constructor(private readonly repository: RegionRepository, private readonly projects: ProjectSession) {}
   getSnapshot = () => this.state
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
@@ -63,7 +70,30 @@ export class RegionSession {
     this.state = { ...this.state, ...fields, canUndo: !!this.undoStack.length, canRedo: !!this.redoStack.length, canRetry: !!this.retryWork }
     this.listeners.forEach((listener) => listener())
   }
-  busy = () => ['loading', 'saving'].includes(this.state.phase)
+  busy = () => !!this.state.transitioning || ['loading', 'saving'].includes(this.state.phase)
+  setMapNavigator = (handler: (target: NavigationTarget) => Promise<void>) => { this.mapNavigator = handler }
+  navigate = (target: NavigationTarget) => {
+    if (this.busy() || this.state.draft || this.state.markerTool || this.state.vertexMode || this.projects.getSnapshot().loading || this.projects.hasUnsavedChanges()) return
+    if (target.mapId === this.state.mapId && 'kind' in target) {
+      const current = target.kind === 'region' ? this.state.regions.find((r) => r.id === target.id && r.id === this.state.cardId) : this.state.markers.find((m) => m.id === target.id && m.id === this.state.markerCardId)
+      if (current) { this.update({ viewFocus: { point: 'vertices' in current ? labelAnchor(current.vertices) : { x: current.x, y: current.y } } }); return }
+      if (target.kind === 'region') this.openCard(target.id, true)
+      else this.openMarkerCard(target.id, true)
+    } else if (target.mapId !== this.state.mapId && this.mapNavigator) this.requestCardIntent({ kind: 'map', target })
+  }
+  readMap = async (mapId: string): Promise<LoadedMapObjects> => {
+    const [regions, assets, objects] = await Promise.all([this.repository.load(mapId), this.repository.loadAssets(mapId), this.repository.loadObjects(mapId)])
+    if (objects.markers.some((m) => m.regionIds.some((id) => !regions.some((r) => r.id === id)))) throw new Error('Область маркера не найдена.')
+    return { regions, assets, ...objects }
+  }
+  adoptMap = (target: NavigationTarget, data: LoadedMapObjects) => {
+    const region = 'kind' in target && target.kind === 'region' ? data.regions.find((r) => r.id === target.id) : undefined
+    const marker = 'kind' in target && target.kind === 'marker' ? data.markers.find((m) => m.id === target.id) : undefined
+    if ('kind' in target && !region && !marker) throw new Error('Объект больше не существует на выбранной карте.')
+    ++this.generation; this.loaded = true; this.undoStack = []; this.redoStack = []; this.retryWork = undefined
+    const editRegion = region && !regionHasUserContent(region)
+    this.update({ mapId: target.mapId, regions: data.regions, entities: data.entities, markers: data.markers, assets: Object.fromEntries(data.assets.map((a) => [a.id, a])), phase: 'saved', transitioning: false, error: undefined, draft: undefined, markerTool: undefined, markerDraft: undefined, cardId: region?.id, selectedId: region?.id, markerCardId: marker?.id, selectedMarkerId: marker?.id, cardMode: editRegion ? 'edit' : 'view', details: editRegion ? { [region.id]: { fields: detailsOf(region), assets: [], version: 0, phase: 'dirty' } } : {}, pendingIntent: undefined, imagePending: 0, imageError: undefined, selectedVertex: undefined, vertexMode: false, viewFocus: region ? { point: labelAnchor(region.vertices) } : marker ? { point: { x: marker.x, y: marker.y } } : undefined })
+  }
   hasLoaded = () => this.loaded
   isDetailsDirty = (id: string) => {
     const region = this.state.regions.find((r) => r.id === id)
@@ -81,9 +111,8 @@ export class RegionSession {
     this.update({ mapId, regions: [], entities: [], markers: [], markerTool: undefined, markerDraft: undefined, markerCardId: undefined, selectedMarkerId: undefined, details: {}, assets: {}, cardId: undefined, cardMode: 'view', pendingIntent: undefined, viewFocus: undefined, imagePending: 0, imageError: undefined, phase: mapId ? 'loading' : 'idle', selectedId: undefined, selectedVertex: undefined, vertexMode: false, draft: undefined, error: undefined })
     if (!mapId) return
     try {
-      const [regions, assets, objects] = await Promise.all([this.repository.load(mapId), this.repository.loadAssets(mapId), this.repository.loadObjects(mapId)])
-      if (objects.markers.some((m) => m.regionIds.some((id) => !regions.some((r) => r.id === id)))) throw new Error('Область маркера не найдена.')
-      if (generation === this.generation) { this.loaded = true; this.update({ regions, ...objects, assets: Object.fromEntries(assets.map((a) => [a.id, a])), phase: 'saved' }) }
+      const { regions, assets, entities, markers } = await this.readMap(mapId)
+      if (generation === this.generation) { this.loaded = true; this.update({ regions, entities, markers, assets: Object.fromEntries(assets.map((a) => [a.id, a])), phase: 'saved' }) }
     } catch (error) {
       if (generation === this.generation) { this.retryWork = () => this.load(mapId); this.fail(error) }
     }
@@ -109,9 +138,16 @@ export class RegionSession {
   private requestCardIntent(intent: CardIntent) {
     if (this.detailsSaving() || this.state.imagePending) return
     if ((this.state.cardId && this.isDetailsDirty(this.state.cardId)) || this.isMarkerDirty()) this.update({ pendingIntent: intent })
-    else this.applyCardIntent(intent)
+    else void this.applyCardIntent(intent)
   }
-  private applyCardIntent(intent: CardIntent) {
+  private async applyCardIntent(intent: CardIntent) {
+    if (intent.kind === 'map') {
+      this.update({ transitioning: true, pendingIntent: undefined, error: undefined })
+      try { await this.mapNavigator!(intent.target) }
+      catch (error) { this.fail(error) }
+      finally { this.update({ transitioning: false }) }
+      return
+    }
     if (this.state.cardId) this.discardDetails(this.state.cardId)
     this.update({ pendingIntent: undefined, imageError: undefined, markerDraft: undefined, markerCardId: undefined, selectedMarkerId: undefined, markerTool: undefined })
     if (intent.kind === 'open') {
@@ -129,7 +165,7 @@ export class RegionSession {
     if (!intent || this.detailsSaving()) return
     if (choice === 'stay') { this.update({ pendingIntent: undefined }); return }
     if (choice === 'save') { if (this.state.markerDraft) await this.saveMarkerDetails(); else await this.saveDetails(); if (this.hasUnsavedDetails()) return }
-    this.applyCardIntent(intent)
+    await this.applyCardIntent(intent)
   }
   discardDetails = (id: string) => {
     if (this.detailsSaving()) return
@@ -232,6 +268,7 @@ export class RegionSession {
       const [id, draft] = entry
       const mapId = this.state.mapId!
       const fields = structuredClone(draft.fields)
+      fields.tags = canonicalTags(fields.tags, this.tagCatalog)
       const generation = this.generation
       try {
         const currentRegion = this.state.regions.find((r) => r.id === id)!
@@ -242,7 +279,7 @@ export class RegionSession {
         this.update({ details: { ...this.state.details, [id]: { ...draft, phase: 'saving', error: undefined } } })
         const referenced = new Set([...documentAssetIds(details.gmNotes), ...documentAssetIds(details.playerDescription)])
         const newAssets = draft.assets.filter((asset) => referenced.has(asset.id))
-        await this.projects.mutateProject((project) => this.repository.save(project, mapId, next, newAssets, { entities: this.state.entities, markers: this.state.markers }))
+        await this.projects.mutateProject((project) => this.repository.save(project, mapId, next, newAssets, { entities: this.state.entities, markers: this.state.markers }, fields.tags))
         if (generation !== this.generation) return
         // Geometry history must never undo subsequently written text.
         for (const command of [...this.undoStack, ...this.redoStack]) {
@@ -325,6 +362,7 @@ export class RegionSession {
     while (this.state.markerDraft) {
       const draft = this.state.markerDraft
       const fields = structuredClone(draft.fields)
+      fields.tags = canonicalTags(fields.tags, this.tagCatalog)
       const entity: Entity = { ...draft.entity, name: fields.name.trim(), description: fields.description, tags: fields.tags, status: fields.status }
       const marker: MarkerPlacement = { ...draft.marker, color: fields.color, locked: fields.locked, regionIds: [...fields.regionIds] }
       try {
@@ -336,7 +374,7 @@ export class RegionSession {
         const referenced = new Set(documentAssetIds(entity.description))
         const newAssets = draft.assets.filter((a) => referenced.has(a.id))
         this.update({ markerDraft: { ...draft, phase: 'saving', error: undefined } })
-        await this.projects.mutateProject((project) => this.repository.save(project, marker.mapId, this.state.regions, newAssets, { entities, markers }))
+        await this.projects.mutateProject((project) => this.repository.save(project, marker.mapId, this.state.regions, newAssets, { entities, markers }, fields.tags))
         if (generation !== this.generation) return
         for (const command of [...this.undoStack, ...this.redoStack]) {
           for (const list of [command.markersBefore, command.markersAfter]) {

@@ -8,6 +8,7 @@ import { DATABASE_NAME, IndexedDb, requestResult } from './indexedDb'
 import { readProject } from './indexedDbProjectRepository'
 import { MAX_ENTITIES, MAX_MARKERS, validateEntity, validateMarker } from '../domain/marker'
 import type { Entity, MapObjects, MarkerPlacement } from '../domain/marker'
+import { recentTags } from '../domain/tags'
 
 export class IndexedDbRegionRepository implements RegionRepository {
   private readonly db: IndexedDb
@@ -36,8 +37,8 @@ export class IndexedDbRegionRepository implements RegionRepository {
       return { entities, markers: markers.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)) }
     })
   }
-  save(project: Project, mapId: string, regions: Region[], newAssets: Asset[] = [], objects?: MapObjects): Promise<Project> {
-    return this.db.transaction(['projects', 'maps', 'regions', 'assets', 'entities', 'markerPlacements'], 'readwrite', async (tx) => {
+  save(project: Project, mapId: string, regions: Region[], newAssets: Asset[] = [], objects?: MapObjects, usedTags?: string[]): Promise<Project> {
+    return this.db.transaction(['projects', 'maps', 'regions', 'assets', 'entities', 'markerPlacements', 'settings'], 'readwrite', async (tx) => {
       const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
       if (stored.revision !== project.revision) throw new RevisionConflictError()
       const map = await requestResult(tx.objectStore('maps').get(mapId)) as Map | undefined
@@ -86,6 +87,11 @@ export class IndexedDbRegionRepository implements RegionRepository {
       }
       for (const marker of previousMarkers) await requestResult(markerStore.delete(marker.id))
       for (const marker of markers) await requestResult(markerStore.add(marker))
+      if (usedTags) {
+        const key = `tagHistory:${project.id}`
+        const history = await requestResult(tx.objectStore('settings').get(key)) as string[] | undefined
+        await requestResult(tx.objectStore('settings').put(recentTags(history ?? [], usedTags).slice(0, 512), key))
+      }
       const next = { ...stored, revision: stored.revision + 1, updatedAt: new Date().toISOString() }
       await requestResult(tx.objectStore('projects').put(next))
       return next

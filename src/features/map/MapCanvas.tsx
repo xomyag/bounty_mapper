@@ -8,16 +8,17 @@ import { labelAnchor, projectOnEdge, translateVertices } from '../../domain/regi
 import type { Region } from '../../domain/region'
 import { documentText } from '../../domain/richText'
 import type { RegionSession, RegionState } from '../../application/regionSession'
-import { decodeImage } from './prepareImage'
+import { cachedBitmap, prepareBitmap } from './bitmapCache'
+import type { ViewportMemory } from '../../application/viewportMemory'
 import { markerTypes, statusBadge, statusLabel } from '../../domain/marker'
 import { markerIcons, markerScreenScale, markerInk } from './markerIcons'
 import { MapContextMenu } from './MapContextMenu'
 
-interface Props { image: MapImage; fitVersion: number; regions: RegionState; session: RegionSession; editable: boolean }
+interface Props { image: MapImage; fitVersion: number; regions: RegionState; session: RegionSession; editable: boolean; viewports: ViewportMemory }
 const flat = (points: Point[]) => points.flatMap((p) => [p.x, p.y])
 const fill = (region: Region) => `${region.color}${Math.round(region.fillOpacity * 255).toString(16).padStart(2, '0')}`
 
-export function MapCanvas({ image, fitVersion, regions, session, editable }: Props) {
+export function MapCanvas({ image, fitVersion, regions, session, editable, viewports }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const stage = useRef<Konva.Stage>(null)
   const doubleClickTarget = useRef<{ kind: 'draft' | 'region'; index: number; regionId?: string } | undefined>(undefined)
@@ -26,7 +27,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable }: Pro
   const blockStagePan = useRef(false)
   const [markerHover, setMarkerHover] = useState<{ id: string; x: number; y: number }>()
   const [size, setSize] = useState({ width: 0, height: 0 })
-  const [cameraState, setCameraState] = useState<{ key: string; camera: Camera; focus?: RegionState['viewFocus'] }>()
+  const [cameraState, setCameraState] = useState<{ key: string; mapId?: string; camera: Camera; focus?: RegionState['viewFocus'] }>()
   const [bitmap, setBitmap] = useState<{ assetId: string; image: HTMLImageElement }>()
   const [decodeError, setDecodeError] = useState('')
   const [pointer, setPointer] = useState<Point>()
@@ -39,20 +40,27 @@ export function MapCanvas({ image, fitVersion, regions, session, editable }: Pro
   const hoverNotes = hoverRegion ? documentText(hoverRegion.gmNotes) : ''
   const asset = image.background?.asset
   const placement = image.background?.placement
+  const mapId = image.map?.id
+  const visibleBitmap = cachedBitmap(asset?.id) ?? (bitmap?.assetId === asset?.id ? bitmap?.image : undefined)
   // Resizing the viewport (including temporary status banners) must not change
   // the camera. Fit only a new map/background or an explicit Show all action.
   const cameraKey = `${image.map?.id}:${asset?.id}:${fitVersion}`
   const bounds = placement ?? image.map?.coordinateBounds
   const fitted = bounds && size.width > 0 && size.height > 0 ? fitBounds(bounds, size) : { x: 0, y: 0, scale: 1 }
   if (size.width > 0 && size.height > 0) {
-    if (cameraState?.key !== cameraKey) setCameraState({ key: cameraKey, camera: fitted, focus: regions.viewFocus })
+    if (cameraState?.key !== cameraKey) {
+      const restored = mapId && cameraState?.mapId !== mapId ? viewports.get(mapId, asset?.id) ?? fitted : fitted
+      const next = regions.mapId === mapId && regions.viewFocus && cameraState?.focus !== regions.viewFocus ? centerOn(restored, regions.viewFocus.point, size) : restored
+      setCameraState({ key: cameraKey, mapId, camera: next, focus: regions.viewFocus })
+    }
     // Consume each explicit card-link navigation once, before painting. Later
     // saves, drags, resizing and closing the card must not repeat the focus.
     else if (cameraState.focus !== regions.viewFocus) setCameraState({ ...cameraState, focus: regions.viewFocus, camera: regions.viewFocus ? centerOn(cameraState.camera, regions.viewFocus.point, size) : cameraState.camera })
   }
   const camera = cameraState?.key === cameraKey ? cameraState.camera : fitted
+  if (mapId && size.width > 0 && size.height > 0 && cameraState?.key === cameraKey) viewports.set(mapId, asset?.id, camera)
   const setCamera = (change: (current: Camera) => Camera) => {
-    setCameraState((current) => ({ key: cameraKey, camera: change(current?.key === cameraKey ? current.camera : fitted), focus: current?.key === cameraKey ? current.focus : regions.viewFocus }))
+    setCameraState((current) => ({ key: cameraKey, mapId, camera: change(current?.key === cameraKey ? current.camera : fitted), focus: current?.key === cameraKey ? current.focus : regions.viewFocus }))
   }
 
   useEffect(() => {
@@ -69,7 +77,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable }: Pro
   useEffect(() => {
     if (!asset) return
     let active = true
-    decodeImage(asset.blob).then((decoded) => {
+    prepareBitmap(asset).then((decoded) => {
       if (active) { setBitmap({ assetId: asset.id, image: decoded }); setDecodeError('') }
     }).catch((error: unknown) => {
       if (active) setDecodeError(error instanceof Error ? error.message : 'Не удалось отобразить изображение.')
@@ -87,7 +95,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable }: Pro
   }
   const focus = () => host.current?.focus({ preventScroll: true })
   return (
-    <div ref={host} className={`canvas-host${regions.draft || regions.markerTool ? ' drawing' : ''}`} tabIndex={0} role="region" aria-label="Карта приключения" aria-describedby="map-controls-hint"
+    <div ref={host} data-map-id={mapId} className={`canvas-host${regions.draft || regions.markerTool ? ' drawing' : ''}`} tabIndex={0} role="region" aria-label="Карта приключения" aria-describedby="map-controls-hint"
       onContextMenu={(event) => {
         event.preventDefault()
         if (!editable || regions.draft || regions.markerTool) return
@@ -162,7 +170,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable }: Pro
             if (regions.draft) setPointer(undefined)
           }}>
           <Layer>
-            {placement && bitmap && bitmap.assetId === asset?.id && <CanvasImage listening={false} image={bitmap.image} x={placement.x} y={placement.y} width={placement.width} height={placement.height} rotation={placement.rotation} visible={placement.visible} />}
+            {placement && visibleBitmap && <CanvasImage listening={false} image={visibleBitmap} x={placement.x} y={placement.y} width={placement.width} height={placement.height} rotation={placement.rotation} visible={placement.visible} />}
             {regions.regions.map((saved) => {
               const region = preview?.id === saved.id ? preview : saved
               const selected = region.id === regions.selectedId
@@ -258,7 +266,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable }: Pro
           </Layer>
         </Stage>
       )}
-      {asset && bitmap?.assetId !== asset.id && !decodeError && <p className="map-overlay" role="status">Подготовка изображения…</p>}
+      {asset && !visibleBitmap && !decodeError && <p className="map-overlay" role="status">Подготовка изображения…</p>}
       {decodeError && <p className="map-overlay form-error" role="alert">{decodeError}</p>}
       {menu && <MapContextMenu position={menu} size={size} disabled={!editable} onClose={() => setMenu(undefined)} onRegion={() => { session.start(menu.point); setMenu(undefined); focus() }} onMarker={(kind) => { session.startMarker(kind); session.placeMarker(menu.point); setMenu(undefined); focus() }} />}
       {hoverRegion && hover && hoverNotes && <aside className="region-hover" role="tooltip" style={{ left: hover.x, top: hover.y }}><strong>{hoverRegion.number}. {hoverRegion.title}</strong><p>{hoverNotes.length > 450 ? `${hoverNotes.slice(0, 450)}…` : hoverNotes}</p><small>Полный текст — в карточке по клику</small></aside>}
