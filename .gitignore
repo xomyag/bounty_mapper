@@ -11,3 +11,12 @@ dist/
 credentials.json
 test-results/
 playwright-report/
+# Local editor/agent settings and user backups (never part of the site).
+.vscode/
+.idea/
+.codex/
+.agents/
+backups/
+*.zip
+*.7z
+*.bak

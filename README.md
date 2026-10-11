@@ -20,6 +20,30 @@
 - Современный браузер: Chrome, Edge или Firefox.
 - Для установки зависимостей нужен доступ к npm registry.
 
+## GitHub Pages
+
+Репозиторий: [xomyag/bounty_mapper](https://github.com/xomyag/bounty_mapper). Целевой адрес сайта после успешного deployment: [Bounty Mapper](https://xomyag.github.io/bounty_mapper/). Подтверждение публикации — успешный workflow **Publish GitHub Pages** в Actions и открывающийся сайт; наличие ссылки само по себе не означает завершённый deployment.
+
+В Settings → Pages выберите Source → **GitHub Actions**. Workflow `.github/workflows/pages.yml` запускается при push в `main` и вручную через Actions → Publish GitHub Pages → Run workflow. Он использует Node.js 24, `npm ci`, unit-тесты, typecheck, lint, production-сборку и браузерные проверки. После проверки обычного запуска сборка повторяется с путём Pages из `configure-pages`, проверяются ресурсы и офлайн-перезагрузка под этим путём, затем публикуется только `dist/`. Изображения и приключения пользователя в сборку не входят.
+
+Обновления: работайте в отдельной ветке, выполните проверки и согласованное слияние в `main`, затем `git push origin main` и дождитесь успешного workflow. Force push не требуется. Если сайт уже был открыт, новая офлайн-оболочка применяется через «Проверить обновления» / «Применить обновление» после сохранения черновиков; автоматического сброса страницы при редактировании нет.
+
+Все приключения и оригиналы изображений остаются в IndexedDB вашего браузера. GitHub получает исходники и оболочку приложения; серверного хранения, аккаунтов и синхронизации нет. Переход с localhost на GitHub Pages меняет origin и не переносит данные: сначала экспортируйте каждый нужный проект в ZIP в локальном приложении, затем импортируйте ZIP на сайте. Аналогично переносите проекты между браузерами/профилями. На одном origin пути сами по себе не изолируют IndexedDB; офлайн-кэш и область Service Worker ограничены путём приложения.
+
+Обычный `npm run dev` сохраняет корневой путь. Проверить сборку для Pages локально в PowerShell:
+
+```powershell
+$env:BM_BASE_PATH = '/bounty_mapper/'
+npm run build
+Remove-Item Env:BM_BASE_PATH
+$env:BM_PAGES_TEST_BASE = '/bounty_mapper/'
+$env:PLAYWRIGHT_CHANNEL = 'msedge'
+npm run test:e2e -- pages-hosting
+Remove-Item Env:BM_PAGES_TEST_BASE
+```
+
+Для возврата к обычному `npm run preview` снова выполните `npm run build` без `BM_BASE_PATH`. Роутера и web app manifest нет; приложение открывается по корневому URL своего подкаталога. Vite переписывает пути JS/CSS, перечень офлайн-ресурсов содержит тот же base, а `sw.js` регистрируется только в его области. Подход основан на [официальной инструкции Vite](https://vite.dev/guide/static-deploy.html#github-pages) и [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
 ## Запуск
 
 Из корня проекта:
