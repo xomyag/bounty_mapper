@@ -1,8 +1,32 @@
 import { createServer } from 'node:http'
 import { readFile, readdir } from 'node:fs/promises'
 import { extname, join, relative } from 'node:path'
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { clickMenuAction, control } from './controls'
+
+async function checkFavicons(page: Page, root: string) {
+  const icons = await page.locator('link[rel="icon"]').evaluateAll((links) => links.map((link) => ({
+    href: (link as HTMLLinkElement).href, type: (link as HTMLLinkElement).type,
+  })))
+  expect(icons).toEqual([
+    { href: `${root}favicon.png`, type: 'image/png' },
+    { href: `${root}favicon.svg`, type: 'image/svg+xml' },
+  ])
+  for (const icon of icons) {
+    const loaded = await page.evaluate(async ({ href }) => {
+      const response = await fetch(href)
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      try {
+        const image = new Image()
+        image.src = url
+        await image.decode()
+        return { status: response.status, type: blob.type, width: image.naturalWidth, height: image.naturalHeight }
+      } finally { URL.revokeObjectURL(url) }
+    }, icon)
+    expect(loaded).toEqual({ status: 200, type: icon.type, width: 32, height: 32 })
+  }
+}
 
 test('Pages subpath serves resources, scopes the worker and reloads local documents offline', async ({ page, context }) => {
   test.skip(!process.env.BM_PAGES_TEST_BASE, 'Build with BM_BASE_PATH and set BM_PAGES_TEST_BASE to test Pages hosting.')
@@ -19,7 +43,7 @@ test('Pages subpath serves resources, scopes the worker and reloads local docume
     const name = pathname === base ? `${base}index.html` : pathname
     const file = files.get(name)
     if (!file) { response.writeHead(404); response.end(); return }
-    response.setHeader('Content-Type', ({ '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' } as Record<string, string>)[extname(name)] ?? 'application/octet-stream')
+    response.setHeader('Content-Type', ({ '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' } as Record<string, string>)[extname(name)] ?? 'application/octet-stream')
     response.end(file)
   })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -33,6 +57,7 @@ test('Pages subpath serves resources, scopes the worker and reloads local docume
   page.on('request', (request) => { if (request.url().startsWith(origin)) paths.push(new URL(request.url()).pathname) })
   try {
     await page.goto(`${origin}${base}`)
+    await checkFavicons(page, `${origin}${base}`)
     await control(page, 'Меню проекта').click()
     await expect(page.getByText('Готово к работе без сети', { exact: true })).toBeVisible()
     await page.evaluate(() => navigator.serviceWorker.ready)
@@ -48,6 +73,7 @@ test('Pages subpath serves resources, scopes the worker and reloads local docume
     await expect(card.getByRole('status')).toHaveText('Сохранено на устройстве')
     await context.setOffline(true)
     await page.reload()
+    await checkFavicons(page, `${origin}${base}`)
     await control(page, 'Контекст приключения').click()
     await expect(card).toContainText('Локальные данные под путём репозитория')
     await card.getByRole('button', { name: 'Редактировать', exact: true }).click()
