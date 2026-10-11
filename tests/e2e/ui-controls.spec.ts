@@ -87,7 +87,7 @@ test('other regions pan the camera; dirty movement participates in close, object
   await control(page, 'Карты проекта').click(); await page.getByRole('menuitem', { name: 'Перейти на карту «Этаж 2»', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Несохранённые изменения области' })).toBeVisible(); await control(page, 'Продолжить редактирование').click()
   await control(page, 'Игра').click(); await expect(page.getByRole('dialog', { name: 'Несохранённые изменения области' })).toBeVisible(); await control(page, 'Отбросить изменения').click()
-  await expect(control(page, 'Игра')).toHaveAttribute('aria-pressed', 'true'); expect((await displayed(page))[0]).toBe(100)
+  await expect(control(page, 'Игра')).toHaveAttribute('aria-pressed', 'true'); await expect.poll(async () => (await displayed(page))[0]).toBe(100)
   await expect(control(page, 'Добавить область')).toBeDisabled(); await expect(card(page).getByRole('button', { name: 'Редактировать', exact: true })).toHaveCount(0)
   const saved = await stored(page); await drag(page, { x: 175, y: 225 }, { x: 20, y: 10 }); expect(await stored(page)).toEqual(saved)
 })

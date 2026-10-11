@@ -14,6 +14,7 @@ import { testSnapshot, testDecode } from '../storage/backup/testSnapshot'
 import { buildArchive, parseArchive, sha256 } from '../storage/backup/archive'
 import { DATABASE_NAME, requestResult } from '../storage/indexedDb'
 import { statusBadge, validateEntity } from '../domain/marker'
+import type { RichDocument } from '../domain/richText'
 
 async function setup() {
   const factory = new IDBFactory(); const backups = new IndexedDbProjectBackupRepository(() => factory)
@@ -46,6 +47,26 @@ async function trap(session: RegionSession) {
   return session.getSnapshot().markers.at(-1)!
 }
 describe('UI-02 persisted card content', () => {
+  it('merges delayed editor field changes into the latest region and marker drafts without losing other fields', async () => {
+    const { session, snapshot } = await setup(); const r = await area(session)
+    const formatted: RichDocument = { type: 'doc', content: [{ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Сохранить формат', marks: [{ type: 'bold' }] }] }] }
+    session.openCard(r.id)
+    const notesChanged = (gmNotes: RichDocument) => session.editDetails(r.id, { gmNotes })
+    notesChanged(formatted)
+    session.editDetails(r.id, { title: 'Новое название', tags: ['Общий тег'], playerDescription: formatted })
+    notesChanged(formatted)
+    await session.saveDetails()
+    expect((await snapshot()).regions.find((region) => region.id === r.id)).toMatchObject({ title: 'Новое название', tags: ['Общий тег'], gmNotes: formatted, playerDescription: formatted })
+    session.closeCard(); session.startMarker('npc'); session.placeMarker({ x: 10, y: 20 })
+    const descriptionChanged = (description: RichDocument) => session.editMarkerDetails({ description })
+    descriptionChanged(formatted)
+    session.editMarkerDetails({ name: 'Новый NPC', tags: ['Общий тег'], regionIds: [r.id] })
+    descriptionChanged(formatted)
+    await session.saveMarkerDetails()
+    const saved = await snapshot()
+    expect(saved.entities.at(-1)).toMatchObject({ name: 'Новый NPC', tags: ['Общий тег'], description: formatted })
+    expect(saved.markerPlacements.at(-1)?.regionIds).toEqual([r.id])
+  })
   it('saves short description with the whole draft; cancels and treats short description alone as filled content', async () => {
     const { session, repository, snapshot } = await setup(); const r = await area(session)
     session.openCard(r.id); session.editDetails(r.id, { ...detailsOf(r), shortDescription: 'Кратко\nВторая строка' })
