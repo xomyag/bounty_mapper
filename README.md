@@ -44,6 +44,8 @@ Remove-Item Env:BM_PAGES_TEST_BASE
 
 Для возврата к обычному `npm run preview` снова выполните `npm run build` без `BM_BASE_PATH`. Роутера и web app manifest нет; приложение открывается по корневому URL своего подкаталога. Vite переписывает пути JS/CSS, перечень офлайн-ресурсов содержит тот же base, а `sw.js` регистрируется только в его области. Подход основан на [официальной инструкции Vite](https://vite.dev/guide/static-deploy.html#github-pages) и [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
+Favicon — упрощённая сложенная карта: золотой контур `#dfb577` на тёмном фоне `#171c21`. Локальные `public/favicon.svg` и PNG fallback 32×32 подключены через Vite `BASE_URL`, работают в `/` и под путём Pages, входят в существующий офлайн-кэш. Проверка `pages-hosting` загружает и декодирует обе иконки с сетью и после офлайн-перезагрузки. Для ручной проверки откройте приложение через `npm run dev` либо `npm run preview`: значок виден во вкладке, запросы `favicon.svg` и `favicon.png` возвращают 200 в Network. Браузер может удерживать старую иконку до повторного открытия вкладки.
+
 ## Запуск
 
 Из корня проекта:
