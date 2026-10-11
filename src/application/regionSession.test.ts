@@ -9,6 +9,7 @@ import { detailsOf, RegionSession } from './regionSession'
 import { translateVertices } from '../domain/region'
 import { markdownToDocument } from '../storage/migrateRegionText'
 import { emptyDocument } from '../domain/richText'
+import { IndexedDbModeRepository } from '../storage/indexedDbModeRepository'
 
 async function setup() {
   const factory = new IDBFactory()
@@ -17,7 +18,7 @@ async function setup() {
   const image = await new IndexedDbMapImageRepository(() => factory).replace(projects.getSnapshot().project!, testAsset(projects.getSnapshot().project!.id))
   await projects.open(image.project.id)
   const repo = new IndexedDbRegionRepository(() => factory)
-  const session = new RegionSession(repo, projects)
+  const session = new RegionSession(repo, projects, new IndexedDbModeRepository(() => factory))
   await session.load(image.image.map!.id)
   return { session, projects, repo, mapId: image.image.map!.id }
 }
