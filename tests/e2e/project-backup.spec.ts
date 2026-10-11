@@ -1,3 +1,4 @@
+import { clickMenuAction, control } from './controls'
 import { readFile } from 'node:fs/promises'
 import { Buffer } from 'node:buffer'
 import { zipSync, unzipSync } from 'fflate'
@@ -6,7 +7,7 @@ import type { Page } from '@playwright/test'
 
 async function seed(page: Page) {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Проекты', exact: true }).click()
+  await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Исходное приключение')
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
   await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
@@ -19,7 +20,7 @@ async function seed(page: Page) {
     return canvas.toDataURL('image/png').split(',')[1]
   })
   await page.getByLabel('Файл изображения карты').setInputFiles({ name: 'map.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
-  await expect(page.getByRole('button', { name: 'Заменить изображение' })).toBeEnabled()
+  await expect(control(page, 'Заменить изображение')).toBeEnabled()
   await expect(page.getByText('Подготовка изображения…')).toHaveCount(0)
 }
 
@@ -43,7 +44,7 @@ test('exports latest context and native image; imports an independent copy that 
   await page.getByLabel('Общий контекст приключения').fill('Последний контекст перед экспортом')
   await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
   const downloading = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Экспорт проекта' }).click()
+  await clickMenuAction(page, 'Экспорт проекта')
   const download = await downloading
   const path = info.outputPath('backup.zip')
   await download.saveAs(path)
@@ -55,7 +56,7 @@ test('exports latest context and native image; imports an independent copy that 
   const before = await counts(page)
   await page.getByLabel('Архив проекта').setInputFiles(path)
   await expect(page.getByText('Копия проекта импортирована и сохранена на устройстве.')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Заменить изображение' })).toBeEnabled()
+  await expect(control(page, 'Заменить изображение')).toBeEnabled()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   const after = await counts(page)
   expect(after).toMatchObject({ projects: 2, maps: 2, assets: 2, placements: 2 })
@@ -68,8 +69,8 @@ test('exports latest context and native image; imports an independent copy that 
   await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
   await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Заменить изображение' })).toBeEnabled()
-  await page.getByRole('button', { name: 'Проекты', exact: true }).click()
+  await expect(control(page, 'Заменить изображение')).toBeEnabled()
+  await clickMenuAction(page, 'Проекты')
   await page.getByRole('button', { name: 'Открыть проект «Исходное приключение»' }).click()
   await page.getByRole('button', { name: 'Контекст', exact: true }).click()
   await expect(page.getByLabel('Общий контекст приключения')).toHaveValue('Последний контекст перед экспортом')
@@ -81,7 +82,7 @@ test('exports latest context and native image; imports an independent copy that 
 test('rejects broken/unknown archives and rolls back a late storage error', async ({ page }, info) => {
   await seed(page)
   const downloading = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Экспорт проекта' }).click()
+  await clickMenuAction(page, 'Экспорт проекта')
   const download = await downloading
   const path = info.outputPath('valid.zip'); await download.saveAs(path)
   const bytes = await readFile(path)
@@ -108,7 +109,7 @@ test('rejects broken/unknown archives and rolls back a late storage error', asyn
   expect(await counts(page)).toEqual(original)
   await page.evaluate(() => { IDBObjectStore.prototype.put = (window as unknown as { __backupTestPut: typeof IDBObjectStore.prototype.put }).__backupTestPut })
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Заменить изображение' })).toBeEnabled()
+  await expect(control(page, 'Заменить изображение')).toBeEnabled()
   expect(await counts(page)).toEqual(original)
   await page.getByLabel('Архив проекта').setInputFiles(path)
   await expect(page.getByText('Копия проекта импортирована и сохранена на устройстве.')).toBeVisible()

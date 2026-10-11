@@ -1,6 +1,7 @@
 import type { Project } from '../domain/project'
 import { createProject } from '../domain/project'
 import type { ProjectRepository } from './projectRepository'
+import type { ProjectAccess } from './projectAccess'
 
 export type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 export interface SessionState {
@@ -8,6 +9,8 @@ export interface SessionState {
   status: SaveStatus
   loading: boolean
   error?: string
+  readOnly?: boolean
+  accessMessage?: string
 }
 
 export class ProjectSession {
@@ -17,9 +20,11 @@ export class ProjectSession {
   private pending?: Promise<void>
   private initialization?: Promise<void>
   private openVersion = 0
+  private disposed = false
   private readonly repository: ProjectRepository
 
-  constructor(repository: ProjectRepository) { this.repository = repository }
+  constructor(repository: ProjectRepository, private readonly access?: ProjectAccess) { this.repository = repository }
+  canEdit = () => !!this.state.project && (!this.access || this.access.canEdit(this.state.project.id))
   getSnapshot = () => this.state
   getOpenVersion = () => this.openVersion
   subscribe = (listener: () => void) => {
@@ -27,9 +32,10 @@ export class ProjectSession {
     return () => { this.listeners.delete(listener) }
   }
   private update(state: SessionState) {
-    this.state = state
+    this.state = { ...state, readOnly: !!state.project && !this.canEditProject(state.project.id), accessMessage: this.access?.message() }
     this.listeners.forEach((listener) => listener())
   }
+  private canEditProject(id: string) { return !this.access || this.access.canEdit(id) }
   initialize = (): Promise<void> => {
     this.initialization ??= this.restore()
     return this.initialization
@@ -38,6 +44,9 @@ export class ProjectSession {
     this.update({ ...this.state, loading: true, error: undefined })
     try {
       const project = await this.repository.restore()
+      if (this.disposed) return
+      await this.access?.select(project?.id)
+      if (this.disposed) { await this.access?.release(); return }
       this.openVersion++
       this.update({ project, status: project ? 'saved' : 'idle', loading: false })
     } catch (error) { this.fail(error) }
@@ -50,6 +59,14 @@ export class ProjectSession {
   create = async (name: string) => {
     if (this.state.loading || this.hasUnsavedChanges() || this.pending) throw new Error('Сначала сохраните текущий проект.')
     const project = createProject(name)
+    this.update({ ...this.state, loading: true })
+    try {
+      await this.access?.select(project.id)
+      if (!this.canEditProject(project.id)) throw new Error(this.access?.message() ?? 'Не удалось получить право редактирования нового проекта.')
+    } catch (error) {
+      this.update({ ...this.state, loading: false, error: error instanceof Error ? error.message : 'Не удалось получить право редактирования.' })
+      throw error
+    }
     this.openVersion++
     this.editVersion++
     this.update({ project, status: 'dirty', loading: false })
@@ -60,6 +77,7 @@ export class ProjectSession {
     this.update({ ...this.state, loading: true, error: undefined })
     try {
       const project = await this.repository.open(id)
+      await this.access?.select(project.id)
       this.openVersion++
       this.editVersion++
       this.update({ project, status: 'saved', loading: false })
@@ -80,6 +98,7 @@ export class ProjectSession {
     this.update({ ...this.state, loading: true })
     try {
       const project = await work()
+      await this.access?.select(project.id)
       this.openVersion++
       this.editVersion++
       this.update({ project, status: 'saved', loading: false })
@@ -89,6 +108,7 @@ export class ProjectSession {
   }
   // Image and region writes share the revision; lock editing and switching until completion.
   mutateProject = async (work: (project: Project) => Promise<Project>) => {
+    if (!this.canEdit()) throw new Error('Проект открыт только для чтения. Получите право редактирования.')
     if (!this.state.project || this.state.loading || this.pending || this.hasUnsavedChanges()) {
       throw new Error('Сначала сохраните изменения проекта.')
     }
@@ -101,7 +121,7 @@ export class ProjectSession {
     }
   }
   edit = (fields: Pick<Project, 'name' | 'contextMd'>) => {
-    if (!this.state.project || this.state.loading) return
+    if (!this.state.project || this.state.loading || !this.canEdit()) return
     this.editVersion++
     this.update({ ...this.state, project: { ...this.state.project, ...fields }, status: this.pending ? 'saving' : 'dirty', error: undefined })
   }
@@ -110,6 +130,7 @@ export class ProjectSession {
     if (this.pending) return this.pending
     const project = this.state.project
     if (!project || this.state.status === 'saved') return Promise.resolve()
+    if (!this.canEdit()) { this.fail(new Error('Проект открыт только для чтения. Получите право редактирования. Черновик сохранён в памяти.')); return Promise.resolve() }
     const version = this.editVersion
     this.update({ ...this.state, status: 'saving', error: undefined })
     this.pending = this.repository.save({ ...project }).then((saved) => {
@@ -118,4 +139,28 @@ export class ProjectSession {
     }).catch((error: unknown) => this.fail(error)).finally(() => { this.pending = undefined })
     return this.pending
   }
+  inspectProject = async (work: (project: Project) => Promise<void>) => {
+    if (!this.state.project || this.state.loading || this.pending || this.hasUnsavedChanges()) throw new Error('Сначала сохраните изменения текущего проекта.')
+    this.update({ ...this.state, loading: true })
+    try { await work(this.state.project) } finally { this.update({ ...this.state, loading: false }) }
+  }
+  requestEditing = async (refresh: () => Promise<void> = async () => {}) => {
+    const id = this.state.project?.id
+    if (!id || this.state.loading || this.pending || this.hasUnsavedChanges()) return
+    this.update({ ...this.state, loading: true, error: undefined })
+    try {
+      await this.access?.select(id)
+      const project = await this.repository.open(id)
+      await refresh()
+      this.update({ project, status: 'saved', loading: false })
+    } catch (error) {
+      await this.access?.release()
+      this.update({ ...this.state, loading: false, error: error instanceof Error ? error.message : 'Не удалось перечитать проект. Право редактирования не получено.' })
+    }
+  }
+  releaseEditing = async () => {
+    if (this.state.loading || this.pending || this.hasUnsavedChanges()) return
+    await this.access?.release(); this.update({ ...this.state })
+  }
+  dispose = () => { this.disposed = true; void this.access?.release() }
 }

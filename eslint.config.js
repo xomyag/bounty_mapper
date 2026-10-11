@@ -6,6 +6,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default tseslint.config(
   { ignores: ['dist/**', 'node_modules/**'] },
+  { files: ['src/offline/worker.js'], extends: [js.configs.recommended], languageOptions: { ecmaVersion: 2022, globals: globals.serviceworker } },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],

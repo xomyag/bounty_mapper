@@ -1,7 +1,7 @@
 import type { RegionRepository } from './regionRepository'
 import type { ProjectSession } from './projectSession'
 import type { Point } from '../domain/viewport'
-import { emptyRegionContent, labelAnchor, MAX_REGIONS, MAX_REGION_VERTICES, regionHasUserContent, samePoint, validatePolygon, validateRegion } from '../domain/region'
+import { emptyRegionContent, labelAnchor, MAX_REGIONS, MAX_REGION_VERTICES, regionHasUserContent, samePoint, translateVertices, validatePolygon, validateRegion } from '../domain/region'
 import { documentAssetIds } from '../domain/richText'
 import type { Region, RegionContent } from '../domain/region'
 import type { Asset } from '../domain/project'
@@ -13,9 +13,9 @@ import { canonicalTags } from '../domain/tags'
 import type { WorkspaceMode } from '../domain/workspaceMode'
 import type { ModeRepository } from './modeRepository'
 
-export interface RegionDetails extends RegionContent { number: string; title: string; color: string; fillOpacity: number }
-interface DetailsDraft { fields: RegionDetails; assets: Asset[]; version: number; phase: 'dirty' | 'saving' | 'error'; error?: string }
-export const detailsOf = (region: Region): RegionDetails => ({ number: String(region.number), title: region.title, color: region.color, fillOpacity: region.fillOpacity, gmNotes: structuredClone(region.gmNotes), playerDescription: structuredClone(region.playerDescription), checks: structuredClone(region.checks), tags: [...region.tags] })
+export interface RegionDetails extends RegionContent { number: string; title: string; color: string; fillOpacity: number; vertices: Point[] }
+interface DetailsDraft { fields: RegionDetails; assets: Asset[]; version: number; phase: 'dirty' | 'saving' | 'error'; error?: string; geometryUndo?: Point[][]; geometryRedo?: Point[][] }
+export const detailsOf = (region: Region): RegionDetails => ({ number: String(region.number), title: region.title, color: region.color, fillOpacity: region.fillOpacity, vertices: structuredClone(region.vertices), gmNotes: structuredClone(region.gmNotes), playerDescription: structuredClone(region.playerDescription), checks: structuredClone(region.checks), tags: [...region.tags] })
 export interface MarkerDetails { name: string; description: Entity['description']; tags: string[]; status: string; color: string; regionIds: string[]; locked: boolean }
 export const markerDetailsOf = (entity: Entity, marker: MarkerPlacement): MarkerDetails => ({ name: entity.name, description: structuredClone(entity.description), tags: [...entity.tags], status: entity.status, color: marker.color, regionIds: [...marker.regionIds], locked: marker.locked })
 export interface MarkerDraft { entity: Entity; marker: MarkerPlacement; fields: MarkerDetails; assets: Asset[]; isNew: boolean; version: number; phase: 'dirty' | 'saving' | 'error'; error?: string }
@@ -86,7 +86,8 @@ export class RegionSession {
     this.listeners.forEach((listener) => listener())
   }
   busy = () => !!this.state.transitioning || ['loading', 'saving'].includes(this.state.phase) || ['loading', 'saving'].includes(this.state.modePhase) || this.state.statusAction?.phase === 'saving'
-  isPreparation = () => this.state.mode === 'prepare' && !['loading', 'saving'].includes(this.state.modePhase)
+  canEditProject = () => this.projects.canEdit()
+  isPreparation = () => this.canEditProject() && this.state.mode === 'prepare' && !['loading', 'saving'].includes(this.state.modePhase)
   loadMode = async (projectId?: string) => {
     const generation = ++this.modeGeneration
     this.modeProjectId = projectId; this.retryModeWork = undefined
@@ -101,7 +102,7 @@ export class RegionSession {
     }
   }
   requestMode = (mode: WorkspaceMode) => {
-    if (!['prepare', 'play'].includes(mode) || mode === this.state.mode || this.busy() || this.detailsSaving() || this.state.imagePending || this.projects.getSnapshot().loading || this.projects.hasUnsavedChanges()) return
+    if (!this.canEditProject() || !['prepare', 'play'].includes(mode) || mode === this.state.mode || this.busy() || this.detailsSaving() || this.state.imagePending || this.projects.getSnapshot().loading || this.projects.hasUnsavedChanges()) return
     this.requestCardIntent({ kind: 'mode', mode })
   }
   retryMode = () => this.retryModeWork?.()
@@ -156,6 +157,24 @@ export class RegionSession {
   hasUnsavedDetails = () => Object.keys(this.state.details).some(this.isDetailsDirty) || this.isMarkerDirty() || this.state.imagePending > 0
   detailsSaving = () => !!this.detailsWork || !!this.markerWork || Object.values(this.state.details).some((draft) => draft.phase === 'saving')
   ready = () => this.isPreparation() && this.loaded && !!this.state.mapId && !this.busy() && !this.hasUnsavedDetails() && !this.projects.getSnapshot().loading && !this.projects.hasUnsavedChanges()
+  canMoveRegion = (id: string) => this.isPreparation() && this.loaded && this.state.cardId === id && this.state.cardMode === 'edit' && !!this.state.details[id] && !this.busy() && !this.detailsSaving() && !this.state.imagePending && !this.state.pendingIntent && !this.state.vertexMode && !this.state.draft && !this.state.markerTool && !this.projects.getSnapshot().loading && !this.projects.hasUnsavedChanges()
+  canUndoDraftGeometry = () => !!this.state.cardId && this.canMoveRegion(this.state.cardId) && !!this.state.details[this.state.cardId]?.geometryUndo?.length
+  canRedoDraftGeometry = () => !!this.state.cardId && this.canMoveRegion(this.state.cardId) && !!this.state.details[this.state.cardId]?.geometryRedo?.length
+  moveRegionDraft = (id: string, offset: Point) => {
+    if (!this.canMoveRegion(id) || ![offset.x, offset.y].every(Number.isFinite) || (!offset.x && !offset.y)) return
+    const draft = this.state.details[id]
+    const vertices = translateVertices(draft.fields.vertices, offset)
+    try { validatePolygon(vertices) } catch (error) { this.fail(error); return }
+    this.update({ details: { ...this.state.details, [id]: { ...draft, fields: { ...draft.fields, vertices }, version: draft.version + 1, phase: 'dirty', error: undefined, geometryUndo: [...(draft.geometryUndo ?? []), structuredClone(draft.fields.vertices)].slice(-100), geometryRedo: [] } } })
+  }
+  private stepDraftGeometry(redo: boolean) {
+    if (redo ? !this.canRedoDraftGeometry() : !this.canUndoDraftGeometry()) return false
+    const id = this.state.cardId!; const draft = this.state.details[id]
+    const from = [...(redo ? draft.geometryRedo! : draft.geometryUndo!)]; const vertices = from.pop()!
+    const to = [...(redo ? draft.geometryUndo ?? [] : draft.geometryRedo ?? []), structuredClone(draft.fields.vertices)]
+    this.update({ details: { ...this.state.details, [id]: { ...draft, fields: { ...draft.fields, vertices }, version: draft.version + 1, phase: 'dirty', error: undefined, geometryUndo: redo ? to : from, geometryRedo: redo ? from : to } } })
+    return true
+  }
   load = async (mapId?: string) => {
     const generation = ++this.generation
     this.loaded = false
@@ -283,17 +302,19 @@ export class RegionSession {
     await this.change({ ...region, vertices: region.vertices.filter((_, i) => i !== index) })
   }
   undo = async () => {
+    if (this.stepDraftGeometry(false)) return
     const command = this.undoStack.at(-1)
     if (command && this.ready() && !this.state.draft) await this.commit(command.before, command.selectedId, 'undo', false, command.markersBefore)
   }
   redo = async () => {
+    if (this.stepDraftGeometry(true)) return
     const command = this.redoStack.at(-1)
     if (command && this.ready() && !this.state.draft) await this.commit(command.after, command.selectedId, 'redo', false, command.markersAfter)
   }
   editDetails = (id: string, fields: RegionDetails) => {
     if (!this.isPreparation() || !this.loaded || this.busy() || !this.state.regions.some((r) => r.id === id) || this.projects.hasUnsavedChanges() || (this.projects.getSnapshot().loading && !this.detailsSaving())) return
     const version = (this.state.details[id]?.version ?? 0) + 1
-    this.update({ details: { ...this.state.details, [id]: { fields: structuredClone(fields), assets: this.state.details[id]?.assets ?? [], version, phase: 'dirty' } } })
+    this.update({ details: { ...this.state.details, [id]: { ...this.state.details[id], fields: structuredClone(fields), assets: this.state.details[id]?.assets ?? [], version, phase: 'dirty', error: undefined } } })
   }
   beginImageInsertion = () => { if (this.isPreparation()) this.update({ imagePending: this.state.imagePending + 1, imageError: undefined }) }
   reportImageError = (error: unknown) => this.update({ imageError: error instanceof Error ? error.message : 'Не удалось вставить изображение или текст.' })
@@ -335,12 +356,18 @@ export class RegionSession {
         const newAssets = draft.assets.filter((asset) => referenced.has(asset.id))
         await this.projects.mutateProject((project) => this.repository.save(project, mapId, next, newAssets, { entities: this.state.entities, markers: this.state.markers }, fields.tags))
         if (generation !== this.generation) return
-        // Geometry history must never undo subsequently written text.
+        const { vertices: _vertices, ...contentDetails } = details; void _vertices
+        // Saved text/appearance is retained when undoing geometry.
         for (const command of [...this.undoStack, ...this.redoStack]) {
           for (const list of [command.before, command.after]) {
             const row = list.find((r) => r.id === id)
-            if (row) Object.assign(row, structuredClone(details))
+            if (row) Object.assign(row, structuredClone(contentDetails))
           }
+        }
+        if (JSON.stringify(currentRegion.vertices) !== JSON.stringify(details.vertices)) {
+          this.undoStack.push({ before: structuredClone(this.state.regions.map((r) => r.id === id ? { ...r, ...contentDetails } : r)), after: structuredClone(next), markersBefore: structuredClone(this.state.markers), markersAfter: structuredClone(this.state.markers), selectedId: id })
+          if (this.undoStack.length > 100) this.undoStack.shift()
+          this.redoStack = []
         }
         const drafts = { ...this.state.details }
         if (drafts[id]?.version === draft.version) delete drafts[id]
@@ -476,7 +503,7 @@ export class RegionSession {
     if (!entity || status === entity.status || !this.canChangeStatus()) return
     await this.writeStatus({ entityId, before: entity.status, after: status }, 'change')
   }
-  private canChangeStatus() { return this.loaded && !this.busy() && !this.hasUnsavedDetails() && !this.detailsSaving() && !this.projects.getSnapshot().loading && !this.projects.hasUnsavedChanges() && !this.state.draft && !this.state.markerTool && !this.state.vertexMode }
+  private canChangeStatus() { return this.canEditProject() && this.loaded && !this.busy() && !this.hasUnsavedDetails() && !this.detailsSaving() && !this.projects.getSnapshot().loading && !this.projects.hasUnsavedChanges() && !this.state.draft && !this.state.markerTool && !this.state.vertexMode }
   undoStatus = async () => { const command = this.statusUndo.at(-1); if (command && this.canChangeStatus()) await this.writeStatus(command, 'undo') }
   redoStatus = async () => { const command = this.statusRedo.at(-1); if (command && this.canChangeStatus()) await this.writeStatus(command, 'redo') }
   retryStatus = async () => {

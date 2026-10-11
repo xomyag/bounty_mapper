@@ -1,14 +1,15 @@
+import { clickMenuAction, control } from './controls'
 import { Buffer } from 'node:buffer'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
 async function createProject(page: Page, name: string) {
-  await page.getByRole('button', { name: 'Проекты', exact: true }).click()
+  await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill(name)
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
   await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
   await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
-  await expect(page.getByRole('button', { name: 'Загрузить карту' })).toBeEnabled()
+  await expect(control(page, 'Загрузить карту')).toBeEnabled()
 }
 
 async function raster(page: Page, mimeType = 'image/png', width = 320, height = 160) {
@@ -41,7 +42,7 @@ async function stored(page: Page) {
 }
 
 async function visibleMap(page: Page) {
-  await expect(page.getByRole('button', { name: 'Заменить изображение' })).toBeEnabled()
+  await expect(control(page, 'Заменить изображение')).toBeEnabled()
   await expect(page.getByText('Подготовка изображения…')).toHaveCount(0)
   await expect(page.locator('canvas')).toHaveCount(1)
   // Check actual canvas pixels: both halves of the uploaded rectangular image are drawn.
@@ -117,7 +118,7 @@ test('PNG/JPEG/WebP render; pan and pointer zoom preserve placement; project map
   expect(second.maps).toHaveLength(2)
   expect(second.assets).toHaveLength(2)
   expect(second.assets.some((asset) => asset.mimeType === 'image/webp' && asset.width === 400)).toBe(true)
-  await page.getByRole('button', { name: 'Проекты', exact: true }).click()
+  await clickMenuAction(page, 'Проекты')
   await page.getByRole('button', { name: 'Открыть проект «Первая карта»' }).click()
   await visibleMap(page)
   await page.getByRole('button', { name: 'Контекст', exact: true }).click()
@@ -157,10 +158,10 @@ test('invalid files and failed storage keep the previous image; replacement retr
   await visibleMap(page)
   expect((await stored(page)).assets[0]).toMatchObject({ width: 600, height: 300, mimeType: 'image/webp' })
   page.once('dialog', (dialog) => dialog.accept())
-  await page.getByRole('button', { name: 'Удалить изображение' }).click()
-  await expect(page.getByRole('button', { name: 'Загрузить карту' })).toBeEnabled()
+  await clickMenuAction(page, 'Удалить изображение')
+  await expect(control(page, 'Загрузить карту')).toBeEnabled()
   expect((await stored(page)).assets).toEqual([])
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Загрузить карту' })).toBeEnabled()
+  await expect(control(page, 'Загрузить карту')).toBeEnabled()
   expect((await stored(page)).maps).toHaveLength(1)
 })

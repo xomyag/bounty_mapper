@@ -11,12 +11,13 @@ vi.mock('./features/map/MapCanvas', () => ({ MapCanvas: () => <div>Canvas</div> 
 beforeEach(() => {
   // jsdom does not implement the native modal API or focus trapping.
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+  HTMLElement.prototype.hidePopover = function () {}
 })
 afterEach(cleanup)
 
 async function createInUi(name: string) {
-  await waitFor(() => expect((screen.getByRole('button', { name: 'Проекты' }) as HTMLButtonElement).disabled).toBe(false))
-  fireEvent.click(screen.getByRole('button', { name: 'Проекты' }))
+  await waitFor(() => expect((screen.getByRole('menuitem', { name: 'Проекты', hidden: true }) as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Проекты', hidden: true }))
   fireEvent.change(screen.getByLabelText('Название нового проекта'), { target: { value: name } })
   fireEvent.click(screen.getByRole('button', { name: 'Создать' }))
   await screen.findByLabelText('Общий контекст приключения')
@@ -38,7 +39,7 @@ describe('Project UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть окно проекта' }))
     await createInUi('Вторая история')
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть окно проекта' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Проекты' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Проекты', hidden: true }))
     fireEvent.click(await screen.findByRole('button', { name: 'Открыть проект «Новая история»' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect((await repo.restore())?.id).toBe(first.id)

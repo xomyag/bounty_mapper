@@ -74,14 +74,15 @@ export function ProjectDialog({ mode, repository, session, onClose, onEdit }: Pr
         </>
       ) : project && (
         <form onSubmit={(event) => { event.preventDefault(); void session.save() }}>
+          {state.readOnly && <p className="form-hint">Только просмотр: проект редактируется в другой вкладке. Получите право редактирования в основной панели.</p>}
           <label htmlFor="project-name">Название проекта</label>
-          <input id="project-name" required autoFocus value={project.name} onChange={(event) => session.edit({ name: event.target.value, contextMd: project.contextMd })} />
+          <input id="project-name" required autoFocus readOnly={state.readOnly} value={project.name} onChange={(event) => session.edit({ name: event.target.value, contextMd: project.contextMd })} />
           <label htmlFor="project-context">Общий контекст приключения</label>
-          <textarea id="project-context" rows={12} value={project.contextMd} onChange={(event) => session.edit({ name: project.name, contextMd: event.target.value })} placeholder="Замысел приключения, важные события и заметки ведущего…" />
+          <textarea id="project-context" rows={12} readOnly={state.readOnly} value={project.contextMd} onChange={(event) => session.edit({ name: project.name, contextMd: event.target.value })} placeholder="Замысел приключения, важные события и заметки ведущего…" />
           <p className="form-hint">Автосохранение после ввода. Markdown хранится как текст; предпросмотр появится позже.</p>
           <div className="editor-footer">
             <span role="status">{state.status === 'saved' ? 'Сохранено на устройстве' : state.status === 'saving' ? 'Сохранение…' : state.status === 'error' ? 'Ошибка сохранения' : 'Есть изменения'}</span>
-            <button type="submit" disabled={state.loading || state.status === 'saving' || state.status === 'saved' || !project.name.trim()}>Сохранить</button>
+            <button type="submit" disabled={state.readOnly || state.loading || state.status === 'saving' || state.status === 'saved' || !project.name.trim()}>Сохранить</button>
           </div>
           {state.error && <div className="form-error" role="alert">{state.error} Текст остаётся в открытой форме. Исправьте причину и повторите сохранение.</div>}
           {state.status === 'error' && project.revision > 0 && <button type="button" className="reload-project" onClick={() => {

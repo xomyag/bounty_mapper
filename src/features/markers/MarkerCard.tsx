@@ -17,7 +17,8 @@ export function MarkerCard({ entity, marker, state, session, disabled, geometryD
   const fields = draft?.fields ?? markerDetailsOf(entity, marker)
   const assets = { ...state.assets, ...Object.fromEntries((draft?.assets ?? []).map((a) => [a.id, a])) }
   const playing = state.mode === 'play'
-  const editing = !playing && state.cardMode === 'edit'
+  const readOnly = !session.canEditProject()
+  const editing = !playing && !readOnly && state.cardMode === 'edit'
   const statusAction = state.statusAction?.entityId === entity.id ? state.statusAction : undefined
   const busy = disabled || session.detailsSaving() || !!state.imagePending
   const edit = (change: Partial<MarkerDetails>) => session.editMarkerDetails({ ...fields, ...change })
@@ -45,11 +46,11 @@ export function MarkerCard({ entity, marker, state, session, disabled, geometryD
       <div className="card-actions"><button type="button" onClick={() => { void session.saveMarkerDetails() }}>Сохранить</button><button type="button" onClick={session.cancelMarkerEdit}>Отмена</button></div>
     </fieldset> : <>
       <p className="marker-status"><span aria-hidden="true">{statusBadge(entity.status)}</span> {statusLabel(entity)}</p>
-      <section aria-label="Быстрая смена статуса"><label>Статус<select aria-label="Быстрая смена статуса" value={entity.status} disabled={busy} onChange={(event) => { void session.changeStatus(entity.id, event.target.value) }}>{Object.entries(statusesOf(entity.kind)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{statusAction?.phase === 'error' && <p className="form-error">{statusAction.error}</p>}{!playing && <button type="button" disabled={busy || !state.canUndoStatus} onClick={() => { void session.undoStatus() }}>Отменить статус</button>}</section>
+      <section aria-label="Быстрая смена статуса"><label>Статус<select aria-label="Быстрая смена статуса" value={entity.status} disabled={readOnly || busy} onChange={(event) => { void session.changeStatus(entity.id, event.target.value) }}>{Object.entries(statusesOf(entity.kind)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{statusAction?.phase === 'error' && <p className="form-error">{statusAction.error}</p>}{!playing && <button type="button" disabled={readOnly || busy || !state.canUndoStatus} onClick={() => { void session.undoStatus() }}>Отменить статус</button>}</section>
       <h3>Описание</h3>{documentHasContent(entity.description) ? <RichTextView document={entity.description} assets={state.assets} /> : <p>Описание пока не заполнено{playing ? '. Для редактирования перейдите в «Подготовку».' : ''}</p>}
       <h3>Теги</h3><p>{entity.tags.join(', ') || 'Нет тегов'}</p>
-      <p>Положение: {marker.locked ? 'Закреплено' : playing ? 'Перемещение доступно в «Подготовке»' : 'Можно перемещать'} · <span className="color-preview" style={{ backgroundColor: marker.color }} /> {marker.color}</p>
-      {!playing && <div className="card-actions"><button type="button" disabled={busy} onClick={session.beginMarkerEdit}>Редактировать</button><button type="button" disabled={geometryDisabled} onClick={() => { void session.removeMarker(marker.id) }}>Удалить маркер</button></div>}
+      <p>Положение: {marker.locked ? 'Закреплено' : readOnly ? 'Только просмотр' : playing ? 'Перемещение доступно в «Подготовке»' : 'Можно перемещать'} · <span className="color-preview" style={{ backgroundColor: marker.color }} /> {marker.color}</p>
+      {!playing && !readOnly && <div className="card-actions"><button type="button" disabled={busy} onClick={session.beginMarkerEdit}>Редактировать</button><button type="button" disabled={geometryDisabled} onClick={() => { void session.removeMarker(marker.id) }}>Удалить маркер</button></div>}
     </>}
     <section aria-label="Связанные области"><h3>Связанные области</h3>
       <ul className="linked-markers">{linkedRegions.map((r) => <li key={r.id}><button type="button" disabled={busy} onClick={() => session.navigate({ mapId: r.mapId, kind: 'region', id: r.id })}>{r.number}. {r.title}</button></li>)}</ul>

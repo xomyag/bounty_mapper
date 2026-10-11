@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { Map } from '../../domain/project'
+import { Plus, Check, Pencil, Trash2, ImagePlus, ChevronDown, Map as MapIcon } from 'lucide-react'
 
 export type MapAction = { kind: 'create' } | { kind: 'rename' | 'delete'; map: Map }
 
-export function MapMenu({ maps, currentMapId, disabled, writesDisabled, playing = false, onNavigate, onAction }: { maps: Map[]; currentMapId?: string; disabled: boolean; writesDisabled: boolean; playing?: boolean; onNavigate: (mapId: string) => void; onAction: (action: MapAction) => void }) {
+export function MapMenu({ maps, currentMapId, disabled, writesDisabled, playing = false, onNavigate, onAction, imageDisabled, hasImage, onUpload, onRemoveImage }: { maps: Map[]; currentMapId?: string; disabled: boolean; writesDisabled: boolean; playing?: boolean; onNavigate: (mapId: string) => void; onAction: (action: MapAction) => void; imageDisabled: boolean; hasImage: boolean; onUpload: () => void; onRemoveImage: () => void }) {
   const id = useId()
   const popover = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -13,19 +14,23 @@ export function MapMenu({ maps, currentMapId, disabled, writesDisabled, playing 
   return <div className="map-menu">
     <button ref={trigger} type="button" className="map-menu-trigger" aria-label="Карты проекта" aria-haspopup="menu" aria-expanded={open} popoverTarget={id} disabled={disabled} onKeyDown={(event) => {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); popover.current?.showPopover(); requestAnimationFrame(() => { const items = popover.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'); (event.key === 'ArrowUp' ? items?.[items.length - 1] : items?.[0])?.focus() }) }
-    }}>{maps.find((map) => map.id === currentMapId)?.name ?? 'Нет карты'} <span aria-hidden="true">▾</span></button>
+    }}><span>{maps.find((map) => map.id === currentMapId)?.name ?? 'Нет карты'}</span><ChevronDown size={16} aria-hidden="true" /></button>
     <div ref={popover} id={id} popover="auto" role="menu" aria-label="Карты проекта" className="map-menu-popover" onToggle={(event) => { setOpen(event.newState === 'open'); if (event.newState === 'open') { const box = trigger.current!.getBoundingClientRect(); const panel = popover.current!; panel.style.top = `${box.bottom + 6}px`; panel.style.right = `${Math.max(8, window.innerWidth - box.right)}px` } }} onKeyDown={(event) => {
       const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')]
       const index = items.indexOf(document.activeElement as HTMLButtonElement)
       if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; items[next]?.focus() }
       if (event.key === 'Escape') { event.preventDefault(); close(); trigger.current?.focus() }
     }}>
-      <button type="button" role="menuitem" disabled={writesDisabled} onClick={() => action({ kind: 'create' })}>New map</button>
+      <button type="button" role="menuitem" disabled={writesDisabled} onClick={() => action({ kind: 'create' })}><Plus size={18} aria-hidden="true" />New map</button>
       <ul role="none">{maps.map((map) => <li key={map.id} role="none" className="map-menu-row" data-map-id={map.id}>
-        <button type="button" role="menuitem" aria-current={map.id === currentMapId ? 'page' : undefined} aria-label={`Перейти на карту «${map.name}»`} disabled={disabled} onClick={() => { close(); onNavigate(map.id) }}><span aria-hidden="true">{map.id === currentMapId ? '✓ ' : ''}</span>{map.name}</button>
-        <button type="button" role="menuitem" aria-label={`Переименовать карту «${map.name}»`} disabled={writesDisabled} onClick={() => action({ kind: 'rename', map })}>Переименовать</button>
-        <button type="button" role="menuitem" aria-label={`Удалить карту «${map.name}»`} disabled={writesDisabled} onClick={() => action({ kind: 'delete', map })}>Удалить</button>
+        <button type="button" role="menuitem" aria-current={map.id === currentMapId ? 'page' : undefined} aria-label={`Перейти на карту «${map.name}»`} disabled={disabled} onClick={() => { close(); onNavigate(map.id) }}>{map.id === currentMapId ? <Check size={18} aria-hidden="true" /> : <MapIcon size={18} aria-hidden="true" />}{map.name}</button>
+        <button type="button" role="menuitem" aria-label={`Переименовать карту «${map.name}»`} disabled={writesDisabled} onClick={() => action({ kind: 'rename', map })}><Pencil size={16} aria-hidden="true" />Переименовать</button>
+        <button type="button" role="menuitem" aria-label={`Удалить карту «${map.name}»`} disabled={writesDisabled} onClick={() => action({ kind: 'delete', map })}><Trash2 size={16} aria-hidden="true" />Удалить</button>
       </li>)}</ul>
+      <section className="map-image-actions" aria-label="Изображение текущей карты"><p>Изображение: {maps.find((map) => map.id === currentMapId)?.name ?? 'первая карта'}</p>
+        <button type="button" role="menuitem" disabled={imageDisabled} onClick={() => { close(); onUpload() }}><ImagePlus size={18} aria-hidden="true" />{hasImage ? 'Заменить изображение' : 'Загрузить карту'}</button>
+        {hasImage && <button type="button" role="menuitem" disabled={imageDisabled} onClick={() => { close(); onRemoveImage() }}><Trash2 size={18} aria-hidden="true" />Удалить изображение</button>}
+      </section>
       {writesDisabled && <p className="form-hint">{playing ? 'Изменение карт доступно в режиме «Подготовка». Переключение карт доступно в игре.' : 'Для изменения карт сохраните или отмените правки карточки и завершите текущую операцию.'}</p>}
     </div>
   </div>

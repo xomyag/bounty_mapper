@@ -4,7 +4,7 @@ import type Konva from 'konva'
 import type { MapImage } from '../../application/mapImageRepository'
 import type { Camera, Point } from '../../domain/viewport'
 import { centerOn, fitBounds, screenToWorld, zoomAt } from '../../domain/viewport'
-import { labelAnchor, projectOnEdge, translateVertices } from '../../domain/region'
+import { labelAnchor, projectOnEdge } from '../../domain/region'
 import type { Region } from '../../domain/region'
 import { documentText } from '../../domain/richText'
 import type { RegionSession, RegionState } from '../../application/regionSession'
@@ -14,12 +14,13 @@ import { markerTypes, statusBadge, statusLabel } from '../../domain/marker'
 import { markerIcons, markerScreenScale, markerInk } from './markerIcons'
 import { MapContextMenu } from './MapContextMenu'
 
-interface Props { image: MapImage; fitVersion: number; regions: RegionState; session: RegionSession; editable: boolean; viewports: ViewportMemory }
+interface Props { image: MapImage; fitVersion: number; zoomCommand?: { version: number; factor: number }; regionDragAllowed: boolean; regions: RegionState; session: RegionSession; editable: boolean; viewports: ViewportMemory }
 const flat = (points: Point[]) => points.flatMap((p) => [p.x, p.y])
 const fill = (region: Region) => `${region.color}${Math.round(region.fillOpacity * 255).toString(16).padStart(2, '0')}`
 
-export function MapCanvas({ image, fitVersion, regions, session, editable: editingAllowed, viewports }: Props) {
+export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, regions, session, editable: editingAllowed, viewports }: Props) {
   const playing = regions.mode === 'play'
+  const readOnly = playing || !session.canEditProject()
   const editable = editingAllowed && session.isPreparation()
   const host = useRef<HTMLDivElement>(null)
   const stage = useRef<Konva.Stage>(null)
@@ -27,6 +28,8 @@ export function MapCanvas({ image, fitVersion, regions, session, editable: editi
   const draggingRegion = useRef(false)
   const draggedMarker = useRef<string | undefined>(undefined)
   const blockStagePan = useRef(false)
+  const suppressClick = useRef(false)
+  const consumedZoom = useRef(zoomCommand?.version)
   const [markerHover, setMarkerHover] = useState<{ id: string; x: number; y: number }>()
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [cameraState, setCameraState] = useState<{ key: string; mapId?: string; camera: Camera; focus?: RegionState['viewFocus'] }>()
@@ -45,13 +48,14 @@ export function MapCanvas({ image, fitVersion, regions, session, editable: editi
   const mapId = image.map?.id
   const visibleBitmap = cachedBitmap(asset?.id) ?? (bitmap?.assetId === asset?.id ? bitmap?.image : undefined)
   // Resizing the viewport (including temporary status banners) must not change
-  // the camera. Fit only a new map/background or an explicit Show all action.
-  const cameraKey = `${image.map?.id}:${asset?.id}:${fitVersion}`
+  // the camera. Replacing/removing the background, including a write retry,
+  // preserves the map camera. Fit only a new map or an explicit Show all action.
+  const cameraKey = `${image.map?.id}:${fitVersion}`
   const bounds = placement ?? image.map?.coordinateBounds
   const fitted = bounds && size.width > 0 && size.height > 0 ? fitBounds(bounds, size) : { x: 0, y: 0, scale: 1 }
   if (size.width > 0 && size.height > 0) {
     if (cameraState?.key !== cameraKey) {
-      const restored = mapId && cameraState?.mapId !== mapId ? viewports.get(mapId, asset?.id) ?? fitted : fitted
+      const restored = mapId && cameraState?.mapId !== mapId ? viewports.get(mapId) ?? fitted : fitted
       const next = regions.mapId === mapId && regions.viewFocus && cameraState?.focus !== regions.viewFocus ? centerOn(restored, regions.viewFocus.point, size) : restored
       setCameraState({ key: cameraKey, mapId, camera: next, focus: regions.viewFocus })
     }
@@ -60,7 +64,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable: editi
     else if (cameraState.focus !== regions.viewFocus) setCameraState({ ...cameraState, focus: regions.viewFocus, camera: regions.viewFocus ? centerOn(cameraState.camera, regions.viewFocus.point, size) : cameraState.camera })
   }
   const camera = cameraState?.key === cameraKey ? cameraState.camera : fitted
-  if (mapId && size.width > 0 && size.height > 0 && cameraState?.key === cameraKey) viewports.set(mapId, asset?.id, camera)
+  if (mapId && size.width > 0 && size.height > 0 && cameraState?.key === cameraKey) viewports.set(mapId, camera)
   const setCamera = (change: (current: Camera) => Camera) => {
     setCameraState((current) => ({ key: cameraKey, mapId, camera: change(current?.key === cameraKey ? current.camera : fitted), focus: current?.key === cameraKey ? current.focus : regions.viewFocus }))
   }
@@ -96,6 +100,12 @@ export function MapCanvas({ image, fitVersion, regions, session, editable: editi
     void session.change(region).finally(() => setPreview(undefined))
   }
   const focus = () => host.current?.focus({ preventScroll: true })
+  const stopClick = () => { suppressClick.current = true; requestAnimationFrame(() => { suppressClick.current = false }) }
+  useEffect(() => {
+    if (!zoomCommand || consumedZoom.current === zoomCommand.version) return
+    consumedZoom.current = zoomCommand.version
+    setCamera((current) => zoomAt(current, { x: size.width / 2, y: size.height / 2 }, current.scale * zoomCommand.factor))
+  })
   useEffect(() => {
     let previous = session.getSnapshot().mode
     return session.subscribe(() => {
@@ -149,8 +159,8 @@ export function MapCanvas({ image, fitVersion, regions, session, editable: editi
         else if (event.key === 'Enter' && regions.draft && editable) void session.finish()
         else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && playing) { if (event.shiftKey) void session.redoStatus(); else void session.undoStatus() }
         else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && playing) void session.redoStatus()
-        else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && editable) { if (event.shiftKey) void session.redo(); else void session.undo() }
-        else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && editable) void session.redo()
+        else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && (editable || session.canUndoDraftGeometry() || session.canRedoDraftGeometry())) { if (event.shiftKey) void session.redo(); else void session.undo() }
+        else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && (editable || session.canRedoDraftGeometry())) void session.redo()
         else if (event.key === 'Delete' && editable && regions.selectedMarkerId) void session.removeMarker()
         else if (event.key === 'Delete' && editable && regions.selectedId) { if (regions.vertexMode) void session.removeVertex(); else void session.remove() }
         else if (event.key === 'ArrowLeft') pan(40, 0)
@@ -172,7 +182,8 @@ export function MapCanvas({ image, fitVersion, regions, session, editable: editi
             else if (event.target === stage.current) session.select()
           }}
           onTap={() => { if (regions.markerTool && editable) { const point = worldPointer(); if (point) session.placeMarker(point) } }}
-          onDragStart={(event) => { if (event.target === stage.current && blockStagePan.current) { event.target.stopDrag(); event.target.position({ x: camera.x, y: camera.y }) } }}
+          onDragStart={(event) => { if (event.target === stage.current) { suppressClick.current = true; if (blockStagePan.current) { event.target.stopDrag(); event.target.position({ x: camera.x, y: camera.y }) } } }}
+          onDragEnd={(event) => { if (event.target === stage.current) stopClick() }}
           onDragMove={(event) => {
             if (event.target === stage.current) setCamera((current) => ({ ...current, x: event.target.x(), y: event.target.y() }))
           }}
@@ -187,14 +198,17 @@ export function MapCanvas({ image, fitVersion, regions, session, editable: editi
           <Layer>
             {placement && visibleBitmap && <CanvasImage listening={false} image={visibleBitmap} x={placement.x} y={placement.y} width={placement.width} height={placement.height} rotation={placement.rotation} visible={placement.visible} />}
             {regions.regions.map((saved) => {
-              const region = !playing && preview?.id === saved.id ? preview : saved
+              const displayed = { ...saved, vertices: regions.details[saved.id]?.fields.vertices ?? saved.vertices }
+              const region = !readOnly && preview?.id === saved.id ? preview : displayed
+              const draggable = regionDragAllowed && session.canMoveRegion(region.id)
               const selected = region.id === regions.selectedId
-              const vertices = !playing && selected && regions.vertexMode && !regions.draft
+              const vertices = !readOnly && selected && regions.vertexMode && !regions.draft
               const anchor = labelAnchor(region.vertices)
-              return <Group key={region.id} _useStrictMode={playing} x={playing ? 0 : undefined} y={playing ? 0 : undefined} draggable={editable && !regions.markerTool && !regions.draft && !regions.vertexMode}
-                onMouseDown={(event) => { if (!regions.draft && !regions.vertexMode && !regions.markerTool) { event.cancelBubble = !playing; focus() } }}
-                onClick={(event) => { if (!regions.draft && !regions.markerTool) { event.cancelBubble = true; if (event.evt.button === 0 && !regions.vertexMode) { setHover(undefined); session.openCard(region.id) } } }}
-                onTap={(event) => { if (!regions.markerTool) { event.cancelBubble = true; if (!regions.draft && !regions.vertexMode) { setHover(undefined); session.openCard(region.id) } } }}
+              return <Group key={region.id} name="map-region" _useStrictMode={!draggable} x={draggable ? undefined : 0} y={draggable ? undefined : 0} draggable={draggable}
+                onMouseDown={(event) => { if (!regions.draft && !regions.vertexMode && !regions.markerTool) { event.cancelBubble = draggable; focus() } }}
+                onTouchStart={(event) => { if (!regions.draft && !regions.vertexMode && !regions.markerTool) event.cancelBubble = draggable }}
+                onClick={(event) => { if (!regions.draft && !regions.markerTool) { event.cancelBubble = true; if (!suppressClick.current && event.evt.button === 0 && !regions.vertexMode) { setHover(undefined); session.openCard(region.id) } } }}
+                onTap={(event) => { if (!regions.markerTool) { event.cancelBubble = true; if (!suppressClick.current && !regions.draft && !regions.vertexMode) { setHover(undefined); session.openCard(region.id) } } }}
                 onMouseMove={() => { const p = stage.current?.getPointerPosition(); if (p && !draggingRegion.current) setHover({ id: region.id, x: Math.max(8, Math.min(p.x + 16, size.width - 320)), y: Math.max(8, Math.min(p.y + 16, size.height - 180)) }) }}
                 onMouseLeave={() => setHover(undefined)}
                 onDragStart={(event) => { event.cancelBubble = true; draggingRegion.current = true; setHover(undefined); session.select(region.id) }}
@@ -202,10 +216,11 @@ export function MapCanvas({ image, fitVersion, regions, session, editable: editi
                 onDragEnd={(event) => {
                   event.cancelBubble = true
                   draggingRegion.current = false
+                  stopClick()
                   const offset = { x: event.target.x(), y: event.target.y() }
                   event.target.position({ x: 0, y: 0 })
-                  if (!editable) return
-                  savePreview({ ...saved, vertices: translateVertices(saved.vertices, offset) })
+                  if (!regionDragAllowed) return
+                  session.moveRegionDraft(saved.id, offset)
                 }}>
                 <Line points={flat(region.vertices)} closed fill={fill(region)} stroke={selected ? '#fff5cb' : region.color} strokeWidth={selected ? 3 : 1.5} strokeScaleEnabled={false} listening={!regions.draft} />
                 {selected && <Line points={flat(region.vertices)} closed stroke="#1a1e29" strokeWidth={1} strokeScaleEnabled={false} dash={[5 / camera.scale, 4 / camera.scale]} listening={false} />}
@@ -247,7 +262,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable: editi
               const isNew = !!regions.markerDraft?.isNew && regions.markerDraft.marker.id === marker.id
               const locked = isNew ? regions.markerDraft!.fields.locked : marker.locked
               const canDrag = session.isPreparation() && (isNew ? session.canMoveMarkerDraft(marker.id) : editable && !locked)
-              return <Group key={marker.id} name="map-marker" _useStrictMode={playing} x={marker.x} y={marker.y} scaleX={scale} scaleY={scale} draggable={canDrag && !regions.draft && !regions.markerTool && !regions.vertexMode} listening={!regions.draft && !regions.markerTool && !regions.vertexMode}
+              return <Group key={marker.id} name="map-marker" _useStrictMode={readOnly} x={marker.x} y={marker.y} scaleX={scale} scaleY={scale} draggable={canDrag && !regions.draft && !regions.markerTool && !regions.vertexMode} listening={!regions.draft && !regions.markerTool && !regions.vertexMode}
                 onMouseDown={(event) => { event.cancelBubble = true; focus() }}
                 onClick={(event) => { event.cancelBubble = true; if (event.evt.button === 0 && draggedMarker.current !== marker.id) { setMarkerHover(undefined); setHover(undefined); session.openMarkerCard(marker.id) } }}
                 onTap={(event) => { event.cancelBubble = true; if (draggedMarker.current !== marker.id) { setMarkerHover(undefined); setHover(undefined); session.openMarkerCard(marker.id) } }}
@@ -284,7 +299,7 @@ export function MapCanvas({ image, fitVersion, regions, session, editable: editi
       )}
       {asset && !visibleBitmap && !decodeError && <p className="map-overlay" role="status">Подготовка изображения…</p>}
       {decodeError && <p className="map-overlay form-error" role="alert">{decodeError}</p>}
-      {menu && !playing && <MapContextMenu position={menu} size={size} disabled={!editable} onClose={() => setMenu(undefined)} onRegion={() => { session.start(menu.point); setMenu(undefined); focus() }} onMarker={(kind) => { session.startMarker(kind); session.placeMarker(menu.point); setMenu(undefined); focus() }} />}
+      {menu && !readOnly && <MapContextMenu position={menu} size={size} disabled={!editable} onClose={() => setMenu(undefined)} onRegion={() => { session.start(menu.point); setMenu(undefined); focus() }} onMarker={(kind) => { session.startMarker(kind); session.placeMarker(menu.point); setMenu(undefined); focus() }} />}
       {hoverRegion && hover && hoverNotes && <aside className="region-hover" role="tooltip" style={{ left: hover.x, top: hover.y }}><strong>{hoverRegion.number}. {hoverRegion.title}</strong><p>{hoverNotes.length > 450 ? `${hoverNotes.slice(0, 450)}…` : hoverNotes}</p><small>Полный текст — в карточке по клику</small></aside>}
       {hoverEntity && markerHover && <aside className="region-hover" role="tooltip" style={{ left: markerHover.x, top: markerHover.y }}><strong>{hoverEntity.name}</strong><p>{markerTypes[hoverEntity.kind].label} · {statusBadge(hoverEntity.status)} {statusLabel(hoverEntity)}{hoverMarker?.locked ? ' · Закреплён' : ''}</p></aside>}
       <p id="map-controls-hint" className="map-hint">{playing ? 'Игра: геометрия заблокирована · Перемещение вида / масштаб · Ctrl+Z / Ctrl+Shift+Z — статус' : regions.markerTool ? 'Клик или тап — положение маркера · Esc — отмена' : regions.draft ? 'Клик — вершина · Ручки — перемещение · Двойной клик по ручке — удалить · Enter / двойной клик по фону — готово · Esc — отмена' : regions.vertexMode ? 'Перетащите вершину · Клик по ребру — добавить · Двойной клик по ручке / Delete — удалить' : 'Фон — перемещение вида · Колесо — масштаб · Ctrl+Z / Ctrl+Shift+Z — отмена / повтор'}</p>
