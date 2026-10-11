@@ -21,7 +21,7 @@ export function RegionCard({ region, state, session, disabled, geometryDisabled,
   const readOnly = playing || !session.canEditProject()
   const editing = !readOnly && state.cardMode === 'edit'
   const busy = disabled || session.detailsSaving() || !!state.imagePending
-  const edit = (change: Partial<RegionDetails>) => session.editDetails(region.id, { ...fields, ...change })
+  const edit = (change: Partial<RegionDetails>) => session.editDetails(region.id, change)
   const insertImage = (file: Blob) => prepareCardImage(file, session, (asset) => session.addDraftAsset(region.id, asset))
   const focusMap = () => requestAnimationFrame(() => document.querySelector<HTMLElement>('[aria-label="Карта приключения"]')?.focus())
   return <section className="region-card" aria-label="Карточка области">

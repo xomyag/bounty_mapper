@@ -21,7 +21,7 @@ export function MarkerCard({ entity, marker, state, session, disabled, geometryD
   const editing = !playing && !readOnly && state.cardMode === 'edit'
   const statusAction = state.statusAction?.entityId === entity.id ? state.statusAction : undefined
   const busy = disabled || session.detailsSaving() || !!state.imagePending
-  const edit = (change: Partial<MarkerDetails>) => session.editMarkerDetails({ ...fields, ...change })
+  const edit = (change: Partial<MarkerDetails>) => session.editMarkerDetails(change)
   const linkedRegions = state.regions.filter((r) => fields.regionIds.includes(r.id))
   return <section className="region-card marker-card" aria-label="Карточка маркера">
     <div className="card-heading"><h2>{entity.name}</h2><button type="button" disabled={busy} aria-label="Закрыть карточку маркера" onClick={session.closeCard}>×</button></div>

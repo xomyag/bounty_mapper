@@ -343,10 +343,11 @@ export class RegionSession {
     const command = this.redoStack.at(-1)
     if (command && this.ready() && !this.state.draft) await this.commit(command.after, command.selectedId, 'redo', false, command.markersAfter)
   }
-  editDetails = (id: string, fields: RegionDetails) => {
-    if (!this.isPreparation() || !this.loaded || this.busy() || !this.state.regions.some((r) => r.id === id) || this.projects.hasUnsavedChanges() || (this.projects.getSnapshot().loading && !this.detailsSaving())) return
+  editDetails = (id: string, fields: Partial<RegionDetails>) => {
+    const region = this.state.regions.find((r) => r.id === id)
+    if (!this.isPreparation() || !this.loaded || this.busy() || !region || this.projects.hasUnsavedChanges() || (this.projects.getSnapshot().loading && !this.detailsSaving())) return
     const version = (this.state.details[id]?.version ?? 0) + 1
-    this.update({ details: { ...this.state.details, [id]: { ...this.state.details[id], fields: structuredClone(fields), assets: this.state.details[id]?.assets ?? [], version, phase: 'dirty', error: undefined } } })
+    this.update({ details: { ...this.state.details, [id]: { ...this.state.details[id], fields: structuredClone({ ...(this.state.details[id]?.fields ?? detailsOf(region)), ...fields }), assets: this.state.details[id]?.assets ?? [], version, phase: 'dirty', error: undefined } } })
   }
   beginImageInsertion = () => { if (this.isPreparation() || this.state.information?.kind === 'new-project') this.update({ imagePending: this.state.imagePending + 1, imageError: undefined }) }
   reportImageError = (error: unknown) => this.update({ imageError: error instanceof Error ? error.message : 'Не удалось вставить изображение или текст.' })
@@ -492,10 +493,10 @@ export class RegionSession {
     if (!this.isPreparation() || !marker || !entity || this.busy() || this.detailsSaving()) return
     this.update({ cardMode: 'edit', markerDraft: { entity, marker, fields: markerDetailsOf(entity, marker), assets: [], isNew: false, version: 0, phase: 'dirty' } })
   }
-  editMarkerDetails = (fields: MarkerDetails) => {
+  editMarkerDetails = (fields: Partial<MarkerDetails>) => {
     const draft = this.state.markerDraft
     if (!this.isPreparation() || !draft || this.busy() || this.projects.hasUnsavedChanges() || (this.projects.getSnapshot().loading && !this.markerWork)) return
-    this.update({ markerDraft: { ...draft, fields: structuredClone(fields), version: draft.version + 1, phase: 'dirty', error: undefined } })
+    this.update({ markerDraft: { ...draft, fields: structuredClone({ ...draft.fields, ...fields }), version: draft.version + 1, phase: 'dirty', error: undefined } })
   }
   cancelMarkerEdit = () => {
     if (this.detailsSaving() || this.state.imagePending) return
