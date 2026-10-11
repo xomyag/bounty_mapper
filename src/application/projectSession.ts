@@ -72,6 +72,16 @@ export class ProjectSession {
     this.update({ project, status: 'dirty', loading: false })
     await this.save()
   }
+  remove = async (project: Project) => {
+    if (this.state.loading || this.pending || (project.id === this.state.project?.id && this.hasUnsavedChanges())) throw new Error('Сначала завершите сохранение текущего проекта.')
+    const current = project.id === this.state.project?.id
+    if (current && !this.canEdit()) throw new Error('Проект открыт только для чтения.')
+    if (current) this.update({ ...this.state, loading: true, error: undefined })
+    try {
+      await this.repository.remove(current ? this.state.project! : project)
+      if (current) { await this.access?.release(); ++this.openVersion; ++this.editVersion; this.update({ status: 'idle', loading: false }) }
+    } finally { if (current && this.state.loading) this.update({ ...this.state, loading: false }) }
+  }
   open = async (id: string, discardDraft = false) => {
     if (this.state.loading || (this.hasUnsavedChanges() && !discardDraft) || this.pending) throw new Error('Сначала сохраните текущий проект.')
     this.update({ ...this.state, loading: true, error: undefined })
@@ -120,7 +130,7 @@ export class ProjectSession {
       if (this.state.loading) this.update({ ...this.state, loading: false })
     }
   }
-  edit = (fields: Pick<Project, 'name' | 'contextMd'>) => {
+  edit = (fields: Pick<Project, 'name' | 'context'>) => {
     if (!this.state.project || this.state.loading || !this.canEdit()) return
     this.editVersion++
     this.update({ ...this.state, project: { ...this.state.project, ...fields }, status: this.pending ? 'saving' : 'dirty', error: undefined })

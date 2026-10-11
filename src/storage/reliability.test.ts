@@ -1,3 +1,4 @@
+import { legacyContextDocument } from './migrateProjectContext'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { unzipSync, zipSync } from 'fflate'
@@ -63,11 +64,11 @@ describe('Complete local recovery', () => {
   })
   it('retains a failed context draft, retries it, and rejects a late save with an obsolete revision', async () => {
     const factory = new IDBFactory(); const repo = new IndexedDbProjectRepository(() => factory); const session = new ProjectSession(repo); await session.initialize(); await session.create('Проект')
-    const stale = session.getSnapshot().project!; session.edit({ name: stale.name, contextMd: 'Последний текст' })
+    const stale = session.getSnapshot().project!; session.edit({ name: stale.name, context: legacyContextDocument('Последний текст') })
     const put = IDBObjectStore.prototype.put; const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<typeof put>) { if (this.name === 'settings') throw new DOMException('Диск заполнен', 'QuotaExceededError'); return put.apply(this, args) })
-    await session.save(); expect(session.getSnapshot()).toMatchObject({ status: 'error', project: { contextMd: 'Последний текст' } }); expect(await repo.restore()).toEqual(stale)
+    await session.save(); expect(session.getSnapshot()).toMatchObject({ status: 'error', project: { context: legacyContextDocument('Последний текст') } }); expect(await repo.restore()).toEqual(stale)
     spy.mockRestore(); await session.retry(); expect(session.getSnapshot().status).toBe('saved')
-    await expect(new IndexedDbProjectRepository(() => factory).save({ ...stale, contextMd: 'Старый текст' })).rejects.toThrow('другой вкладке'); expect((await repo.restore())?.contextMd).toBe('Последний текст')
+    await expect(new IndexedDbProjectRepository(() => factory).save({ ...stale, context: legacyContextDocument('Старый текст') })).rejects.toThrow('другой вкладке'); expect((await repo.restore())?.context).toEqual(legacyContextDocument('Последний текст'))
   })
   it('rejects missing images and checksum-valid broken rich-document references before inserting', async () => {
     const snapshot = await fullProject(); const bytes = await buildArchive(snapshot)
@@ -77,9 +78,9 @@ describe('Complete local recovery', () => {
     await expect(parseArchive(new Blob([new Uint8Array(zipSync(broken))]), testDecode)).rejects.toThrow('отсутствующее изображение')
   })
   it('refuses a newer database without clearing its content or creating an empty project', async () => {
-    const factory = new IDBFactory(); const db = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME, 9); r.onupgradeneeded = () => r.result.createObjectStore('future'); r.onsuccess = () => resolve(r.result) })
+    const factory = new IDBFactory(); const db = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME, 10); r.onupgradeneeded = () => r.result.createObjectStore('future'); r.onsuccess = () => resolve(r.result) })
     await new Promise<void>((resolve) => { const tx = db.transaction('future', 'readwrite'); tx.objectStore('future').put('Существующие данные', 'data'); tx.oncomplete = () => resolve() }); db.close()
     const session = new ProjectSession(new IndexedDbProjectRepository(() => factory)); await session.initialize(); expect(session.getSnapshot().project).toBeUndefined(); expect(session.getSnapshot().error).toContain('новее')
-    const untouched = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME); r.onsuccess = () => resolve(r.result) }); expect(untouched.version).toBe(9); expect(await requestResult(untouched.transaction('future').objectStore('future').get('data'))).toBe('Существующие данные'); untouched.close()
+    const untouched = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME); r.onsuccess = () => resolve(r.result) }); expect(untouched.version).toBe(10); expect(await requestResult(untouched.transaction('future').objectStore('future').get('data'))).toBe('Существующие данные'); untouched.close()
   })
 })

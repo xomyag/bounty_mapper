@@ -1,3 +1,4 @@
+import { finishProjectCreation } from './controls'
 import { clickMenuAction, control } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
@@ -64,8 +65,7 @@ async function seed(page: Page) {
   await page.goto('/'); await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Игра')
   await button(page, 'Создать').click()
-  await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
-  await button(page, 'Закрыть окно проекта').click()
+  await finishProjectCreation(page)
   await expect(modeButton(page, 'Подготовка')).toHaveAttribute('aria-pressed', 'true')
   const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 600; c.height = 400; const ctx = c.getContext('2d')!; ctx.fillStyle = '#466778'; ctx.fillRect(0, 0, 600, 400); return c.toDataURL().split(',')[1] })
   await page.getByLabel('Файл изображения карты').setInputFiles({ name: 'map.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })

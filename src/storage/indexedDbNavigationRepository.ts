@@ -1,3 +1,4 @@
+import { emptyDocument } from '../domain/richText'
 import type { NavigationRepository } from '../application/navigationRepository'
 import type { NavigationData } from '../domain/navigation'
 import type { Map, Project, ImagePlacement, Asset } from '../domain/project'
@@ -41,7 +42,7 @@ export class IndexedDbNavigationRepository implements NavigationRepository {
       const previous = mapId ? maps.find((m) => m.id === mapId) : undefined
       if (mapId && !previous) throw new Error('Карта не найдена в текущем проекте.')
       if (!mapId && maps.length >= MAX_PROJECT_MAPS) throw new Error(`Допустимо не более ${MAX_PROJECT_MAPS} карт проекта.`)
-      const map: Map = previous ? { ...previous, name: name.trim() } : { id: crypto.randomUUID(), projectId: project.id, name: name.trim(), notesMd: '', order: Math.max(-1, ...maps.map((m) => m.order)) + 1, coordinateBounds: { x: 0, y: 0, width: 1000, height: 1000 } }
+      const map: Map = previous ? { ...previous, name: name.trim() } : { id: crypto.randomUUID(), projectId: project.id, name: name.trim(), description: emptyDocument(), order: Math.max(-1, ...maps.map((m) => m.order)) + 1, coordinateBounds: { x: 0, y: 0, width: 1000, height: 1000 } }
       const next = { ...stored, revision: stored.revision + 1, updatedAt: new Date().toISOString() }
       await requestResult(tx.objectStore('maps').put(map)); await requestResult(tx.objectStore('projects').put(next))
       return { project: next, map }
@@ -60,8 +61,8 @@ export class IndexedDbNavigationRepository implements NavigationRepository {
       const markers = await requestResult(tx.objectStore('markerPlacements').index('mapId').getAll(mapId)) as MarkerPlacement[]
       const entities = await requestResult(tx.objectStore('entities').index('projectId').getAll(project.id)) as Entity[]
       const regionAssets = (region: Region) => [...documentAssetIds(region.gmNotes), ...documentAssetIds(region.playerDescription)]
-      const candidates = new Set([...placements.filter((p) => p.mapId === mapId).map((p) => p.assetId), ...regions.filter((r) => r.mapId === mapId).flatMap(regionAssets)])
-      const retained = new Set([...placements.filter((p) => p.mapId !== mapId).map((p) => p.assetId), ...regions.filter((r) => r.mapId !== mapId).flatMap(regionAssets), ...entities.flatMap((e) => documentAssetIds(e.description))])
+      const candidates = new Set([...documentAssetIds(maps.find((m) => m.id === mapId)!.description), ...placements.filter((p) => p.mapId === mapId).map((p) => p.assetId), ...regions.filter((r) => r.mapId === mapId).flatMap(regionAssets)])
+      const retained = new Set([...documentAssetIds(stored.context), ...maps.filter((m) => m.id !== mapId).flatMap((m) => documentAssetIds(m.description)), ...placements.filter((p) => p.mapId !== mapId).map((p) => p.assetId), ...regions.filter((r) => r.mapId !== mapId).flatMap(regionAssets), ...entities.flatMap((e) => documentAssetIds(e.description))])
       for (const region of regions.filter((r) => r.mapId === mapId)) await requestResult(tx.objectStore('regions').delete(region.id))
       for (const marker of markers) await requestResult(tx.objectStore('markerPlacements').delete(marker.id))
       for (const placement of placements.filter((p) => p.mapId === mapId)) await requestResult(tx.objectStore('imagePlacements').delete(placement.id))

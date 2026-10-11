@@ -1,10 +1,12 @@
-export const PROJECT_SCHEMA_VERSION = 1
+import { emptyDocument, validateRichDocument } from './richText'
+import type { RichDocument } from './richText'
+export const PROJECT_SCHEMA_VERSION = 2
 export const MAX_PROJECT_MAPS = 128
 
 export interface Project {
   id: string
   name: string
-  contextMd: string
+  context: RichDocument
   schemaVersion: number
   revision: number
   createdAt: string
@@ -15,7 +17,7 @@ export interface Map {
   id: string
   projectId: string
   name: string
-  notesMd: string
+  description: RichDocument
   order: number
   coordinateBounds: { x: number; y: number; width: number; height: number }
 }
@@ -51,7 +53,13 @@ export function createProject(name: string): Project {
   if (!name.trim()) throw new Error('Укажите название проекта.')
   const now = new Date().toISOString()
   return {
-    id: crypto.randomUUID(), name: name.trim(), contextMd: '',
+    id: crypto.randomUUID(), name: name.trim(), context: emptyDocument(),
     schemaVersion: PROJECT_SCHEMA_VERSION, revision: 0, createdAt: now, updatedAt: now,
   }
+}
+
+export function validateProject(project: Project) {
+  if (!project || project.schemaVersion !== PROJECT_SCHEMA_VERSION) throw new Error('Версия проекта не поддерживается.')
+  if (typeof project.id !== 'string' || !project.id.trim() || typeof project.name !== 'string' || !project.name.trim() || !Number.isSafeInteger(project.revision) || project.revision < 1 || typeof project.createdAt !== 'string' || typeof project.updatedAt !== 'string') throw new Error('Повреждённая запись проекта.')
+  validateRichDocument(project.context)
 }

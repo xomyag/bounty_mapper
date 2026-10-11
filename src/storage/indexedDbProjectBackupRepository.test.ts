@@ -1,3 +1,4 @@
+import { legacyContextDocument } from './migrateProjectContext'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { independentCopy } from '../application/projectBackupRepository'
@@ -27,7 +28,7 @@ describe('Atomic project backups in IndexedDB', () => {
       expect(copy.maps.some((m) => m.id === placement.mapId && m.projectId === copy.project.id)).toBe(true)
       expect(copy.assets.some((a) => a.id === placement.assetId && a.projectId === copy.project.id)).toBe(true)
     }
-    const changed = await projects.save({ ...copy.project, name: 'Изменённая копия', contextMd: 'Другой контекст' })
+    const changed = await projects.save({ ...copy.project, name: 'Изменённая копия', context: legacyContextDocument('Другой контекст') })
     await new IndexedDbMapImageRepository(() => factory).remove(changed)
     const savedOriginal = await backups.snapshot(original.project.id)
     expect(savedOriginal.project).toEqual(original.project)
@@ -66,12 +67,12 @@ describe('Atomic project backups in IndexedDB', () => {
     const db = new IndexedDb(() => factory)
     const reading = backups.snapshot(original.project.id)
     const writing = db.transaction(['projects', 'maps'], 'readwrite', async (tx) => {
-      await requestResult(tx.objectStore('projects').put({ ...original.project, contextMd: 'new', revision: 2 }))
-      await requestResult(tx.objectStore('maps').put({ ...original.maps[0], notesMd: 'new' }))
+      await requestResult(tx.objectStore('projects').put({ ...original.project, context: legacyContextDocument('new'), revision: 2 }))
+      await requestResult(tx.objectStore('maps').put({ ...original.maps[0], description: legacyContextDocument('new') }))
     })
     const [snapshot] = await Promise.all([reading, writing])
-    expect(snapshot.project.contextMd === 'new').toBe(snapshot.maps[0].notesMd === 'new')
-    expect((await backups.snapshot(original.project.id)).project.contextMd).toBe('new')
+    expect(JSON.stringify(snapshot.project.context) === JSON.stringify(legacyContextDocument('new'))).toBe(JSON.stringify(snapshot.maps[0].description) === JSON.stringify(legacyContextDocument('new')))
+    expect((await backups.snapshot(original.project.id)).project.context).toEqual(legacyContextDocument('new'))
   })
 
   it('does not delete an image still referenced by another imported map', async () => {

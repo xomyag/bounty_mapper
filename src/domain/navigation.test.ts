@@ -1,3 +1,4 @@
+import { legacyContextDocument } from '../storage/migrateProjectContext'
 import { describe, expect, it } from 'vitest'
 import { defaultFilters, filterNavigation, groupNavigation, navigationStatuses } from './navigation'
 import type { NavigationData } from './navigation'
@@ -5,7 +6,7 @@ import { emptyRegionContent } from './region'
 import { emptyDocument } from './richText'
 
 const data: NavigationData = {
-  maps: ['a', 'b'].map((id) => ({ id, projectId: 'project', name: `Карта ${id}`, notesMd: '', order: 0, coordinateBounds: { x: 0, y: 0, width: 100, height: 100 } })),
+  maps: ['a', 'b'].map((id) => ({ id, projectId: 'project', name: `Карта ${id}`, description: legacyContextDocument(''), order: 0, coordinateBounds: { x: 0, y: 0, width: 100, height: 100 } })),
   regions: [
     { ...emptyRegionContent(), id: 'r1', mapId: 'a', number: 12, title: 'Башня', titleCustomized: true, tags: ['Тайна', 'Север'], color: '#ffffff', fillOpacity: .4, order: 0, vertices: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }] },
     { ...emptyRegionContent(), id: 'r2', mapId: 'b', number: 8, title: 'Подвал', titleCustomized: true, tags: ['тайна'], color: '#ffffff', fillOpacity: .4, order: 0, vertices: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }] },

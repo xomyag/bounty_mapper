@@ -1,3 +1,4 @@
+import { finishProjectCreation } from './controls'
 import { clickMenuAction } from './controls'
 import { Buffer } from 'node:buffer'
 import { expect, test } from '@playwright/test'
@@ -33,8 +34,7 @@ async function seed(page: Page, withArea = true) {
   await page.goto('/'); await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Маркеры')
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
-  await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
-  await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
+  await finishProjectCreation(page)
   const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 400; c.height = 300; const ctx = c.getContext('2d')!; ctx.fillStyle = '#466778'; ctx.fillRect(0, 0, 400, 300); return c.toDataURL().split(',')[1] })
   await page.getByLabel('Файл изображения карты').setInputFiles({ name: 'map.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
   await expect(page.getByRole('button', { name: 'Добавить маркер', exact: true })).toBeEnabled()

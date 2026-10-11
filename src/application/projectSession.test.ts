@@ -1,3 +1,4 @@
+import { legacyContextDocument } from '../storage/migrateProjectContext'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { IndexedDbProjectRepository } from '../storage/indexedDbProjectRepository'
@@ -29,15 +30,15 @@ describe('Project session', () => {
     await session.initialize()
     await session.create('Проект')
     vi.spyOn(repo, 'save').mockRejectedValueOnce(new Error('Квота исчерпана'))
-    session.edit({ name: 'Новое название', contextMd: 'Важный текст' })
+    session.edit({ name: 'Новое название', context: legacyContextDocument('Важный текст') })
     await session.save()
-    expect(session.getSnapshot()).toMatchObject({ status: 'error', project: { name: 'Новое название', contextMd: 'Важный текст' } })
+    expect(session.getSnapshot()).toMatchObject({ status: 'error', project: { name: 'Новое название', context: legacyContextDocument('Важный текст') } })
     await expect(session.open('other')).rejects.toThrow('Сначала сохраните')
     await expect(session.create('Другой')).rejects.toThrow('Сначала сохраните')
-    expect((await repo.restore())?.contextMd).toBe('')
+    expect((await repo.restore())?.context).toEqual(legacyContextDocument(''))
     await session.retry()
     expect(session.getSnapshot().status).toBe('saved')
-    expect((await repo.restore())?.contextMd).toBe('Важный текст')
+    expect((await repo.restore())?.context).toEqual(legacyContextDocument('Важный текст'))
   })
 
   it('never reports newer edits as saved when an earlier write completes', async () => {
@@ -49,18 +50,18 @@ describe('Project session', () => {
     const spy = vi.spyOn(repo, 'save').mockImplementationOnce((project) => new Promise((resolve) => {
       complete = () => { void originalSave(project).then(resolve) }
     }))
-    session.edit({ name: 'Проект', contextMd: 'Первый текст' })
+    session.edit({ name: 'Проект', context: legacyContextDocument('Первый текст') })
     const pending = session.save()
     expect(session.getSnapshot().status).toBe('saving')
-    session.edit({ name: 'Проект', contextMd: 'Следующий текст' })
+    session.edit({ name: 'Проект', context: legacyContextDocument('Следующий текст') })
     expect(session.save()).toBe(pending)
     complete()
     await pending
     expect(spy).toHaveBeenCalledTimes(1)
-    expect(session.getSnapshot()).toMatchObject({ status: 'dirty', project: { contextMd: 'Следующий текст', revision: 2 } })
+    expect(session.getSnapshot()).toMatchObject({ status: 'dirty', project: { context: legacyContextDocument('Следующий текст'), revision: 2 } })
     await session.save()
     expect(session.getSnapshot().status).toBe('saved')
-    expect((await repo.restore())?.contextMd).toBe('Следующий текст')
+    expect((await repo.restore())?.context).toEqual(legacyContextDocument('Следующий текст'))
   })
 
   it('can retry a failed initial read', async () => {

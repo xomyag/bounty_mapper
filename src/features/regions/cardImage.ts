@@ -7,7 +7,7 @@ export async function prepareCardImage(file: Blob, session: RegionSession, addAs
   let failure: unknown
   try {
     if (file.size > 64 * 1024 * 1024) throw new Error('Изображение превышает лимит 64 МиБ.')
-    const asset = await prepareImage(file, session.getProjectId()!)
+    const asset = await prepareImage(file, session.getImageProjectId()!)
     if (asset.pixelWidth * asset.pixelHeight > 64 * 1024 * 1024) throw new Error('Изображение превышает лимит 64 мегапикселей.')
     addAsset(asset); return asset
   } catch (error) { failure = error; throw error }

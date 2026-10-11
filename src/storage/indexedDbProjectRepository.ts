@@ -1,20 +1,14 @@
 import type { ProjectRepository } from '../application/projectRepository'
 import { RevisionConflictError } from '../application/projectRepository'
-import { PROJECT_SCHEMA_VERSION } from '../domain/project'
-import type { Project } from '../domain/project'
+import { validateProject } from '../domain/project'
+import type { Asset, Map, Project } from '../domain/project'
 
+import { writeDocumentAssets } from './documentAssets'
 import { IndexedDb, requestResult, DATABASE_NAME } from './indexedDb'
 
 export function readProject(value: unknown): Project {
-  if (typeof value !== 'object' || value === null) throw new Error('Повреждённая запись проекта.')
-  const p = value as Partial<Project>
-  if (p.schemaVersion !== PROJECT_SCHEMA_VERSION) throw new Error('Версия проекта не поддерживается.')
-  if (typeof p.id !== 'string' || typeof p.name !== 'string' || !p.name.trim() ||
-      typeof p.contextMd !== 'string' || !Number.isInteger(p.revision) || (p.revision ?? 0) < 1 ||
-      typeof p.createdAt !== 'string' || typeof p.updatedAt !== 'string') {
-    throw new Error('Повреждённая запись проекта.')
-  }
-  return p as Project
+  validateProject(value as Project)
+  return value as Project
 }
 
 export class IndexedDbProjectRepository implements ProjectRepository {
@@ -50,18 +44,41 @@ export class IndexedDbProjectRepository implements ProjectRepository {
     })
   }
 
-  save(project: Project): Promise<Project> {
-    return this.db.transaction(['projects', 'settings'], 'readwrite', async (tx) => {
+  save(project: Project, assets: Asset[] = []): Promise<Project> {
+    return this.db.transaction(['projects', 'settings', 'assets'], 'readwrite', async (tx) => {
       if (!project.name.trim()) throw new Error('Укажите название проекта.')
-      if (project.schemaVersion !== PROJECT_SCHEMA_VERSION) throw new Error('Версия проекта не поддерживается.')
       const store = tx.objectStore('projects')
       const value: unknown = await requestResult(store.get(project.id))
       const existing = value === undefined ? undefined : readProject(value)
       if ((existing?.revision ?? 0) !== project.revision) throw new RevisionConflictError()
       const saved = { ...project, name: project.name.trim(), revision: project.revision + 1, updatedAt: new Date().toISOString() }
+      validateProject(saved)
+      await writeDocumentAssets(tx, project.id, assets, [saved.context])
       await requestResult(store.put(saved))
       await requestResult(tx.objectStore('settings').put(saved.id, 'activeProjectId'))
       return saved
+    })
+  }
+  remove(project: Project): Promise<void> {
+    return this.db.transaction(['projects', 'maps', 'regions', 'markerPlacements', 'imagePlacements', 'entities', 'assets', 'settings'], 'readwrite', async (tx) => {
+      const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
+      if (stored.revision !== project.revision) throw new RevisionConflictError()
+      const maps = await requestResult(tx.objectStore('maps').index('projectId').getAll(project.id)) as Map[]
+      for (const map of maps) {
+        for (const store of ['regions', 'markerPlacements', 'imagePlacements']) {
+          const keys = await requestResult(tx.objectStore(store).index('mapId').getAllKeys(map.id))
+          for (const key of keys) await requestResult(tx.objectStore(store).delete(key))
+        }
+        await requestResult(tx.objectStore('maps').delete(map.id))
+      }
+      for (const store of ['entities', 'assets']) {
+        const keys = await requestResult(tx.objectStore(store).index('projectId').getAllKeys(project.id))
+        for (const key of keys) await requestResult(tx.objectStore(store).delete(key))
+      }
+      const settings = tx.objectStore('settings')
+      for (const key of [`workspaceMode:${project.id}`, `tagHistory:${project.id}`]) await requestResult(settings.delete(key))
+      if (await requestResult(settings.get('activeProjectId')) === project.id) await requestResult(settings.delete('activeProjectId'))
+      await requestResult(tx.objectStore('projects').delete(project.id))
     })
   }
 }

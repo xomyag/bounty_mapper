@@ -1,3 +1,9 @@
+async function saveContext(page: Page) {
+  const card = page.getByRole('region', { name: 'Контекст приключения', exact: true }); await card.getByRole('button', { name: 'Сохранить', exact: true }).click(); await expect(card.getByRole('status')).toHaveText('Сохранено на устройстве')
+}
+async function openContextEditor(page: Page) {
+  await page.getByRole('button', { name: 'Контекст приключения', exact: true }).click(); const card = page.getByRole('region', { name: 'Контекст приключения', exact: true }); await card.getByRole('button', { name: 'Редактировать' }).click()
+}
 import { clickMenuAction, control } from './controls'
 import { readFile } from 'node:fs/promises'
 import { Buffer } from 'node:buffer'
@@ -10,10 +16,9 @@ async function seed(page: Page) {
   await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Исходное приключение')
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
-  await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
-  await page.getByLabel('Общий контекст приключения').fill('Исходный контекст')
-  await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
-  await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
+  await page.getByRole('textbox', { name: 'Общий контекст приключения', exact: true }).fill('Исходный контекст')
+  await saveContext(page)
+  await page.getByRole('button', { name: 'Закрыть контекст приключения' }).click()
   const png = await page.evaluate(() => {
     const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 32
     const ctx = canvas.getContext('2d')!; ctx.fillStyle = '#c95544'; ctx.fillRect(0, 0, 64, 32)
@@ -40,9 +45,10 @@ test('exports latest context and native image; imports an independent copy that 
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   await seed(page)
-  await page.getByRole('button', { name: 'Контекст', exact: true }).click()
-  await page.getByLabel('Общий контекст приключения').fill('Последний контекст перед экспортом')
-  await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
+  await openContextEditor(page)
+  await page.getByRole('textbox', { name: 'Общий контекст приключения', exact: true }).fill('Последний контекст перед экспортом')
+  await saveContext(page)
+  await page.getByRole('button', { name: 'Закрыть контекст приключения' }).click()
   const downloading = page.waitForEvent('download')
   await clickMenuAction(page, 'Экспорт проекта')
   const download = await downloading
@@ -50,7 +56,7 @@ test('exports latest context and native image; imports an independent copy that 
   await download.saveAs(path)
   const entries = unzipSync(new Uint8Array(await readFile(path)))
   const document = JSON.parse(new TextDecoder().decode(entries['project.json']))
-  expect(document.project.contextMd).toBe('Последний контекст перед экспортом')
+  expect(JSON.stringify(document.project.context)).toContain('Последний контекст перед экспортом')
   expect(document.assets[0]).toMatchObject({ pixelWidth: 64, pixelHeight: 32, mimeType: 'image/png' })
   expect(entries[document.assets[0].path].length).toBe(document.assets[0].byteSize)
   const before = await counts(page)
@@ -61,20 +67,20 @@ test('exports latest context and native image; imports an independent copy that 
   const after = await counts(page)
   expect(after).toMatchObject({ projects: 2, maps: 2, assets: 2, placements: 2 })
   expect(after.active).not.toBe(before.active)
-  await page.getByRole('button', { name: 'Контекст', exact: true }).click()
+  await openContextEditor(page)
   await expect(page.getByLabel('Название проекта')).toHaveValue('Исходное приключение (копия)')
-  await expect(page.getByLabel('Общий контекст приключения')).toHaveValue('Последний контекст перед экспортом')
+  await expect(page.getByRole('textbox', { name: 'Общий контекст приключения', exact: true })).toHaveText('Последний контекст перед экспортом')
   await page.getByLabel('Название проекта').fill('Моя копия')
-  await page.getByLabel('Общий контекст приключения').fill('Изменения только копии')
-  await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
-  await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
+  await page.getByRole('textbox', { name: 'Общий контекст приключения', exact: true }).fill('Изменения только копии')
+  await saveContext(page)
+  await page.getByRole('button', { name: 'Закрыть контекст приключения' }).click()
   await page.reload()
   await expect(control(page, 'Заменить изображение')).toBeEnabled()
   await clickMenuAction(page, 'Проекты')
   await page.getByRole('button', { name: 'Открыть проект «Исходное приключение»' }).click()
-  await page.getByRole('button', { name: 'Контекст', exact: true }).click()
-  await expect(page.getByLabel('Общий контекст приключения')).toHaveValue('Последний контекст перед экспортом')
-  await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
+  await openContextEditor(page)
+  await expect(page.getByRole('textbox', { name: 'Общий контекст приключения', exact: true })).toHaveText('Последний контекст перед экспортом')
+  await page.getByRole('button', { name: 'Закрыть контекст приключения' }).click()
   await expect(page.locator('canvas')).toHaveCount(1)
   expect(errors).toEqual([])
 })

@@ -1,3 +1,4 @@
+import { legacyContextDocument } from '../storage/migrateProjectContext'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { IndexedDbProjectRepository } from '../storage/indexedDbProjectRepository'
@@ -45,12 +46,12 @@ describe('Map image session', () => {
     const uploading = session.upload(new Blob(['first']))
     expect(session.getSnapshot().phase).toBe('uploading')
     await expect(projects.open('other')).rejects.toThrow()
-    projects.edit({ name: 'Unexpected edit', contextMd: '' })
+    projects.edit({ name: 'Unexpected edit', context: legacyContextDocument('') })
     expect(projects.getSnapshot().project?.name).toBe('Приключение')
     finish()
     await uploading
     expect(projects.getSnapshot().project?.revision).toBe(2)
-    projects.edit({ name: 'Новые заметки', contextMd: 'Контекст' })
+    projects.edit({ name: 'Новые заметки', context: legacyContextDocument('Контекст') })
     await projects.save()
     expect(projects.getSnapshot().status).toBe('saved')
   })
@@ -60,7 +61,7 @@ describe('Map image session', () => {
     vi.spyOn(maps, 'load').mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
     const old = session.load('old')
     await session.load('new')
-    finish({ map: { id: 'old-map', projectId: 'old', name: 'Old', notesMd: '', order: 0, coordinateBounds: { x: 0, y: 0, width: 1, height: 1 } } })
+    finish({ map: { id: 'old-map', projectId: 'old', name: 'Old', description: legacyContextDocument(''), order: 0, coordinateBounds: { x: 0, y: 0, width: 1, height: 1 } } })
     await old
     expect(session.getSnapshot()).toEqual({ projectId: 'new', image: {}, phase: 'idle' })
   })

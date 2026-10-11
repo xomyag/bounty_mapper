@@ -7,6 +7,11 @@ import { ProjectSession } from './application/projectSession'
 import type { ProjectRepository } from './application/projectRepository'
 import { IndexedDbProjectRepository } from './storage/indexedDbProjectRepository'
 import { ProjectDialog } from './features/projects/ProjectDialog'
+import { InformationCard } from './features/projects/InformationCard'
+import { ProjectDeleteDialog } from './features/projects/ProjectDeleteDialog'
+import type { Project } from './domain/project'
+import type { InformationRepository } from './application/informationRepository'
+import { IndexedDbInformationRepository } from './storage/indexedDbInformationRepository'
 import { MapImageSession } from './application/mapImageSession'
 import type { MapImageRepository } from './application/mapImageRepository'
 import { IndexedDbMapImageRepository } from './storage/indexedDbMapImageRepository'
@@ -43,6 +48,7 @@ import { Info, Search, Pentagon, MapPinPlus, Undo2, Redo2, ZoomIn, ZoomOut, Maxi
 
 const MapCanvas = lazy(() => import('./features/map/MapCanvas').then((module) => ({ default: module.MapCanvas })))
 
+const defaultInformationRepository = new IndexedDbInformationRepository()
 const defaultRepository = new IndexedDbProjectRepository()
 const defaultMapRepository = new IndexedDbMapImageRepository()
 const defaultBackupRepository = new IndexedDbProjectBackupRepository()
@@ -54,7 +60,7 @@ const statusLabels = {
   saved: 'Сохранено на устройстве', error: 'Ошибка сохранения',
 }
 
-export function App({ repository = defaultRepository, mapRepository = defaultMapRepository, backupRepository = defaultBackupRepository, regionRepository = defaultRegionRepository, navigationRepository = defaultNavigationRepository, modeRepository = defaultModeRepository }: { repository?: ProjectRepository; mapRepository?: MapImageRepository; backupRepository?: ProjectBackupRepository; regionRepository?: RegionRepository; navigationRepository?: NavigationRepository; modeRepository?: ModeRepository }) {
+export function App({ repository = defaultRepository, mapRepository = defaultMapRepository, backupRepository = defaultBackupRepository, regionRepository = defaultRegionRepository, navigationRepository = defaultNavigationRepository, modeRepository = defaultModeRepository, informationRepository = defaultInformationRepository }: { repository?: ProjectRepository; mapRepository?: MapImageRepository; backupRepository?: ProjectBackupRepository; regionRepository?: RegionRepository; navigationRepository?: NavigationRepository; modeRepository?: ModeRepository; informationRepository?: InformationRepository }) {
   const [cardLayout] = useState(() => new CardLayoutSession(new IndexedDbCardWidthRepository()))
   const layout = useSyncExternalStore(cardLayout.subscribe, cardLayout.getSnapshot)
   const workspace = useRef<HTMLElement>(null)
@@ -63,8 +69,25 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   const cardWidth = clampCardWidth(layout.width, workspaceWidth)
   const [session] = useState(() => new ProjectSession(repository, projectLocksEnabled ? new BrowserProjectAccess() : undefined))
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot)
-  const [dialog, setDialog] = useState<'projects' | 'edit' | null>(null)
-  const [regions] = useState(() => new RegionSession(regionRepository, session, modeRepository))
+  const [dialog, setDialog] = useState<'projects' | null>(null)
+  const [regions] = useState(() => new RegionSession(regionRepository, session, modeRepository, informationRepository))
+  const [deleteProject, setDeleteProject] = useState<Project>()
+  const [deleting, setDeleting] = useState(false)
+  const deletingRef = useRef(false)
+  const [deleteError, setDeleteError] = useState<string>()
+  const [projectMessage, setProjectMessage] = useState<string>()
+  const confirmDelete = () => {
+    if (!deleteProject || deletingRef.current) return
+    const target = deleteProject
+    const run = async () => {
+      deletingRef.current = true; setDeleting(true); setDeleteError(undefined)
+      try { await session.remove(target); setDeleteProject(undefined); setProjectMessage(`Проект «${target.name}» удалён.`); setDialog('projects') }
+      catch (error) { setDeleteError(error instanceof Error ? error.message : 'Не удалось удалить проект.') }
+      finally { deletingRef.current = false; setDeleting(false) }
+    }
+    if (target.id === session.getSnapshot().project?.id) regions.afterDetails(run, () => setDeleteProject(undefined))
+    else void run()
+  }
   const regionState = useSyncExternalStore(regions.subscribe, regions.getSnapshot)
   const preparation = regions.isPreparation()
   const [maps] = useState(() => new MapImageSession(mapRepository, session, prepareImage, regions.isPreparation))
@@ -78,6 +101,8 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   const unsavedDetails = regions.hasUnsavedDetails()
   const detailsSaving = regions.detailsSaving()
   const detailsError = Object.values(regionState.details).find((draft) => draft.phase === 'error')
+  const informationError = regionState.information?.draft?.phase === 'error'
+  const creatingProject = regionState.information?.kind === 'new-project'
   const markerError = regionState.markerDraft?.phase === 'error'
   const fileInput = useRef<HTMLInputElement>(null)
   const archiveInput = useRef<HTMLInputElement>(null)
@@ -101,6 +126,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   const cardRegion = regionState.mapId === mapId ? regionState.regions.find((region) => region.id === regionState.cardId) : undefined
   const cardMarker = regionState.mapId === mapId && regionState.markerCardId ? regionState.markerDraft?.marker ?? regionState.markers.find((m) => m.id === regionState.markerCardId) : undefined
   const cardEntity = cardMarker ? regionState.markerDraft?.entity ?? regionState.entities.find((e) => e.id === cardMarker.entityId) : undefined
+  const cardOpen = !!(cardRegion || cardMarker || regionState.information)
   const canEditRegion = regions.ready() && !maps.busy() && !backupBusy && regionState.mapId === mapId
   const regionDragAllowed = preparation && !mapBusy && !backupBusy && !state.loading && !session.hasUnsavedChanges() && regionState.mapId === mapId
   const navigationDisabled = mapBusy || state.loading || backupBusy || session.hasUnsavedChanges() || !!regionState.draft || !!regionState.markerTool || regionState.vertexMode
@@ -125,7 +151,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
       if (prepared?.[0].background) await prepareBitmap(prepared[0].background.asset)
       if (!await navigation.deleteMap(mapAction.map.id)) throw new Error(navigation.getSnapshot().error)
       if (deletingCurrent) {
-        if (next && prepared) { regions.adoptMap({ mapId: next.id }, prepared[1]); maps.adoptSelection(prepared[0]) }
+        if (next && prepared) { regions.adoptMap({ mapId: next.id }, { ...prepared[1], map: prepared[0].map }); maps.adoptSelection(prepared[0]) }
         else { void regions.load(undefined); maps.adoptSelection({}) }
       }
     }
@@ -138,7 +164,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
     if (!targetId) { void regions.load(undefined); maps.adoptSelection({}); return }
     const [image, objects] = await Promise.all([maps.readSelection(targetId), regions.readMap(targetId)])
     if (image.background) await prepareBitmap(image.background.asset)
-    regions.adoptMap({ mapId: targetId }, objects); maps.adoptSelection(image)
+    regions.adoptMap({ mapId: targetId }, { ...objects, map: image.map }); maps.adoptSelection(image)
   }
   const startRegion = () => {
     regions.start()
@@ -153,7 +179,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   }, [session, offline])
   useEffect(() => { void regions.loadMode(projectId) }, [regions, projectId, openVersion])
   useEffect(() => { void maps.load(projectId) }, [maps, projectId, openVersion])
-  useEffect(() => { if (regions.getSnapshot().mapId !== mapId) void regions.load(mapId) }, [regions, mapId])
+  useEffect(() => { const current = regions.getSnapshot(); if (current.mapId !== mapId || current.information && current.information.projectId !== projectId) void regions.load(mapId) }, [regions, mapId, projectId])
   useEffect(() => { void navigation.load(projectId) }, [navigation, projectId, state.project?.revision, openVersion])
   useEffect(() => { regions.setTagCatalog(tags) }, [regions, tags])
   useEffect(() => regions.subscribe(() => { if (regions.getSnapshot().mode === 'play') setMarkerPicker(undefined) }), [regions])
@@ -165,7 +191,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
       if (session.getSnapshot().project?.id !== originProject) throw new Error('Проект изменился во время перехода.')
       // Prepare data and the decoded background before changing either live
       // session. React commits the destination and its focus together.
-      regions.adoptMap(target, objects)
+      regions.adoptMap(target, { ...objects, map: image.map })
       maps.adoptSelection(image)
     })
   }, [regions, maps, session])
@@ -191,16 +217,18 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   return (
     <div className="app-shell">
       <header className="control-panel">
-        <ProjectMenu disabled={state.loading || mapBusy || backupBusy || unsavedDetails} importDisabled={state.loading || mapBusy || backupBusy || unsavedDetails || session.hasUnsavedChanges()} exportDisabled={!projectId || state.loading || mapBusy || backupBusy || unsavedDetails} onProjects={() => setDialog('projects')} onImport={() => archiveInput.current?.click()} onExport={() => { void backups.export(downloadArchive, regions.flushDetails) }}>
+        <ProjectMenu disabled={state.loading || mapBusy || backupBusy || creatingProject} importDisabled={state.loading || mapBusy || backupBusy || unsavedDetails || session.hasUnsavedChanges()} exportDisabled={!projectId || state.loading || mapBusy || backupBusy || unsavedDetails} onProjects={() => setDialog('projects')} onImport={() => archiveInput.current?.click()} onExport={() => { void backups.export(downloadArchive, regions.flushDetails) }}>
           {offlineState.phase !== 'disabled' && <section className="offline-menu" aria-label="Офлайн-запуск"><p>{offlineState.message}</p><button type="button" role="menuitem" disabled={offlineState.phase === 'applying'} onClick={() => { void offline.checkUpdate() }}>{offlineState.phase === 'error' ? 'Повторить подготовку офлайн' : 'Проверить обновления'}</button>{offlineState.updateAvailable && <><button type="button" role="menuitem" disabled={updateBlocked || offlineState.phase === 'applying'} onClick={offline.applyUpdate}>Применить обновление</button>{updateBlocked && <p>Сохраните или отмените правки и завершите инструмент перед обновлением.</p>}</>}</section>}
         </ProjectMenu>
-        <div className="project-state"><span className="project-name" title={state.project?.name}>{state.project?.name ?? 'Bounty Mapper'}</span>
-          <span role="status">{regionState.statusAction?.phase === 'saving' ? 'Сохранение статуса…' : regionState.statusAction?.phase === 'error' ? 'Ошибка сохранения статуса' : regionState.modePhase === 'error' ? 'Ошибка настройки режима' : regionState.transitioning ? 'Открытие карты…' : detailsSaving ? 'Сохранение карточек…' : detailsError || markerError ? 'Ошибка сохранения карточки' : unsavedDetails ? 'Есть изменения в карточках' : regionState.phase === 'saving' ? 'Сохранение объектов карты…' : regionState.phase === 'loading' ? 'Чтение объектов карты…' : regionState.error ? 'Ошибка объектов карты' : offlineState.phase === 'applying' ? 'Применение обновления…' : backupBusy ? backupState.phase === 'exporting' ? 'Экспорт проекта…' : backupState.phase === 'validating' ? 'Проверка архива…' : 'Сохранение копии…' : mapState.phase === 'error' ? 'Ошибка изображения карты' : mapState.phase === 'uploading' ? 'Загрузка изображения…' : mapState.phase === 'saving' ? 'Сохранение изображения…' : mapState.phase === 'loading' ? 'Чтение карты…' : state.loading ? 'Открытие…' : !state.project && state.error ? 'Ошибка открытия хранилища' : statusLabels[state.status]}</span>
+        <div className="project-summary"><div className="project-state"><span className="project-name" title={state.project?.name}>{state.project?.name ?? 'Bounty Mapper'}</span>
+          <span role="status">{regionState.statusAction?.phase === 'saving' ? 'Сохранение статуса…' : regionState.statusAction?.phase === 'error' ? 'Ошибка сохранения статуса' : regionState.modePhase === 'error' ? 'Ошибка настройки режима' : regionState.transitioning ? 'Открытие карты…' : detailsSaving ? 'Сохранение карточек…' : detailsError || markerError || informationError ? 'Ошибка сохранения карточки' : unsavedDetails ? 'Есть изменения в карточках' : regionState.phase === 'saving' ? 'Сохранение объектов карты…' : regionState.phase === 'loading' ? 'Чтение объектов карты…' : regionState.error ? 'Ошибка объектов карты' : offlineState.phase === 'applying' ? 'Применение обновления…' : backupBusy ? backupState.phase === 'exporting' ? 'Экспорт проекта…' : backupState.phase === 'validating' ? 'Проверка архива…' : 'Сохранение копии…' : mapState.phase === 'error' ? 'Ошибка изображения карты' : mapState.phase === 'uploading' ? 'Загрузка изображения…' : mapState.phase === 'saving' ? 'Сохранение изображения…' : mapState.phase === 'loading' ? 'Чтение карты…' : state.loading ? 'Открытие…' : !state.project && state.error ? 'Ошибка открытия хранилища' : statusLabels[state.status]}</span>
           {offlineState.phase !== 'disabled' && <span className="offline-status">{offlineState.phase === 'ready' ? 'Готово к работе без сети' : offlineState.phase === 'loading' ? 'Подготовка офлайн-запуска…' : offlineState.phase === 'applying' ? 'Применение обновления…' : offlineState.message}</span>}
         </div>
-        {projectId && <IconButton icon={Info} label="Контекст" disabled={state.loading || mapBusy || backupBusy || unsavedDetails} onClick={() => setDialog('edit')} />}
+        {projectId && <IconButton icon={Info} label="Контекст приключения" disabled={state.loading || mapBusy || backupBusy || creatingProject} onClick={() => regions.openInformation()} />}
+        </div>
         {projectId && <div className="mode-switch" role="group" aria-label="Режим работы"><button type="button" aria-pressed={preparation} disabled={state.readOnly || state.loading || mapBusy || backupBusy || detailsSaving || !!regionState.imagePending || session.hasUnsavedChanges()} onClick={() => regions.requestMode('prepare')}>Подготовка</button><button type="button" aria-pressed={!preparation} disabled={state.readOnly || state.loading || mapBusy || backupBusy || detailsSaving || !!regionState.imagePending || session.hasUnsavedChanges()} onClick={() => regions.requestMode('play')}>Игра</button></div>}
         <IconButton icon={Search} label="Навигация и поиск" disabled={!projectId || state.loading || backupBusy} aria-expanded={!!projectId && navigationProject === navigationKey} aria-controls="project-navigation" onClick={() => { setNavigationProject((current) => current === navigationKey ? undefined : navigationKey); if (navigationProject !== navigationKey) requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[aria-label="Поиск объектов"]')?.focus()) }} />
+        {mapId && <IconButton icon={Info} label="Описание карты" disabled={state.loading || mapBusy || backupBusy || creatingProject} onClick={() => regions.openInformation(mapId)} />}
         {projectId && <MapMenu key={navigationKey} maps={navigationState.data.maps} currentMapId={mapId} disabled={navigationDisabled || navigationState.loading} writesDisabled={mapWritesDisabled} playing={!preparation} onNavigate={(id) => regions.navigate({ mapId: id })} onAction={setMapAction} imageDisabled={!canWriteImage || backupBusy} hasImage={!!mapState.image.background} onUpload={() => fileInput.current?.click()} onRemoveImage={() => { const name = navigationState.data.maps.find((map) => map.id === mapId)?.name ?? ''; if (window.confirm(`Удалить фоновое изображение карты «${name}»? Карта, области, маркеры и контекст проекта останутся.`)) void maps.remove() }} />}
       </header>
       <input ref={fileInput} className="file-input" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" aria-label="Файл изображения карты" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void maps.upload(file) }} />
@@ -218,7 +246,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
       {backupState.message && <div className={backupState.phase === 'error' ? 'error-banner' : 'backup-message'}><span role={backupState.phase === 'error' ? 'alert' : 'status'}>{backupState.message}</span><button type="button" onClick={backups.dismiss} aria-label="Закрыть сообщение об архиве">Закрыть</button></div>}
       {regionState.error && <div className="error-banner" role="alert"><span>{regionState.error}</span>{regionState.canRetry && <button type="button" disabled={mapBusy || state.loading || backupBusy} onClick={() => { void regions.retry() }}>{regions.hasLoaded() ? 'Повторить запись объектов карты' : 'Повторить чтение объектов карты'}</button>}<button type="button" disabled={regionBusy || !regions.hasLoaded()} onClick={regions.dismiss}>Закрыть ошибку карты</button></div>}
       {layout.phase === 'error' && <div className="error-banner" role="alert"><span>{layout.error}</span><button type="button" onClick={() => { void cardLayout.save() }}>Повторить сохранение ширины</button></div>}
-      <main ref={workspace} style={{ '--card-width': cardWidth + 'px' } as CSSProperties} id="map-workspace" className={`map-workspace ${navigationProject === navigationKey && projectId ? 'search-open' : ''} ${cardRegion || cardMarker ? 'card-open' : ''} ${workspaceWidth - (navigationProject === navigationKey && projectId ? 354 : 12) - (cardRegion || cardMarker ? cardWidth + 24 : 12) < 250 ? 'controls-strips' : ''}`} aria-label="Рабочая область карты" tabIndex={-1}>
+      <main ref={workspace} style={{ '--card-width': cardWidth + 'px' } as CSSProperties} id="map-workspace" className={`map-workspace ${navigationProject === navigationKey && projectId ? 'search-open' : ''} ${cardOpen ? 'card-open' : ''} ${workspaceWidth - (navigationProject === navigationKey && projectId ? 354 : 12) - (cardOpen ? cardWidth + 24 : 12) < 250 ? 'controls-strips' : ''}`} aria-label="Рабочая область карты" tabIndex={-1}>
         <div className="workspace-controls creation-controls" role="group" aria-label="Создание объектов">
           <IconButton icon={Pentagon} label="Добавить область" disabled={!canEditRegion || !!regionState.draft} onClick={startRegion} />
           <IconButton icon={MapPinPlus} label="Добавить маркер" disabled={!canEditRegion || !!regionState.draft} aria-expanded={!!mapId && markerPicker === mapId} onClick={() => setMarkerPicker((current) => current === mapId ? undefined : mapId)} />
@@ -243,12 +271,14 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
         </div>}
         {regionState.draft && <div className="region-draft-tools" role="group" aria-label="Создание области"><span>Вершин: {regionState.draft.length}</span><button type="button" disabled={!canEditRegion} onClick={() => { void regions.finish() }}>Готово</button><button type="button" disabled={regionBusy} onClick={regions.cancel}>Отменить контур</button></div>}
         {regionState.markerTool && <div className="region-draft-tools" role="group" aria-label="Размещение маркера"><span>{markerTypes[regionState.markerTool].label}: укажите место на карте</span><button type="button" onClick={regions.cancelMarkerTool}>Отменить размещение</button></div>}
-        {(cardRegion || cardMarker) && <div id="object-card" className="card-panel"><CardResizer width={cardWidth} viewWidth={workspaceWidth} session={cardLayout} />
+        {(cardRegion || cardMarker || regionState.information) && <div id="object-card" className="card-panel"><CardResizer width={cardWidth} viewWidth={workspaceWidth} session={cardLayout} />
+        {regionState.information && <InformationCard key={`${regionState.information.kind}:${regionState.information.projectId}:${regionState.information.mapId ?? ''}`} state={regionState} session={regions} disabled={mapBusy || backupBusy || deleting || (state.loading && !detailsSaving)} mapName={regionState.information.kind === 'map' ? navigationState.data.maps.find((m) => m.id === regionState.information?.mapId)?.name : undefined} onCancelCreation={() => setDialog('projects')} />}
         {cardRegion && <RegionCard key={cardRegion.id} region={cardRegion} state={regionState} session={regions} disabled={mapBusy || backupBusy || (state.loading && !detailsSaving) || session.hasUnsavedChanges()} geometryDisabled={!canEditRegion} tagCatalog={tags} />}
         {cardMarker && cardEntity && <MarkerCard key={cardMarker.id} entity={cardEntity} marker={cardMarker} state={regionState} session={regions} disabled={mapBusy || backupBusy || (state.loading && !detailsSaving) || session.hasUnsavedChanges()} geometryDisabled={!canEditRegion} tagCatalog={tags} />}
         </div>}
       </main>
-      {dialog && <ProjectDialog key={dialog} mode={dialog} repository={repository} session={session} onClose={() => setDialog(null)} onEdit={() => setDialog('edit')} />}
+      {dialog && <ProjectDialog repository={repository} session={session} message={projectMessage} onClose={() => setDialog(null)} onCreate={(name) => { setDialog(null); regions.createInformation(name) }} onOpen={(id) => { setDialog(null); regions.afterDetails(() => session.open(id)) }} onDelete={(project) => { setDialog(null); setDeleteError(undefined); setDeleteProject(project) }} />}
+      {deleteProject && <ProjectDeleteDialog project={deleteProject} busy={deleting} error={deleteError} onCancel={() => { setDeleteProject(undefined); setDialog('projects') }} onDelete={confirmDelete} />}
       {mapAction && <MapActionDialog action={mapAction} disabled={mapWritesDisabled} onSubmit={changeMap} onClose={() => { setMapAction(undefined); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.map-menu-trigger')?.focus()) }} />}
     </div>
   )

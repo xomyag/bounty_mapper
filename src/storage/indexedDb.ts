@@ -1,10 +1,11 @@
+import { migrateProjectContext, migrateMapDescription } from './migrateProjectContext'
 import { migrateRegionText } from './migrateRegionText'
 import { migrateMarkerPlacement } from './migrateMarkerPlacements'
 import { validateRegion } from '../domain/region'
 import { validateEntity } from '../domain/marker'
 import { storageError } from './storageError'
 export const DATABASE_NAME = 'bounty-mapper'
-export const DATABASE_VERSION = 8
+export const DATABASE_VERSION = 9
 
 export function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -63,6 +64,12 @@ export class IndexedDb {
             if (!row) return
             try { row.update(migrateMarkerPlacement(row.value)); row.continue() }
             catch (error) { migrationError = new Error(`Не удалось перенести привязки маркеров. Исходные данные не изменены. ${error instanceof Error ? error.message : ''}`); request.transaction!.abort() }
+          }
+        }
+        if (event.oldVersion < 9) {
+          for (const name of ['projects', 'maps'] as const) {
+            const cursor = request.transaction!.objectStore(name).openCursor()
+            cursor.onsuccess = () => { const row = cursor.result; if (!row) return; try { row.update(name === 'projects' ? migrateProjectContext(row.value) : migrateMapDescription(row.value)); row.continue() } catch (error) { migrationError = new Error(`Не удалось перенести контекст приключения и карты. Исходные данные не изменены. ${error instanceof Error ? error.message : ''}`); request.transaction!.abort() } }
           }
         }
         if (event.oldVersion < 8) {

@@ -1,3 +1,4 @@
+import { legacyContextDocument } from '../storage/migrateProjectContext'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { ProjectSession } from './projectSession'
@@ -21,22 +22,22 @@ async function setup() {
 describe('Backup actions', () => {
   it('flushes the latest edits before creating the archive', async () => {
     const { projects, backups } = await setup()
-    projects.edit({ name: 'Последнее название', contextMd: 'Самый последний текст' })
+    projects.edit({ name: 'Последнее название', context: legacyContextDocument('Самый последний текст') })
     let bytes!: Uint8Array
     await backups.export((archive) => { bytes = archive })
     const restored = await parseArchive(new Blob([new Uint8Array(bytes)]), testDecode)
-    expect(restored.project).toMatchObject({ name: 'Последнее название', contextMd: 'Самый последний текст', revision: 2 })
+    expect(restored.project).toMatchObject({ name: 'Последнее название', context: legacyContextDocument('Самый последний текст'), revision: 2 })
     expect(backups.getSnapshot().phase).toBe('done')
   })
   it('stops export and retains the draft if flushing fails', async () => {
     const { repo, projects, backups } = await setup()
-    projects.edit({ name: 'Название', contextMd: 'Несохранённый текст' })
+    projects.edit({ name: 'Название', context: legacyContextDocument('Несохранённый текст') })
     vi.spyOn(repo, 'save').mockRejectedValueOnce(new Error('Ошибка записи'))
     const download = vi.fn()
     await backups.export(download)
     expect(download).not.toHaveBeenCalled()
     expect(backups.getSnapshot().phase).toBe('error')
-    expect(projects.getSnapshot().project?.contextMd).toBe('Несохранённый текст')
+    expect(projects.getSnapshot().project?.context).toEqual(legacyContextDocument('Несохранённый текст'))
   })
   it('validates before any database insertion and keeps the original selection on error', async () => {
     const { projects, repository, backups } = await setup()

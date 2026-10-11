@@ -1,3 +1,4 @@
+import { finishProjectCreation } from './controls'
 import { clickMenuAction, control } from './controls'
 import { Buffer } from 'node:buffer'
 import { expect, test } from '@playwright/test'
@@ -7,8 +8,7 @@ async function createProject(page: Page, name: string) {
   await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill(name)
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
-  await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
-  await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
+  await finishProjectCreation(page)
   await expect(control(page, 'Загрузить карту')).toBeEnabled()
 }
 
@@ -101,10 +101,13 @@ test('PNG/JPEG/WebP render; pan and pointer zoom preserve placement; project map
   await expect(region).toBeVisible()
   expect((await stored(page)).placements).toEqual(before.placements)
   await page.getByRole('button', { name: 'Показать всю карту' }).click()
-  await page.getByRole('button', { name: 'Контекст', exact: true }).click()
-  await page.getByLabel('Общий контекст приключения').fill('Контекст рядом с картой')
-  await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
-  await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
+  await page.getByRole('button', { name: 'Контекст приключения', exact: true }).click()
+  const info = page.getByRole('region', { name: 'Контекст приключения', exact: true })
+  await info.getByRole('button', { name: 'Заполнить' }).click()
+  await page.getByRole('textbox', { name: 'Общий контекст приключения', exact: true }).fill('Контекст рядом с картой')
+  await info.getByRole('button', { name: 'Сохранить', exact: true }).click()
+  await expect(info.getByRole('status')).toHaveText('Сохранено на устройстве')
+  await page.getByRole('button', { name: 'Закрыть контекст приключения' }).click()
   await page.reload()
   await visibleMap(page)
   await expect(page.getByRole('dialog')).toHaveCount(0)
@@ -121,9 +124,9 @@ test('PNG/JPEG/WebP render; pan and pointer zoom preserve placement; project map
   await clickMenuAction(page, 'Проекты')
   await page.getByRole('button', { name: 'Открыть проект «Первая карта»' }).click()
   await visibleMap(page)
-  await page.getByRole('button', { name: 'Контекст', exact: true }).click()
-  await expect(page.getByLabel('Общий контекст приключения')).toHaveValue('Контекст рядом с картой')
-  await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
+  await page.getByRole('button', { name: 'Контекст приключения', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Контекст приключения', exact: true })).toContainText('Контекст рядом с картой')
+  await page.getByRole('button', { name: 'Закрыть контекст приключения' }).click()
   await page.reload(); await visibleMap(page)
   expect(errors).toEqual([])
 })

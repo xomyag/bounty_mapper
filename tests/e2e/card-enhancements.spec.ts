@@ -1,3 +1,4 @@
+import { finishProjectCreation } from './controls'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import type Konva from 'konva'
@@ -18,7 +19,7 @@ async function stored(page: Page) { return page.evaluate(async () => {
 }) }
 async function seed(page: Page) {
   await page.goto('/'); await clickMenuAction(page, 'Проекты'); await page.getByLabel('Название нового проекта').fill('UI-02')
-  await control(page, 'Создать').click(); await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве'); await control(page, 'Закрыть окно проекта').click()
+  await control(page, 'Создать').click(); await finishProjectCreation(page)
   await control(page, 'Карты проекта').click(); await page.getByRole('menuitem', { name: 'New map', exact: true }).click(); await page.getByLabel('Название новой карты').fill('Залы')
   await page.getByRole('dialog').getByRole('button', { name: 'Создать карту', exact: true }).click(); await expect(control(page, 'Добавить область')).toBeEnabled()
   await page.evaluate(async (content) => {
