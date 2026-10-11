@@ -7,6 +7,8 @@ import { markdownToDocument } from '../migrateRegionText'
 import type { ProjectSnapshot } from '../../application/projectBackupRepository'
 import { BACKUP_LIMITS } from './zip'
 import type { BackupLimits } from './zip'
+import { MAX_ENTITIES, MAX_MARKERS, validateEntity, validateMarker } from '../../domain/marker'
+import type { Entity, MarkerPlacement, MarkerKind } from '../../domain/marker'
 
 export type AssetRecord = Omit<Asset, 'blob'> & { path: string }
 export interface BackupDocument {
@@ -15,6 +17,8 @@ export interface BackupDocument {
   imagePlacements: ImagePlacement[]
   assets: AssetRecord[]
   regions: Region[]
+  entities: Entity[]
+  markerPlacements: MarkerPlacement[]
 }
 function invalid(): never { throw new Error('Некорректная структура данных проекта.') }
 function record(value: unknown, required: string[], optional: string[] = []): Record<string, unknown> {
@@ -45,8 +49,8 @@ function bounds(value: unknown) {
 }
 function unique(items: { id: string }[]) { if (new Set(items.map((item) => item.id)).size !== items.length) return invalid() }
 
-export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_LIMITS, formatVersion = 4): BackupDocument {
-  const root = record(value, ['project', 'maps', 'imagePlacements', 'assets', ...(formatVersion === 1 ? [] : ['regions'])])
+export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_LIMITS, formatVersion = 6): BackupDocument {
+  const root = record(value, ['project', 'maps', 'imagePlacements', 'assets', ...(formatVersion === 1 ? [] : ['regions']), ...(formatVersion < 5 ? [] : ['entities', 'markerPlacements'])])
   const p = record(root.project, ['id', 'name', 'contextMd', 'schemaVersion', 'revision', 'createdAt', 'updatedAt'])
   if (p.schemaVersion !== PROJECT_SCHEMA_VERSION) throw new Error('Версия данных проекта не поддерживается.')
   const project: Project = { id: string(p.id, true), name: string(p.name, true), contextMd: string(p.contextMd), schemaVersion: PROJECT_SCHEMA_VERSION, revision: integer(p.revision, 1), createdAt: date(p.createdAt), updatedAt: date(p.updatedAt) }
@@ -93,14 +97,29 @@ export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_L
     validateRegion(region)
     return region
   })
-  unique(maps); unique(assets); unique(imagePlacements); unique(regions)
+  const entities: Entity[] = (formatVersion < 5 ? [] : array(root.entities, MAX_ENTITIES)).map((value) => {
+    const e = record(value, ['id', 'projectId', 'kind', 'name', 'description', 'status', 'tags'])
+    validateRichDocument(e.description)
+    const entity: Entity = { id: string(e.id, true), projectId: string(e.projectId, true), kind: string(e.kind) as MarkerKind, name: string(e.name, true), description: e.description, status: string(e.status, true), tags: array(e.tags, 256).map((tag) => string(tag, true)) }
+    validateEntity(entity); return entity
+  })
+  const markerPlacements: MarkerPlacement[] = (formatVersion < 5 ? [] : array(root.markerPlacements, MAX_MARKERS)).map((value) => {
+    const m = record(value, ['id', 'mapId', 'entityId', 'x', 'y', 'color', 'locked', 'order', ...(formatVersion < 6 ? [] : ['regionIds'])], formatVersion < 6 ? ['regionId'] : [])
+    const regionIds = formatVersion < 6 ? m.regionId === undefined ? [] : [string(m.regionId, true)] : array(m.regionIds, MAX_REGIONS).map((id) => string(id, true))
+    const marker = { id: string(m.id, true), mapId: string(m.mapId, true), entityId: string(m.entityId, true), x: number(m.x), y: number(m.y), color: string(m.color), locked: boolean(m.locked), order: integer(m.order), regionIds }
+    validateMarker(marker); return marker
+  })
+  unique(maps); unique(assets); unique(imagePlacements); unique(regions); unique(entities); unique(markerPlacements)
   if (new Set(assets.map((asset) => asset.path)).size !== assets.length || new Set(imagePlacements.map((placement) => placement.mapId)).size !== imagePlacements.length) return invalid()
   if (maps.some((map) => map.projectId !== project.id) || assets.some((asset) => asset.projectId !== project.id)) throw new Error('Карта или изображение относится к другому проекту.')
   const mapIds = new Set(maps.map((map) => map.id)); const assetIds = new Set(assets.map((asset) => asset.id))
   if (imagePlacements.some((placement) => !mapIds.has(placement.mapId) || !assetIds.has(placement.assetId))) throw new Error('В проекте есть ссылка на отсутствующую карту или изображение.')
   if (regions.some((region) => !mapIds.has(region.mapId))) throw new Error('Область ссылается на отсутствующую карту.')
   if (regions.some((region) => [...documentAssetIds(region.gmNotes), ...documentAssetIds(region.playerDescription)].some((id) => !assetIds.has(id)))) throw new Error('Текст области ссылается на отсутствующее изображение.')
-  return { project, maps, assets, imagePlacements, regions }
+  const entityIds = new Set(entities.map((e) => e.id))
+  if (entities.some((e) => e.projectId !== project.id || documentAssetIds(e.description).some((id) => !assetIds.has(id)))) throw new Error('Сущность ссылается на другой проект или отсутствующее изображение.')
+  if (markerPlacements.some((m) => !mapIds.has(m.mapId) || !entityIds.has(m.entityId) || m.regionIds.some((id) => !regions.some((r) => r.id === id && r.mapId === m.mapId)))) throw new Error('Некорректная ссылка размещения маркера.')
+  return { project, maps, assets, imagePlacements, regions, entities, markerPlacements }
 }
 
 // Explicit field projection: storage/UI extras and secrets never enter the archive.
@@ -108,6 +127,8 @@ export function documentFromSnapshot(snapshot: ProjectSnapshot): BackupDocument 
   const p = snapshot.project
   return validateDocument({
     project: { id: p.id, name: p.name, contextMd: p.contextMd, schemaVersion: p.schemaVersion, revision: p.revision, createdAt: p.createdAt, updatedAt: p.updatedAt },
+    entities: snapshot.entities.map((e) => ({ id: e.id, projectId: e.projectId, kind: e.kind, name: e.name, description: e.description, status: e.status, tags: [...e.tags] })),
+    markerPlacements: snapshot.markerPlacements.map((m) => ({ id: m.id, mapId: m.mapId, entityId: m.entityId, x: m.x, y: m.y, color: m.color, locked: m.locked, order: m.order, regionIds: [...m.regionIds] })),
     maps: snapshot.maps.map((m) => ({ id: m.id, projectId: m.projectId, name: m.name, notesMd: m.notesMd, order: m.order, coordinateBounds: { x: m.coordinateBounds.x, y: m.coordinateBounds.y, width: m.coordinateBounds.width, height: m.coordinateBounds.height } })),
     imagePlacements: snapshot.imagePlacements.map((i) => ({ id: i.id, mapId: i.mapId, assetId: i.assetId, x: i.x, y: i.y, width: i.width, height: i.height, rotation: i.rotation, order: i.order, locked: i.locked, visible: i.visible })),
     regions: snapshot.regions.map((r) => ({ id: r.id, mapId: r.mapId, vertices: r.vertices.map((p) => ({ x: p.x, y: p.y })), order: r.order, number: r.number, title: r.title, titleCustomized: r.titleCustomized, color: r.color, fillOpacity: r.fillOpacity, gmNotes: r.gmNotes, playerDescription: r.playerDescription, tags: [...r.tags], checks: r.checks.map((c) => ({ id: c.id, condition: c.condition, ability: c.ability, result: c.result, ...(c.dc === undefined ? {} : { dc: c.dc }) })) })),

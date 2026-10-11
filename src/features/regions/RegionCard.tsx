@@ -1,11 +1,12 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { detailsOf } from '../../application/regionSession'
 import type { RegionSession, RegionState, RegionDetails } from '../../application/regionSession'
 import type { Region } from '../../domain/region'
-import type { Asset } from '../../domain/project'
 import { RichTextView } from './RichTextView'
 import { ColorPicker } from '../map/ColorPicker'
-import { prepareImage } from '../map/prepareImage'
+import { prepareCardImage } from './cardImage'
+import { CardConfirmation } from './CardConfirmation'
+import { statusLabel } from '../../domain/marker'
 
 const RichTextEditor = lazy(() => import('./RichTextEditor').then((module) => ({ default: module.RichTextEditor })))
 
@@ -16,21 +17,8 @@ export function RegionCard({ region, state, session, disabled, geometryDisabled 
   const editing = state.cardMode === 'edit'
   const busy = disabled || session.detailsSaving() || !!state.imagePending
   const [tag, setTag] = useState('')
-  const confirmation = useRef<HTMLDialogElement>(null)
-  useEffect(() => { if (state.pendingIntent && confirmation.current && !confirmation.current.open) confirmation.current.showModal() }, [state.pendingIntent])
   const edit = (change: Partial<RegionDetails>) => session.editDetails(region.id, { ...fields, ...change })
-  const insertImage = async (file: Blob): Promise<Asset> => {
-    session.beginImageInsertion()
-    let failure: unknown
-    try {
-      if (file.size > 64 * 1024 * 1024) throw new Error('Изображение превышает лимит 64 МиБ.')
-      const asset = await prepareImage(file, session.getProjectId()!)
-      if (asset.pixelWidth * asset.pixelHeight > 64 * 1024 * 1024) throw new Error('Изображение превышает лимит 64 мегапикселей.')
-      session.addDraftAsset(region.id, asset)
-      return asset
-    } catch (error) { failure = error; throw error }
-    finally { session.endImageInsertion(failure) }
-  }
+  const insertImage = (file: Blob) => prepareCardImage(file, session, (asset) => session.addDraftAsset(region.id, asset))
   const focusMap = () => requestAnimationFrame(() => document.querySelector<HTMLElement>('[aria-label="Карта приключения"]')?.focus())
   return <section className="region-card" aria-label="Карточка области">
     <div className="card-heading"><h2>{region.number}. {region.title}</h2><button type="button" disabled={busy} aria-label="Закрыть карточку области" onClick={session.closeCard}>×</button></div>
@@ -72,13 +60,13 @@ export function RegionCard({ region, state, session, disabled, geometryDisabled 
       <button type="button" disabled={disabled || state.vertexMode} onClick={session.beginEdit}>Редактировать</button>
       <button type="button" disabled={geometryDisabled} onClick={() => { void session.remove() }}>Удалить область</button>
     </>}
+    <section aria-label="Связанные маркеры"><h3>Связанные маркеры</h3><ul className="linked-markers">{state.markers.filter((m) => m.regionIds.includes(region.id)).map((m) => {
+      const entity = state.entities.find((e) => e.id === m.entityId)!
+      return <li key={m.id}><button type="button" disabled={busy || state.vertexMode} onClick={() => session.openMarkerCard(m.id, true)}>{entity.name} · {statusLabel(entity)}</button></li>
+    })}</ul>{!state.markers.some((m) => m.regionIds.includes(region.id)) && <p>Нет связанных маркеров</p>}</section>
     <div className="card-map-tools"><button type="button" disabled={busy} aria-pressed={state.vertexMode} onClick={() => { session.setVertexMode(!state.vertexMode); focusMap() }}>{state.vertexMode ? 'Закончить правку вершин' : 'Редактировать вершины'}</button>
       {state.vertexMode && <button type="button" disabled={geometryDisabled || state.selectedVertex === undefined || region.vertices.length <= 3} onClick={() => { void session.removeVertex() }}>Удалить вершину</button>}
     </div>
-    {state.pendingIntent && <dialog ref={confirmation} className="project-dialog" aria-label="Несохранённые изменения области" onCancel={(event) => { event.preventDefault(); void session.resolveCardIntent('stay') }}>
-      <h2>Есть несохранённые изменения</h2><p>Сохранить карточку перед продолжением?</p>
-      {draft?.error && <p role="alert">{draft.error}</p>}
-      <div className="card-actions"><button type="button" disabled={session.detailsSaving()} onClick={() => { void session.resolveCardIntent('save') }}>Сохранить и продолжить</button><button type="button" disabled={session.detailsSaving()} onClick={() => { void session.resolveCardIntent('discard') }}>Отбросить изменения</button><button type="button" disabled={session.detailsSaving()} onClick={() => { void session.resolveCardIntent('stay') }}>Продолжить редактирование</button></div>
-    </dialog>}
+    <CardConfirmation state={state} session={session} label="Несохранённые изменения области" error={draft?.error} />
   </section>
 }

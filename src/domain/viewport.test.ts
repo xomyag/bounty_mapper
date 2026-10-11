@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { fitBounds, MAX_SCALE, MIN_SCALE, screenToWorld, worldToScreen, zoomAt } from './viewport'
+import { centerOn, fitBounds, MAX_SCALE, MIN_SCALE, screenToWorld, worldToScreen, zoomAt } from './viewport'
 
 describe('Camera coordinates', () => {
+  it('centers an offscreen object while preserving zoom and world coordinates', () => {
+    const point = Object.freeze({ x: -915.5, y: 1282.25 })
+    const view = { width: 1280, height: 720 }
+    for (const scale of [MIN_SCALE, 0.25, 1, 4, MAX_SCALE]) {
+      const camera = Object.freeze({ x: 341, y: -199, scale })
+      const next = centerOn(camera, point, view)
+      expect(next.scale).toBe(scale)
+      expect(worldToScreen(point, next)).toEqual({ x: view.width / 2, y: view.height / 2 })
+      const restored = screenToWorld({ x: view.width / 2, y: view.height / 2 }, next)
+      expect(restored.x).toBeCloseTo(point.x, 8)
+      expect(restored.y).toBeCloseTo(point.y, 8)
+      expect(camera).toEqual({ x: 341, y: -199, scale })
+    }
+  })
   it('round-trips world and screen with offsets and different scales', () => {
     for (const scale of [0.001, 0.25, 1, 4, 64]) {
       const camera = { x: -173, y: 91, scale }

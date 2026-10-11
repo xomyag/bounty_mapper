@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import type { Region } from '../../src/domain/region'
 import type { ImagePlacement } from '../../src/domain/project'
+import type Konva from 'konva'
 import { fitBounds, screenToWorld, worldToScreen, zoomAt } from '../../src/domain/viewport'
 
 async function seed(page: Page) {
@@ -176,7 +177,7 @@ test('double-click finishes without duplicate, Esc/draft export, context menu an
   expect((await stored(page)).regions).toHaveLength(1)
   await expect(page.getByRole('group', { name: 'Создание области' })).toContainText('Вершин: 3')
   await page.evaluate(() => { IDBObjectStore.prototype.put = (window as unknown as { __regionPut: typeof IDBObjectStore.prototype.put }).__regionPut })
-  await page.getByRole('button', { name: 'Повторить запись областей', exact: true }).click()
+  await page.getByRole('button', { name: 'Повторить запись объектов карты', exact: true }).click()
   await expect.poll(async () => (await stored(page)).regions.length).toBe(2)
   await expect(page.getByRole('group', { name: 'Создание области' })).toHaveCount(0)
   box = (await page.getByRole('region', { name: 'Карта приключения' }).boundingBox())!
@@ -210,7 +211,12 @@ test('rejects self-crossing drafts and rereads the same project after a revision
   await other.getByRole('button', { name: 'Открыть проект «Карта с областями»' }).click()
   await expect(other.getByRole('button', { name: 'Добавить область', exact: true })).toBeEnabled()
   await expect(other.getByRole('region', { name: 'Свойства области' })).toHaveCount(0)
-  await other.mouse.click(otherBox.x + 220, otherBox.y + 230)
+  await other.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  const reopenedBox = (await other.getByRole('region', { name: 'Карта приключения' }).boundingBox())!
+  const reopenedCamera = await other.evaluate(() => { const s = (window as unknown as { Konva: { stages: Konva.Stage[] } }).Konva.stages[0]; return { x: s.x(), y: s.y(), scale: s.scaleX() } })
+  const polygon = (await stored(other)).regions[0].vertices
+  const center = worldToScreen({ x: polygon.reduce((sum, p) => sum + p.x, 0) / polygon.length, y: polygon.reduce((sum, p) => sum + p.y, 0) / polygon.length }, reopenedCamera)
+  await other.mouse.click(reopenedBox.x + center.x, reopenedBox.y + center.y)
   await other.getByRole('button', { name: 'Редактировать', exact: true }).click()
   await expect(other.getByLabel('Название области', { exact: true })).toHaveValue('Название из первой вкладки')
   await expect(other.getByRole('button', { name: 'Отменить', exact: true })).toBeDisabled()
