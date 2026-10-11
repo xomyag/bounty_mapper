@@ -1,3 +1,4 @@
+import { legacyContextDocument } from '../../storage/migrateProjectContext'
 import { describe, expect, it } from 'vitest'
 import { BrowserProjectAccess } from './browserProjectAccess'
 import { ProjectSession } from '../../application/projectSession'
@@ -35,14 +36,14 @@ describe('Single editor per project', () => {
     const owner = new ProjectSession(repo, a); const reader = new ProjectSession(new IndexedDbProjectRepository(() => factory), b)
     await owner.initialize(); await reader.initialize()
     expect(reader.getSnapshot().readOnly).toBe(true)
-    reader.edit({ name: 'Перезапись', contextMd: 'Чужой' }); expect(reader.getSnapshot().project).toEqual(project)
+    reader.edit({ name: 'Перезапись', context: legacyContextDocument('Чужой') }); expect(reader.getSnapshot().project).toEqual(project)
     await expect(reader.mutateProject(async (p) => p)).rejects.toThrow('только для чтения')
     let inspected = false; await reader.inspectProject(async () => { inspected = true }); expect(inspected).toBe(true)
-    owner.edit({ name: project.name, contextMd: 'Актуальный текст' }); await owner.save(); await owner.releaseEditing()
+    owner.edit({ name: project.name, context: legacyContextDocument('Актуальный текст') }); await owner.save(); await owner.releaseEditing()
     let refreshed = false; await reader.requestEditing(async () => { refreshed = true })
-    expect(refreshed).toBe(true); expect(reader.canEdit()).toBe(true); expect(reader.getSnapshot().project?.contextMd).toBe('Актуальный текст')
+    expect(refreshed).toBe(true); expect(reader.canEdit()).toBe(true); expect(reader.getSnapshot().project?.context).toEqual(legacyContextDocument('Актуальный текст'))
     expect(reader.getSnapshot().project?.revision).toBe(2)
-    reader.edit({ name: project.name, contextMd: 'После получения права' }); await reader.save(); expect((await repo.restore())?.revision).toBe(3)
+    reader.edit({ name: project.name, context: legacyContextDocument('После получения права') }); await reader.save(); expect((await repo.restore())?.revision).toBe(3)
     await reader.releaseEditing()
   })
   it('keeps revision protection when Web Locks is unavailable', async () => {

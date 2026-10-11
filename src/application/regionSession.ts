@@ -4,7 +4,12 @@ import type { Point } from '../domain/viewport'
 import { emptyRegionContent, labelAnchor, MAX_REGIONS, MAX_REGION_VERTICES, regionHasUserContent, samePoint, translateVertices, validatePolygon, validateRegion } from '../domain/region'
 import { documentAssetIds } from '../domain/richText'
 import type { Region, RegionContent } from '../domain/region'
-import type { Asset } from '../domain/project'
+import { createProject } from '../domain/project'
+import type { Asset, Project, Map } from '../domain/project'
+import type { InformationRepository } from './informationRepository'
+import type { RichDocument } from '../domain/richText'
+
+export interface InformationCard { kind: 'project' | 'map' | 'new-project'; projectId: string; mapId?: string; name: string; document: RichDocument; assets: Record<string, Asset>; project?: Project; draft?: { name: string; document: RichDocument; assets: Asset[]; phase: 'dirty' | 'saving' | 'error'; error?: string } }
 import { markerTypes, statusesOf, validateEntity, validateMarker, MAX_MARKERS, MAX_ENTITIES } from '../domain/marker'
 import type { Entity, MarkerPlacement, MarkerKind } from '../domain/marker'
 import { emptyDocument } from '../domain/richText'
@@ -20,12 +25,13 @@ export type MarkerCheckDraft = Omit<Region['checks'][number], 'dc'> & { dc: stri
 export interface MarkerDetails { checks: MarkerCheckDraft[]; name: string; description: Entity['description']; tags: string[]; status: string; color: string; regionIds: string[]; locked: boolean }
 export const markerDetailsOf = (entity: Entity, marker: MarkerPlacement): MarkerDetails => ({ checks: (entity.checks ?? []).map((c) => ({ ...c, dc: c.dc === undefined ? '' : String(c.dc) })), name: entity.name, description: structuredClone(entity.description), tags: [...entity.tags], status: entity.status, color: marker.color, regionIds: [...marker.regionIds], locked: marker.locked })
 export interface MarkerDraft { entity: Entity; marker: MarkerPlacement; fields: MarkerDetails; assets: Asset[]; isNew: boolean; version: number; phase: 'dirty' | 'saving' | 'error'; error?: string }
-type CardIntent = { kind: 'open'; id: string; center?: boolean } | { kind: 'marker'; id: string; center?: boolean } | { kind: 'close' } | { kind: 'vertices' } | { kind: 'map'; target: NavigationTarget } | { kind: 'mode'; mode: WorkspaceMode }
+type CardIntent = { kind: 'information'; mapId?: string } | { kind: 'create-project'; project: Project } | { kind: 'action'; run: () => Promise<void>; onStay?: () => void } | { kind: 'open'; id: string; center?: boolean } | { kind: 'marker'; id: string; center?: boolean } | { kind: 'close' } | { kind: 'vertices' } | { kind: 'map'; target: NavigationTarget } | { kind: 'mode'; mode: WorkspaceMode }
 interface StatusCommand { entityId: string; before: string; after: string }
 interface StatusAction extends StatusCommand { kind: 'change' | 'undo' | 'redo'; phase: 'saving' | 'saved' | 'error'; error?: string }
 export interface LoadedMapObjects { regions: Region[]; assets: Asset[]; entities: Entity[]; markers: MarkerPlacement[] }
 
 export interface RegionState {
+  information?: InformationCard
   mode: WorkspaceMode
   modePhase: 'idle' | 'loading' | 'saving' | 'saved' | 'error'
   modeError?: string
@@ -63,6 +69,7 @@ interface Command { before: Region[]; after: Region[]; markersBefore: MarkerPlac
 
 export class RegionSession {
   private state: RegionState = { mode: 'prepare', modePhase: 'idle', canUndoStatus: false, canRedoStatus: false, regions: [], entities: [], markers: [], details: {}, assets: {}, cardMode: 'view', imagePending: 0, phase: 'idle', vertexMode: false, canUndo: false, canRedo: false, canRetry: false }
+  private informationWork?: Promise<void>
   private detailsWork?: Promise<void>
   private markerWork?: Promise<void>
   private listeners = new Set<() => void>()
@@ -79,7 +86,7 @@ export class RegionSession {
   private statusUndo: StatusCommand[] = []
   private statusRedo: StatusCommand[] = []
   setTagCatalog = (catalog: string[]) => { this.tagCatalog = catalog }
-  constructor(private readonly repository: RegionRepository, private readonly projects: ProjectSession, private readonly modes: ModeRepository) {}
+  constructor(private readonly repository: RegionRepository, private readonly projects: ProjectSession, private readonly modes: ModeRepository, private readonly informationRepository?: InformationRepository) {}
   getSnapshot = () => this.state
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   private update(fields: Partial<RegionState>) {
@@ -140,13 +147,15 @@ export class RegionSession {
     if (objects.markers.some((m) => m.regionIds.some((id) => !regions.some((r) => r.id === id)))) throw new Error('Область маркера не найдена.')
     return { regions, assets, ...objects }
   }
-  adoptMap = (target: NavigationTarget, data: LoadedMapObjects) => {
+  adoptMap = (target: NavigationTarget, data: LoadedMapObjects & { map?: Map }) => {
+    const info = this.state.information
+    const information = 'kind' in target ? undefined : info?.kind === 'map' ? data.map ? { ...info, mapId: data.map.id, name: data.map.name, document: data.map.description, draft: undefined, assets: Object.fromEntries(data.assets.map((a) => [a.id, a])) } : undefined : info
     const region = 'kind' in target && target.kind === 'region' ? data.regions.find((r) => r.id === target.id) : undefined
     const marker = 'kind' in target && target.kind === 'marker' ? data.markers.find((m) => m.id === target.id) : undefined
     if ('kind' in target && !region && !marker) throw new Error('Объект больше не существует на выбранной карте.')
     ++this.generation; this.loaded = true; this.undoStack = []; this.redoStack = []; this.retryWork = undefined
     const editRegion = region && this.isPreparation() && !regionHasUserContent(region)
-    this.update({ mapId: target.mapId, regions: data.regions, entities: data.entities, markers: data.markers, assets: Object.fromEntries(data.assets.map((a) => [a.id, a])), phase: 'saved', transitioning: false, error: undefined, draft: undefined, markerTool: undefined, markerDraft: undefined, cardId: region?.id, selectedId: region?.id, markerCardId: marker?.id, selectedMarkerId: marker?.id, cardMode: editRegion ? 'edit' : 'view', details: editRegion ? { [region.id]: { fields: detailsOf(region), assets: [], version: 0, phase: 'dirty' } } : {}, pendingIntent: undefined, imagePending: 0, imageError: undefined, selectedVertex: undefined, vertexMode: false, viewFocus: region ? { point: labelAnchor(region.vertices) } : marker ? { point: { x: marker.x, y: marker.y } } : undefined })
+    this.update({ information, mapId: target.mapId, regions: data.regions, entities: data.entities, markers: data.markers, assets: Object.fromEntries(data.assets.map((a) => [a.id, a])), phase: 'saved', transitioning: false, error: undefined, draft: undefined, markerTool: undefined, markerDraft: undefined, cardId: region?.id, selectedId: region?.id, markerCardId: marker?.id, selectedMarkerId: marker?.id, cardMode: editRegion ? 'edit' : 'view', details: editRegion ? { [region.id]: { fields: detailsOf(region), assets: [], version: 0, phase: 'dirty' } } : {}, pendingIntent: undefined, imagePending: 0, imageError: undefined, selectedVertex: undefined, vertexMode: false, viewFocus: region ? { point: labelAnchor(region.vertices) } : marker ? { point: { x: marker.x, y: marker.y } } : undefined })
   }
   hasLoaded = () => this.loaded
   isDetailsDirty = (id: string) => {
@@ -155,8 +164,9 @@ export class RegionSession {
     return !!draft && !!region && (draft.phase === 'saving' || draft.phase === 'error' || JSON.stringify(draft.fields) !== JSON.stringify(detailsOf(region)))
   }
   isMarkerDirty = () => !!this.state.markerDraft && (this.state.markerDraft.isNew || this.state.markerDraft.phase === 'error' || this.state.markerDraft.phase === 'saving' || JSON.stringify(this.state.markerDraft.fields) !== JSON.stringify(markerDetailsOf(this.state.markerDraft.entity, this.state.markerDraft.marker)))
-  hasUnsavedDetails = () => Object.keys(this.state.details).some(this.isDetailsDirty) || this.isMarkerDirty() || this.state.imagePending > 0
-  detailsSaving = () => !!this.detailsWork || !!this.markerWork || Object.values(this.state.details).some((draft) => draft.phase === 'saving')
+  isInformationDirty = () => { const info = this.state.information; const d = info?.draft; return !!info && (info.kind === 'new-project' || !!d && (d.phase !== 'dirty' || d.name !== info.name || JSON.stringify(d.document) !== JSON.stringify(info.document))) }
+  hasUnsavedDetails = () => this.isInformationDirty() || Object.keys(this.state.details).some(this.isDetailsDirty) || this.isMarkerDirty() || this.state.imagePending > 0
+  detailsSaving = () => !!this.informationWork || !!this.detailsWork || !!this.markerWork || Object.values(this.state.details).some((draft) => draft.phase === 'saving')
   ready = () => this.isPreparation() && this.loaded && !!this.state.mapId && !this.busy() && !this.hasUnsavedDetails() && !this.projects.getSnapshot().loading && !this.projects.hasUnsavedChanges()
   canMoveRegion = (id: string) => this.isPreparation() && this.loaded && this.state.cardId === id && this.state.cardMode === 'edit' && !!this.state.details[id] && !this.busy() && !this.detailsSaving() && !this.state.imagePending && !this.state.pendingIntent && !this.state.vertexMode && !this.state.draft && !this.state.markerTool && !this.projects.getSnapshot().loading && !this.projects.hasUnsavedChanges()
   canUndoDraftGeometry = () => !!this.state.cardId && this.canMoveRegion(this.state.cardId) && !!this.state.details[this.state.cardId]?.geometryUndo?.length
@@ -180,7 +190,7 @@ export class RegionSession {
     const generation = ++this.generation
     this.loaded = false
     this.undoStack = []; this.redoStack = []; this.retryWork = undefined
-    this.update({ mapId, regions: [], entities: [], markers: [], markerTool: undefined, markerDraft: undefined, markerCardId: undefined, selectedMarkerId: undefined, details: {}, assets: {}, cardId: undefined, cardMode: 'view', pendingIntent: undefined, viewFocus: undefined, imagePending: 0, imageError: undefined, phase: mapId ? 'loading' : 'idle', selectedId: undefined, selectedVertex: undefined, vertexMode: false, draft: undefined, error: undefined })
+    this.update({ information: this.state.information?.projectId === this.getProjectId() && this.state.information?.kind !== 'map' ? this.state.information : undefined, mapId, regions: [], entities: [], markers: [], markerTool: undefined, markerDraft: undefined, markerCardId: undefined, selectedMarkerId: undefined, details: {}, assets: {}, cardId: undefined, cardMode: 'view', pendingIntent: undefined, viewFocus: undefined, imagePending: 0, imageError: undefined, phase: mapId ? 'loading' : 'idle', selectedId: undefined, selectedVertex: undefined, vertexMode: false, draft: undefined, error: undefined })
     if (!mapId) return
     try {
       const { regions, assets, entities, markers } = await this.readMap(mapId)
@@ -209,10 +219,30 @@ export class RegionSession {
   }
   private requestCardIntent(intent: CardIntent) {
     if (this.busy() || this.detailsSaving() || this.state.imagePending) return
-    if ((this.state.cardId && this.isDetailsDirty(this.state.cardId)) || this.isMarkerDirty()) this.update({ pendingIntent: intent })
+    if (this.hasUnsavedDetails()) this.update({ pendingIntent: intent })
     else void this.applyCardIntent(intent)
   }
   private async applyCardIntent(intent: CardIntent) {
+    if (intent.kind === 'information' || intent.kind === 'create-project') {
+      if (!this.informationRepository) return
+      this.update({ transitioning: true, pendingIntent: undefined, error: undefined })
+      try {
+        const project = intent.kind === 'create-project' ? intent.project : this.projects.getSnapshot().project!
+        const data = intent.kind === 'create-project' ? { assets: [] as Asset[], map: undefined } : await this.informationRepository.load(project.id, intent.mapId)
+        if (intent.kind !== 'create-project' && this.getProjectId() !== project.id) return
+        const kind = intent.kind === 'create-project' ? 'new-project' : intent.mapId ? 'map' : 'project'
+        const name = data.map?.name ?? project.name; const document = data.map?.description ?? project.context
+        const information: InformationCard = { kind, projectId: project.id, mapId: data.map?.id, name, document, assets: Object.fromEntries(data.assets.map((a) => [a.id,a])), ...(kind === 'new-project' ? { project, draft: { name, document: structuredClone(document), assets: [], phase: 'dirty' } } : {}) }
+        this.update({ information, cardId: undefined, selectedId: undefined, markerCardId: undefined, selectedMarkerId: undefined, markerDraft: undefined, details: {}, cardMode: kind === 'new-project' ? 'edit' : 'view', draft: undefined, markerTool: undefined, vertexMode: false, selectedVertex: undefined, imageError: undefined })
+      } catch (error) { this.fail(error) } finally { this.update({ transitioning: false }) }
+      return
+    }
+    if (intent.kind === 'action') {
+      this.update({ details: {}, markerDraft: undefined, cardMode: 'view' })
+      this.update({ pendingIntent: undefined, transitioning: true })
+      try { await intent.run() } catch (error) { this.fail(error) } finally { this.update({ transitioning: false }) }
+      return
+    }
     if (intent.kind === 'mode') { await this.applyMode(intent.mode); return }
     if (intent.kind === 'map') {
       this.update({ transitioning: true, pendingIntent: undefined, error: undefined })
@@ -222,7 +252,7 @@ export class RegionSession {
       return
     }
     if (this.state.cardId) this.discardDetails(this.state.cardId)
-    this.update({ pendingIntent: undefined, imageError: undefined, markerDraft: undefined, markerCardId: undefined, selectedMarkerId: undefined, markerTool: undefined })
+    this.update({ information: undefined, draft: undefined, pendingIntent: undefined, imageError: undefined, markerDraft: undefined, markerCardId: undefined, selectedMarkerId: undefined, markerTool: undefined })
     if (intent.kind === 'open') {
       const region = this.state.regions.find((r) => r.id === intent.id)!
       this.update({ cardId: intent.id, cardMode: 'view', selectedId: intent.id, vertexMode: false, selectedVertex: undefined, ...(intent.center ? { viewFocus: { point: labelAnchor(region.vertices) } } : {}) })
@@ -236,8 +266,9 @@ export class RegionSession {
   resolveCardIntent = async (choice: 'save' | 'discard' | 'stay') => {
     const intent = this.state.pendingIntent
     if (!intent || this.busy() || this.detailsSaving()) return
-    if (choice === 'stay') { this.update({ pendingIntent: undefined }); return }
-    if (choice === 'save') { if (this.state.markerDraft) await this.saveMarkerDetails(); else await this.saveDetails(); if (this.hasUnsavedDetails()) return }
+    if (choice === 'stay') { if (intent.kind === 'action') intent.onStay?.(); this.update({ pendingIntent: undefined }); return }
+    if (choice === 'save') { if (this.state.information?.draft) await this.saveInformation(); else if (this.state.markerDraft) await this.saveMarkerDetails(); else await this.saveDetails(); if (this.hasUnsavedDetails()) return }
+    if (this.state.information?.draft) this.update({ information: this.state.information.kind === 'new-project' ? undefined : { ...this.state.information, draft: undefined }, cardMode: 'view' })
     await this.applyCardIntent(intent)
   }
   discardDetails = (id: string) => {
@@ -317,7 +348,7 @@ export class RegionSession {
     const version = (this.state.details[id]?.version ?? 0) + 1
     this.update({ details: { ...this.state.details, [id]: { ...this.state.details[id], fields: structuredClone(fields), assets: this.state.details[id]?.assets ?? [], version, phase: 'dirty', error: undefined } } })
   }
-  beginImageInsertion = () => { if (this.isPreparation()) this.update({ imagePending: this.state.imagePending + 1, imageError: undefined }) }
+  beginImageInsertion = () => { if (this.isPreparation() || this.state.information?.kind === 'new-project') this.update({ imagePending: this.state.imagePending + 1, imageError: undefined }) }
   reportImageError = (error: unknown) => this.update({ imageError: error instanceof Error ? error.message : 'Не удалось вставить изображение или текст.' })
   endImageInsertion = (error?: unknown) => this.update({ imagePending: Math.max(0, this.state.imagePending - 1), imageError: error ? error instanceof Error ? error.message : 'Не удалось вставить изображение.' : undefined })
   addDraftAsset = (id: string, asset: Asset) => {
@@ -326,6 +357,47 @@ export class RegionSession {
     if (!region) return
     const draft = this.state.details[id] ?? { fields: detailsOf(region), assets: [], version: 0, phase: 'dirty' as const }
     this.update({ details: { ...this.state.details, [id]: { ...draft, assets: [...draft.assets, asset] } } })
+  }
+  openInformation = (mapId?: string) => this.requestCardIntent({ kind: 'information', mapId })
+  createInformation = (name: string) => this.requestCardIntent({ kind: 'create-project', project: createProject(name) })
+  afterDetails = (run: () => Promise<void>, onStay?: () => void) => this.requestCardIntent({ kind: 'action', run, onStay })
+  beginInformationEdit = () => {
+    const info = this.state.information
+    if (!info || !this.isPreparation() || this.busy() || this.detailsSaving()) return
+    this.update({ cardMode: 'edit', information: { ...info, draft: { name: info.name, document: structuredClone(info.document), assets: [], phase: 'dirty' } } })
+  }
+  editInformation = (change: Partial<{ name: string; document: RichDocument }>) => {
+    const info = this.state.information
+    if (!info?.draft || (info.kind !== 'new-project' && !this.isPreparation()) || this.busy() || this.detailsSaving()) return
+    this.update({ information: { ...info, draft: { ...info.draft, ...change, phase: 'dirty', error: undefined } } })
+  }
+  cancelInformationEdit = () => {
+    if (this.detailsSaving() || this.state.imagePending) return
+    const info = this.state.information
+    this.update({ information: info?.kind === 'new-project' ? undefined : info && { ...info, draft: undefined }, cardMode: 'view', imageError: undefined })
+  }
+  addInformationDraftAsset = (asset: Asset) => {
+    const info = this.state.information
+    if (info?.draft && asset.projectId === info.projectId) this.update({ information: { ...info, draft: { ...info.draft, assets: [...info.draft.assets, asset] } } })
+  }
+  getImageProjectId = () => this.state.information?.kind === 'new-project' ? this.state.information.projectId : this.getProjectId()
+  saveInformation = (): Promise<void> => {
+    if (this.informationWork) return this.informationWork
+    const info = this.state.information; const draft = info?.draft
+    if (!info || !draft || !this.informationRepository || this.state.imagePending || this.busy() || (info.kind !== 'new-project' && !this.isPreparation())) return Promise.resolve()
+    if (!draft.name.trim()) { this.update({ information: { ...info, draft: { ...draft, phase: 'error', error: 'Укажите название проекта.' } } }); return Promise.resolve() }
+    this.update({ information: { ...info, draft: { ...draft, phase: 'saving', error: undefined } } })
+    this.informationWork = (async () => {
+      try {
+        const fields = { name: draft.name.trim(), document: draft.document, mapId: info.mapId }
+        if (info.kind === 'new-project') await this.projects.adoptProject(() => this.informationRepository!.create({ ...info.project!, name: fields.name, context: fields.document }, draft.assets))
+        else await this.projects.mutateProject((project) => this.informationRepository!.save(project, fields, draft.assets))
+        this.update({ information: { ...info, kind: info.kind === 'new-project' ? 'project' : info.kind, name: fields.name, document: structuredClone(fields.document), draft: undefined, assets: { ...info.assets, ...Object.fromEntries(draft.assets.map((a) => [a.id,a])) } }, cardMode: 'view', imageError: undefined })
+      } catch (error) {
+        this.update({ information: { ...info, draft: { ...draft, phase: 'error', error: error instanceof Error ? error.message : 'Не удалось сохранить документ.' } } })
+      } finally { this.informationWork = undefined }
+    })()
+    return this.informationWork
   }
   getProjectId = () => this.projects.getSnapshot().project?.id
   saveDetails = (includeErrors = true): Promise<void> => {

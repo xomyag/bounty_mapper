@@ -1,3 +1,4 @@
+import { legacyContextDocument } from './migrateProjectContext'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { createProject } from '../domain/project'
@@ -21,7 +22,7 @@ describe('IndexedDB projects', () => {
     expect(first.name).toBe('Первое приключение')
     expect(await repo.list()).toHaveLength(2)
     await repo.open(first.id)
-    const edited = await repo.save({ ...first, name: 'Новое название', contextMd: '# Контекст\nСекрет ведущего' })
+    const edited = await repo.save({ ...first, name: 'Новое название', context: legacyContextDocument('# Контекст\nСекрет ведущего') })
     const reloaded = new IndexedDbProjectRepository(() => factory)
     expect(await reloaded.restore()).toEqual(edited)
     expect(edited.revision).toBe(2)
@@ -36,7 +37,7 @@ describe('IndexedDB projects', () => {
       if (this.name === 'settings') throw new DOMException('Нет места', 'QuotaExceededError')
       return put.apply(this, args)
     })
-    await expect(repo.save({ ...saved, contextMd: 'Несохранённый текст' })).rejects.toThrow('Нет места')
+    await expect(repo.save({ ...saved, context: legacyContextDocument('Несохранённый текст') })).rejects.toThrow('Нет места')
     expect(await repo.restore()).toEqual(saved)
     expect(await repo.list()).toEqual([saved])
   })
@@ -64,8 +65,8 @@ describe('IndexedDB projects', () => {
     const saved = await repo.save(createProject('Общий проект'))
     const other = new IndexedDbProjectRepository(() => factory)
     const results = await Promise.allSettled([
-      repo.save({ ...saved, contextMd: 'Первая вкладка' }),
-      other.save({ ...saved, contextMd: 'Вторая вкладка' }),
+      repo.save({ ...saved, context: legacyContextDocument('Первая вкладка') }),
+      other.save({ ...saved, context: legacyContextDocument('Вторая вкладка') }),
     ])
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
     expect(results.find((r) => r.status === 'rejected')).toMatchObject({ reason: expect.any(RevisionConflictError) })

@@ -1,3 +1,4 @@
+import { emptyDocument } from '../domain/richText'
 import type { MapImage, MapImageRepository, MapImageResult } from '../application/mapImageRepository'
 import { RevisionConflictError } from '../application/projectRepository'
 import type { Asset, ImagePlacement, Map, Project } from '../domain/project'
@@ -56,7 +57,7 @@ export class IndexedDbMapImageRepository implements MapImageRepository {
           width: asset.pixelWidth, height: asset.pixelHeight, rotation: 0, order: 0, locked: true, visible: true,
         }
         const map: Map = {
-          ...(previous.map ?? { id: placement.mapId, projectId: project.id, name: 'Карта 1', notesMd: '', order: 0 }),
+          ...(previous.map ?? { id: placement.mapId, projectId: project.id, name: 'Карта 1', description: emptyDocument(), order: 0 }),
           coordinateBounds: { x: placement.x, y: placement.y, width: placement.width, height: placement.height },
         }
         await requestResult(tx.objectStore('assets').add(asset))
@@ -71,7 +72,9 @@ export class IndexedDbMapImageRepository implements MapImageRepository {
         const remaining = await requestResult(tx.objectStore('imagePlacements').getAll()) as ImagePlacement[]
         const regions = await requestResult(tx.objectStore('regions').getAll()) as Region[]
         const entities = await requestResult(tx.objectStore('entities').getAll()) as Entity[]
-        const usedInText = regions.some((r) => [...documentAssetIds(r.gmNotes), ...documentAssetIds(r.playerDescription)].includes(previous.background!.asset.id)) || entities.some((e) => documentAssetIds(e.description).includes(previous.background!.asset.id))
+        const projects = await requestResult(projectStore.getAll()) as Project[]
+        const maps = await requestResult(tx.objectStore('maps').getAll()) as Map[]
+        const usedInText = [...projects.map((p) => p.context), ...maps.map((m) => m.description)].some((doc) => documentAssetIds(doc).includes(previous.background!.asset.id)) || regions.some((r) => [...documentAssetIds(r.gmNotes), ...documentAssetIds(r.playerDescription)].includes(previous.background!.asset.id)) || entities.some((e) => documentAssetIds(e.description).includes(previous.background!.asset.id))
         if (!usedInText && !remaining.some((item) => item.assetId === previous.background!.asset.id)) await requestResult(tx.objectStore('assets').delete(previous.background.asset.id))
       }
       await requestResult(projectStore.put(nextProject))

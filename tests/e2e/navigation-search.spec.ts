@@ -1,3 +1,4 @@
+import { finishProjectCreation } from './controls'
 import { clickMenuAction, control } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
@@ -56,8 +57,7 @@ async function seed(page: Page) {
   await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Навигация')
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
-  await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
-  await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
+  await finishProjectCreation(page)
   async function upload(color: string) {
     const png = await page.evaluate((color) => { const c = document.createElement('canvas'); c.width = 600; c.height = 400; const ctx = c.getContext('2d')!; ctx.fillStyle = color; ctx.fillRect(0, 0, 600, 400); return c.toDataURL().split(',')[1] }, color)
     await expect(control(page, 'Загрузить карту')).toBeEnabled()

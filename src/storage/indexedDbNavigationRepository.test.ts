@@ -1,3 +1,4 @@
+import { legacyContextDocument } from './migrateProjectContext'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { IndexedDbNavigationRepository } from './indexedDbNavigationRepository'
@@ -80,7 +81,7 @@ describe('Project maps and navigation storage', () => {
     const { factory, project, navigation, projects } = await setup()
     const db = new IndexedDb(() => factory)
     await db.transaction(['maps'], 'readwrite', async (tx) => {
-      for (let n = 0; n < MAX_PROJECT_MAPS; n++) await requestResult(tx.objectStore('maps').add({ id: `map-${n}`, projectId: project.id, name: `Карта ${n}`, notesMd: '', order: n, coordinateBounds: { x: 0, y: 0, width: 1000, height: 1000 } }))
+      for (let n = 0; n < MAX_PROJECT_MAPS; n++) await requestResult(tx.objectStore('maps').add({ id: `map-${n}`, projectId: project.id, name: `Карта ${n}`, description: legacyContextDocument(''), order: n, coordinateBounds: { x: 0, y: 0, width: 1000, height: 1000 } }))
     })
     expect(MAX_PROJECT_MAPS).toBe(BACKUP_LIMITS.maps)
     await expect(navigation.createMap(project, 'Лишняя')).rejects.toThrow(String(BACKUP_LIMITS.maps))

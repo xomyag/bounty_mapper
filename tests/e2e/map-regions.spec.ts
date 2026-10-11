@@ -1,3 +1,4 @@
+import { finishProjectCreation } from './controls'
 import { clickMenuAction } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
@@ -14,8 +15,7 @@ async function seed(page: Page) {
   await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Карта с областями')
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
-  await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
-  await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
+  await finishProjectCreation(page)
   const png = await page.evaluate(() => {
     const canvas = document.createElement('canvas'); canvas.width = 400; canvas.height = 300
     const ctx = canvas.getContext('2d')!; ctx.fillStyle = '#466778'; ctx.fillRect(0, 0, 400, 300)

@@ -1,3 +1,4 @@
+import { finishProjectCreation } from './controls'
 import { clickMenuAction } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
@@ -21,8 +22,7 @@ async function seed(page: Page) {
   await clickMenuAction(page, 'Проекты')
   await page.getByLabel('Название нового проекта').fill('Карточки')
   await page.getByRole('button', { name: 'Создать', exact: true }).click()
-  await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве')
-  await page.getByRole('button', { name: 'Закрыть окно проекта' }).click()
+  await finishProjectCreation(page)
   const png = await page.evaluate(() => {
     const canvas = document.createElement('canvas'); canvas.width = 400; canvas.height = 300
     const ctx = canvas.getContext('2d')!; ctx.fillStyle = '#466778'; ctx.fillRect(0, 0, 400, 300)
@@ -200,7 +200,7 @@ test('pastes cleaned HTML/plain text and a screenshot; assets survive failed wri
   const downloading = page.waitForEvent('download'); await clickMenuAction(page, 'Экспорт проекта')
   const path = info.outputPath('visual-details.zip'); await (await downloading).saveAs(path)
   const entries = unzipSync(new Uint8Array(await readFile(path)))
-  expect(JSON.parse(new TextDecoder().decode(entries['manifest.json'])).formatVersion).toBe(7)
+  expect(JSON.parse(new TextDecoder().decode(entries['manifest.json'])).formatVersion).toBe(8)
   await page.getByLabel('Архив проекта', { exact: true }).setInputFiles(path)
   await expect(page.getByText('Копия проекта импортирована и сохранена на устройстве.')).toBeVisible()
   await page.getByRole('button', { name: 'Закрыть сообщение об архиве' }).click()

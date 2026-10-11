@@ -1,3 +1,4 @@
+import { legacyTestMetadata } from '../storage/backup/legacyTestMetadata'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { unzipSync, zipSync } from 'fflate'
@@ -33,8 +34,9 @@ async function seedV7(factory: IDBFactory, original: ProjectSnapshot) {
       for (const name of ['regions', 'markerPlacements', 'imagePlacements']) db.createObjectStore(name, { keyPath: 'id' }).createIndex('mapId', 'mapId', { unique: name === 'imagePlacements' })
       request.transaction!.objectStore('markerPlacements').createIndex('entityId', 'entityId')
     }; request.onsuccess = () => resolve(request.result) })
-    const tx = db.transaction(Array.from(db.objectStoreNames), 'readwrite'); tx.objectStore('projects').add(original.project)
-    for (const name of ['maps', 'regions', 'entities', 'imagePlacements', 'markerPlacements'] as const) for (const value of original[name]) { const row = { ...value } as Record<string, unknown>; if (name === 'regions') delete row.shortDescription; if (name === 'entities') delete row.checks; tx.objectStore(name).add(row) }
+    const legacy = structuredClone(original); legacyTestMetadata(legacy as unknown as Record<string, unknown>)
+    const tx = db.transaction(Array.from(db.objectStoreNames), 'readwrite'); tx.objectStore('projects').add(legacy.project)
+    for (const name of ['maps', 'regions', 'entities', 'imagePlacements', 'markerPlacements'] as const) for (const value of legacy[name]) { const row = { ...value } as Record<string, unknown>; if (name === 'regions') delete row.shortDescription; if (name === 'entities') delete row.checks; tx.objectStore(name).add(row) }
     original.assets.forEach((asset) => tx.objectStore('assets').add(asset)); await new Promise<void>((resolve) => { tx.oncomplete = () => resolve() }); db.close()
 }
 const check = { id: 'detect', condition: 'Обнаружить', ability: 'Внимательность', dc: '15', result: 'Тайное пояснение' }
@@ -106,6 +108,7 @@ describe('UI-02 persisted card content', () => {
     session.editDetails(r.id, oldContent); await session.saveDetails(); session.closeCard(); session.startMarker('enemy'); session.placeMarker({ x: 10, y: 20 }); await session.saveMarkerDetails()
     const original = await snapshot(); const files = unzipSync(await buildArchive(original))
     const doc = JSON.parse(new TextDecoder().decode(files['project.json']))
+    legacyTestMetadata(doc)
     for (const r of doc.regions) delete r.shortDescription; for (const e of doc.entities) delete e.checks
     files['project.json'] = new TextEncoder().encode(JSON.stringify(doc)); const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json'])); manifest.formatVersion = 6
     const entry = manifest.files.find((f: { path: string }) => f.path === 'project.json'); entry.byteSize = files['project.json'].length; entry.sha256 = await sha256(files['project.json']); files['manifest.json'] = new TextEncoder().encode(JSON.stringify(manifest))
@@ -113,7 +116,7 @@ describe('UI-02 persisted card content', () => {
     const factory = new IDBFactory()
     await seedV7(factory, original)
     expect(await new IndexedDbProjectBackupRepository(() => factory).snapshot(original.project.id)).toEqual(original)
-    const upgraded = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME); r.onsuccess = () => resolve(r.result) }); expect(upgraded.version).toBe(8)
+    const upgraded = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME); r.onsuccess = () => resolve(r.result) }); expect(upgraded.version).toBe(9)
     expect((await requestResult(upgraded.transaction('regions').objectStore('regions').get(r.id))).shortDescription).toBe(''); upgraded.close()
   })
   it('rolls back a v7 upgrade when an entity is invalid, retaining original region rows and version', async () => {
@@ -124,7 +127,8 @@ describe('UI-02 persisted card content', () => {
     expect(db.version).toBe(7); const tx = db.transaction(['regions', 'entities', 'projects'])
     const region = await requestResult(tx.objectStore('regions').get(old.regions[0].id))
     expect(region).not.toHaveProperty('shortDescription'); expect(region.gmNotes).toEqual(old.regions[0].gmNotes)
-    expect(await requestResult(tx.objectStore('projects').get(old.project.id))).toEqual(old.project)
+    const legacy = structuredClone(old); legacyTestMetadata(legacy as unknown as Record<string, unknown>)
+    expect(await requestResult(tx.objectStore('projects').get(old.project.id))).toEqual(legacy.project)
     expect(await requestResult(tx.objectStore('entities').get(old.entities[0].id))).not.toHaveProperty('checks'); db.close()
   })
 })

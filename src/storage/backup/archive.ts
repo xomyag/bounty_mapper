@@ -8,7 +8,7 @@ import { BACKUP_LIMITS, fileLimit, unpackZip, validPath } from './zip'
 import type { BackupLimits } from './zip'
 
 export const BACKUP_FORMAT = 'bounty-mapper-project'
-export const BACKUP_VERSION = 7
+export const BACKUP_VERSION = 8
 interface Manifest { format: string; formatVersion: number; createdAt: string; files: { path: string; byteSize: number; sha256: string }[] }
 export async function sha256(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(bytes))
@@ -22,7 +22,7 @@ function json(bytes: Uint8Array): unknown {
 function manifest(value: unknown, limits: BackupLimits): Manifest {
   if (!value || typeof value !== 'object') throw new Error('Некорректный manifest.json.')
   const m = value as Partial<Manifest>
-  if (m.format !== BACKUP_FORMAT || ![1, 2, 3, 4, 5, 6, BACKUP_VERSION].includes(m.formatVersion!)) throw new Error('Неизвестная версия или формат архива.')
+  if (m.format !== BACKUP_FORMAT || ![1, 2, 3, 4, 5, 6, 7, BACKUP_VERSION].includes(m.formatVersion!)) throw new Error('Неизвестная версия или формат архива.')
   if (Object.keys(m).some((key) => !['format', 'formatVersion', 'createdAt', 'files'].includes(key)) ||
       typeof m.createdAt !== 'string' || !Number.isFinite(Date.parse(m.createdAt)) || !Array.isArray(m.files) || m.files.length > limits.files - 1) throw new Error('Некорректный manifest.json.')
   const paths = new Set<string>()

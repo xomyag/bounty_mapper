@@ -3,6 +3,7 @@ import { PROJECT_SCHEMA_VERSION } from '../../domain/project'
 import { emptyRegionContent, MAX_REGIONS, MAX_REGION_VERTICES, validateRegion } from '../../domain/region'
 import type { Region } from '../../domain/region'
 import { documentAssetIds, validateRichDocument } from '../../domain/richText'
+import { migrateProjectContext, migrateMapDescription } from '../migrateProjectContext'
 import { markdownToDocument } from '../migrateRegionText'
 import type { ProjectSnapshot } from '../../application/projectBackupRepository'
 import { BACKUP_LIMITS } from './zip'
@@ -49,14 +50,14 @@ function bounds(value: unknown) {
 }
 function unique(items: { id: string }[]) { if (new Set(items.map((item) => item.id)).size !== items.length) return invalid() }
 
-export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_LIMITS, formatVersion = 7): BackupDocument {
+export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_LIMITS, formatVersion = 8): BackupDocument {
   const root = record(value, ['project', 'maps', 'imagePlacements', 'assets', ...(formatVersion === 1 ? [] : ['regions']), ...(formatVersion < 5 ? [] : ['entities', 'markerPlacements'])])
-  const p = record(root.project, ['id', 'name', 'contextMd', 'schemaVersion', 'revision', 'createdAt', 'updatedAt'])
-  if (p.schemaVersion !== PROJECT_SCHEMA_VERSION) throw new Error('Версия данных проекта не поддерживается.')
-  const project: Project = { id: string(p.id, true), name: string(p.name, true), contextMd: string(p.contextMd), schemaVersion: PROJECT_SCHEMA_VERSION, revision: integer(p.revision, 1), createdAt: date(p.createdAt), updatedAt: date(p.updatedAt) }
+  const p = record(root.project, ['id', 'name', formatVersion < 8 ? 'contextMd' : 'context', 'schemaVersion', 'revision', 'createdAt', 'updatedAt'])
+  if (p.schemaVersion !== (formatVersion < 8 ? 1 : PROJECT_SCHEMA_VERSION)) throw new Error('Версия данных проекта не поддерживается.')
+  const project: Project = { id: string(p.id, true), name: string(p.name, true), context: formatVersion < 8 ? migrateProjectContext({ ...p, contextMd: string(p.contextMd) }).context : (validateRichDocument(p.context), p.context), schemaVersion: PROJECT_SCHEMA_VERSION, revision: integer(p.revision, 1), createdAt: date(p.createdAt), updatedAt: date(p.updatedAt) }
   const maps: ProjectMap[] = array(root.maps, limits.maps).map((value) => {
-    const m = record(value, ['id', 'projectId', 'name', 'notesMd', 'order', 'coordinateBounds'])
-    return { id: string(m.id, true), projectId: string(m.projectId, true), name: string(m.name, true), notesMd: string(m.notesMd), order: integer(m.order), coordinateBounds: bounds(m.coordinateBounds) }
+    const m = record(value, ['id', 'projectId', 'name', formatVersion < 8 ? 'notesMd' : 'description', 'order', 'coordinateBounds'])
+    return { id: string(m.id, true), projectId: string(m.projectId, true), name: string(m.name, true), description: formatVersion < 8 ? migrateMapDescription({ ...m, notesMd: string(m.notesMd) }).description : (validateRichDocument(m.description), m.description), order: integer(m.order), coordinateBounds: bounds(m.coordinateBounds) }
   })
   const assets: AssetRecord[] = array(root.assets, limits.assets).map((value) => {
     const a = record(value, ['id', 'projectId', 'mimeType', 'byteSize', 'pixelWidth', 'pixelHeight', 'checksum', 'tags', 'path'], ['caption'])
@@ -114,6 +115,8 @@ export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_L
   unique(maps); unique(assets); unique(imagePlacements); unique(regions); unique(entities); unique(markerPlacements)
   if (new Set(assets.map((asset) => asset.path)).size !== assets.length || new Set(imagePlacements.map((placement) => placement.mapId)).size !== imagePlacements.length) return invalid()
   if (maps.some((map) => map.projectId !== project.id) || assets.some((asset) => asset.projectId !== project.id)) throw new Error('Карта или изображение относится к другому проекту.')
+  const projectAssets = [...documentAssetIds(project.context), ...maps.flatMap((map) => documentAssetIds(map.description))]
+  if (projectAssets.some((id) => !assets.some((asset) => asset.id === id))) throw new Error('Контекст ссылается на отсутствующее изображение.')
   const mapIds = new Set(maps.map((map) => map.id)); const assetIds = new Set(assets.map((asset) => asset.id))
   if (imagePlacements.some((placement) => !mapIds.has(placement.mapId) || !assetIds.has(placement.assetId))) throw new Error('В проекте есть ссылка на отсутствующую карту или изображение.')
   if (regions.some((region) => !mapIds.has(region.mapId))) throw new Error('Область ссылается на отсутствующую карту.')
@@ -128,10 +131,10 @@ export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_L
 export function documentFromSnapshot(snapshot: ProjectSnapshot): BackupDocument {
   const p = snapshot.project
   return validateDocument({
-    project: { id: p.id, name: p.name, contextMd: p.contextMd, schemaVersion: p.schemaVersion, revision: p.revision, createdAt: p.createdAt, updatedAt: p.updatedAt },
+    project: { id: p.id, name: p.name, context: p.context, schemaVersion: p.schemaVersion, revision: p.revision, createdAt: p.createdAt, updatedAt: p.updatedAt },
     entities: snapshot.entities.map((e) => ({ id: e.id, projectId: e.projectId, kind: e.kind, name: e.name, description: e.description, status: e.status, tags: [...e.tags], checks: e.checks.map((c) => ({ id: c.id, condition: c.condition, ability: c.ability, result: c.result, ...(c.dc === undefined ? {} : { dc: c.dc }) })) })),
     markerPlacements: snapshot.markerPlacements.map((m) => ({ id: m.id, mapId: m.mapId, entityId: m.entityId, x: m.x, y: m.y, color: m.color, locked: m.locked, order: m.order, regionIds: [...m.regionIds] })),
-    maps: snapshot.maps.map((m) => ({ id: m.id, projectId: m.projectId, name: m.name, notesMd: m.notesMd, order: m.order, coordinateBounds: { x: m.coordinateBounds.x, y: m.coordinateBounds.y, width: m.coordinateBounds.width, height: m.coordinateBounds.height } })),
+    maps: snapshot.maps.map((m) => ({ id: m.id, projectId: m.projectId, name: m.name, description: m.description, order: m.order, coordinateBounds: { x: m.coordinateBounds.x, y: m.coordinateBounds.y, width: m.coordinateBounds.width, height: m.coordinateBounds.height } })),
     imagePlacements: snapshot.imagePlacements.map((i) => ({ id: i.id, mapId: i.mapId, assetId: i.assetId, x: i.x, y: i.y, width: i.width, height: i.height, rotation: i.rotation, order: i.order, locked: i.locked, visible: i.visible })),
     regions: snapshot.regions.map((r) => ({ shortDescription: r.shortDescription, id: r.id, mapId: r.mapId, vertices: r.vertices.map((p) => ({ x: p.x, y: p.y })), order: r.order, number: r.number, title: r.title, titleCustomized: r.titleCustomized, color: r.color, fillOpacity: r.fillOpacity, gmNotes: r.gmNotes, playerDescription: r.playerDescription, tags: [...r.tags], checks: r.checks.map((c) => ({ id: c.id, condition: c.condition, ability: c.ability, result: c.result, ...(c.dc === undefined ? {} : { dc: c.dc }) })) })),
     assets: snapshot.assets.map((a, index) => ({ id: a.id, projectId: a.projectId, mimeType: a.mimeType, byteSize: a.byteSize, pixelWidth: a.pixelWidth, pixelHeight: a.pixelHeight, checksum: a.checksum, tags: [...a.tags], ...(a.caption === undefined ? {} : { caption: a.caption }), path: `assets/${index}.${a.mimeType === 'image/jpeg' ? 'jpg' : a.mimeType === 'image/png' ? 'png' : 'webp'}` })),

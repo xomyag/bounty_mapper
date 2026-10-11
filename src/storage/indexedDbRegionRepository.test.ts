@@ -1,3 +1,4 @@
+import { legacyTestMetadata } from './backup/legacyTestMetadata'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { independentCopy } from '../application/projectBackupRepository'
@@ -144,6 +145,7 @@ describe('Region persistence, migrations and archives', () => {
     const snapshot = await testSnapshot(); snapshot.regions = [region(snapshot.maps[0].id)]
     const files = unzipSync(await buildArchive(snapshot))
     const document = JSON.parse(new TextDecoder().decode(files['project.json']))
+    legacyTestMetadata(document)
     const r = document.regions[0]
     delete r.shortDescription; delete r.gmNotes; delete r.playerDescription; delete r.titleCustomized
     r.gmNotesMd = '# Старый зал\n**Тайна**'; r.playerDescriptionMd = '> Описание'
@@ -195,6 +197,7 @@ describe('Region persistence, migrations and archives', () => {
     const snapshot = await testSnapshot(); snapshot.regions = [region(snapshot.maps[0].id)]
     const files = unzipSync(await buildArchive(snapshot))
     const document = JSON.parse(new TextDecoder().decode(files['project.json']))
+    legacyTestMetadata(document)
     for (const region of document.regions) for (const field of ['shortDescription', 'gmNotes', 'playerDescription', 'titleCustomized', 'checks', 'tags']) delete region[field]
     files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
@@ -211,6 +214,7 @@ describe('Region persistence, migrations and archives', () => {
     const snapshot = await testSnapshot()
     const files = unzipSync(await buildArchive(snapshot))
     const document = JSON.parse(new TextDecoder().decode(files['project.json'])) as Record<string, unknown>
+    legacyTestMetadata(document)
     delete document.regions
     files['project.json'] = new TextEncoder().encode(JSON.stringify(document))
     const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json'])) as { formatVersion: number; files: { path: string; byteSize: number; sha256: string }[] }

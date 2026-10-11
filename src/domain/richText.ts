@@ -7,7 +7,7 @@ export function safeLink(value: unknown): string {
   try { return ['http:', 'https:', 'mailto:'].includes(new URL(value, 'https://bounty-mapper.invalid').protocol) ? value : '' } catch { return '' }
 }
 export function documentText(node: RichNode): string {
-  return node.text ?? (node.type === 'image' ? '[Изображение]' : (node.content ?? []).map(documentText).join(['doc', 'blockquote', 'bulletList', 'orderedList', 'table', 'tableRow'].includes(node.type) ? '\n' : ''))
+  return node.text ?? (node.type === 'hardBreak' ? '\n' : node.type === 'image' ? '[Изображение]' : (node.content ?? []).map(documentText).join(['doc', 'blockquote', 'bulletList', 'orderedList', 'table', 'tableRow'].includes(node.type) ? '\n' : ''))
 }
 export function documentHasContent(node: RichNode): boolean {
   return node.type === 'image' || !!node.text?.trim() || (node.content ?? []).some(documentHasContent)

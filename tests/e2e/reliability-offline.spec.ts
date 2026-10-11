@@ -1,3 +1,4 @@
+import { finishProjectCreation } from './controls'
 import { clickMenuAction, control } from './controls'
 import { createServer } from 'node:http'
 import { readFile, readdir } from 'node:fs/promises'
@@ -17,7 +18,7 @@ async function camera(page: Page) { return page.evaluate(() => { const s = (wind
 async function seed(page: Page, origin: string) {
   await page.goto(origin); await expect(page.getByText('Готово к работе без сети', { exact: true })).toBeVisible()
   await clickMenuAction(page, 'Проекты'); await page.getByLabel('Название нового проекта').fill('Надёжность'); await button(page, 'Создать').click()
-  await expect(page.getByRole('dialog').getByRole('status')).toHaveText('Сохранено на устройстве'); await button(page, 'Закрыть окно проекта').click()
+  await finishProjectCreation(page)
   const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 500; c.height = 400; c.getContext('2d')!.fillRect(0, 0, 500, 400); return c.toDataURL().split(',')[1] })
   await page.getByLabel('Файл изображения карты').setInputFiles({ name: 'map.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') }); await expect(button(page, 'Добавить область')).toBeEnabled()
   await page.evaluate(async (content) => {

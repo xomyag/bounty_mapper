@@ -1,3 +1,4 @@
+import { legacyContextDocument } from './migrateProjectContext'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { createProject } from '../domain/project'
@@ -84,7 +85,7 @@ describe('Map image storage', () => {
 
   it('rejects stale image changes after another tab saves the project', async () => {
     const saved = await maps.replace(project, testAsset(project.id))
-    await projects.save({ ...saved.project, contextMd: 'Новые заметки' })
+    await projects.save({ ...saved.project, context: legacyContextDocument('Новые заметки') })
     await expect(maps.replace(saved.project, testAsset(project.id, 800))).rejects.toThrow('другой вкладке')
     await expect(maps.remove(saved.project)).rejects.toThrow('другой вкладке')
     expect((await maps.load(project.id)).background?.asset.id).toBe(saved.image.background?.asset.id)
