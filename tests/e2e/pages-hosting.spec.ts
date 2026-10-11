@@ -1,7 +1,8 @@
 import { createServer } from 'node:http'
 import { readFile, readdir } from 'node:fs/promises'
 import { extname, join, relative } from 'node:path'
-import { test, expect, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from './testLocale'
 import { clickMenuAction, control } from './controls'
 
 async function checkFavicons(page: Page, root: string) {
@@ -48,7 +49,7 @@ test('Pages subpath serves resources, scopes the worker and reloads local docume
   })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const address = server.address()
-  if (!address || typeof address === 'string') throw new Error('Нет адреса тестового сервера')
+  if (!address || typeof address === 'string') throw new Error('Missing test server address')
   const origin = `http://127.0.0.1:${address.port}`
   const errors: string[] = []
   const paths: string[] = []
@@ -78,6 +79,11 @@ test('Pages subpath serves resources, scopes the worker and reloads local docume
     await expect(card).toContainText('Локальные данные под путём репозитория')
     await card.getByRole('button', { name: 'Редактировать', exact: true }).click()
     await expect(page.getByRole('textbox', { name: 'Общий контекст приключения', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Меню проекта', exact: true }).click()
+    await page.getByRole('menuitemradio', { name: 'English', exact: true }).click()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+    await page.getByRole('button', { name: 'Project menu', exact: true }).click()
+    await expect(page.getByRole('textbox', { name: 'General adventure context', exact: true })).toContainText('Локальные данные под путём репозитория')
     expect(paths.length).toBeGreaterThan(2)
     expect(paths.every((path) => path.startsWith(base))).toBe(true)
     expect(errors).toEqual([])

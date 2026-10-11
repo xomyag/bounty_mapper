@@ -3,7 +3,8 @@ import { clickMenuAction, control } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import { unzipSync } from 'fflate'
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test, configureRussianLocale } from './testLocale'
 import type { Page } from '@playwright/test'
 import type Konva from 'konva'
 import type { Camera } from '../../src/domain/viewport'
@@ -72,7 +73,7 @@ async function seed(page: Page) {
   await page.getByRole('button', { name: 'Переименовать карту', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Карты проекта', exact: true })).toContainText('Башня')
   await page.getByRole('button', { name: 'Карты проекта', exact: true }).click()
-  await page.getByRole('menuitem', { name: 'New map', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Новая карта', exact: true }).click()
   await page.getByLabel('Название новой карты').fill('Подвал')
   await page.getByRole('button', { name: 'Создать карту', exact: true }).click()
   await expect.poll(async () => (await stored(page)).maps.length).toBe(2)
@@ -122,25 +123,25 @@ async function centered(page: Page, point: { x: number; y: number }, scale: numb
 
 test('search and combined filters persist across tabs/close; multi-bound grouping counts placements once and opens one card', async ({ page }) => {
   const { a, regions, markers } = await seed(page); const before = await stored(page)
-  await nav(page).getByLabel('Поиск объектов').fill('12'); await expect(nav(page).getByText('Найдено: 1', { exact: true })).toBeVisible()
+  await nav(page).getByLabel('Поиск объектов').fill('12'); await expect(nav(page).getByText('Найден 1 результат', { exact: true })).toBeVisible()
   await nav(page).getByLabel('Поиск объектов').fill('ТАЙНА'); await nav(page).getByLabel('Область поиска').selectOption('project')
-  await expect(nav(page).getByText('Найдено: 2', { exact: true })).toBeVisible()
+  await expect(nav(page).getByText('Найдено 2 результата', { exact: true })).toBeVisible()
   await expect(nav(page).getByLabel('Фильтр по карте')).toBeHidden()
   await nav(page).getByRole('button', { name: /Фильтры и группировка/ }).click()
   await nav(page).getByLabel('Фильтр по тегу «Тайна»').check(); await nav(page).getByLabel('Фильтр по тегу «Север»').check()
-  await nav(page).getByLabel('Логика фильтра тегов').selectOption('all'); await expect(nav(page).getByText('Найдено: 1', { exact: true })).toBeVisible()
+  await nav(page).getByLabel('Логика фильтра тегов').selectOption('all'); await expect(nav(page).getByText('Найден 1 результат', { exact: true })).toBeVisible()
   await nav(page).getByLabel('Группировка результатов').selectOption('tag')
   await expect(nav(page).locator('[data-object-id="a1"]')).toHaveCount(2)
   await nav(page).getByRole('tab', { name: 'Маркеры', exact: true }).click(); await nav(page).getByLabel('Область поиска').selectOption('project')
   await nav(page).getByLabel('Тип маркера в поиске').selectOption('enemy'); await nav(page).getByLabel('Статус маркера в поиске').selectOption('hidden')
   await nav(page).getByLabel('Тип маркера в поиске').selectOption('boss'); await expect(nav(page).getByLabel('Статус маркера в поиске')).toHaveValue('hidden')
-  await expect(nav(page).getByText('Найдено: 0', { exact: true })).toBeVisible(); await nav(page).getByLabel('Тип маркера в поиске').selectOption('enemy')
+  await expect(nav(page).getByText('Найдено 0 результатов', { exact: true })).toBeVisible(); await nav(page).getByLabel('Тип маркера в поиске').selectOption('enemy')
   await nav(page).getByLabel('Фильтр по карте').selectOption(a.id); await nav(page).getByLabel('Связанная область в поиске').selectOption('a2')
   await nav(page).getByLabel('Фильтр по тегу «Тайна»').check(); await nav(page).getByLabel('Фильтр по тегу «Север»').check(); await nav(page).getByLabel('Логика фильтра тегов').selectOption('all')
-  await expect(nav(page).getByText('Найдено: 1', { exact: true })).toBeVisible()
-  await nav(page).getByLabel('Поиск объектов').fill('несуществующий'); await expect(nav(page).getByText('Найдено: 0', { exact: true })).toBeVisible(); await expect(nav(page).getByText(/Ничего не найдено/)).toBeVisible()
+  await expect(nav(page).getByText('Найден 1 результат', { exact: true })).toBeVisible()
+  await nav(page).getByLabel('Поиск объектов').fill('несуществующий'); await expect(nav(page).getByText('Найдено 0 результатов', { exact: true })).toBeVisible(); await expect(nav(page).getByText(/Ничего не найдено/)).toBeVisible()
   await nav(page).getByRole('button', { name: 'Сбросить фильтры', exact: true }).click(); await nav(page).getByLabel('Область поиска').selectOption('project'); await nav(page).getByLabel('Группировка результатов').selectOption('region')
-  await expect(nav(page).getByText('Найдено: 3', { exact: true })).toBeVisible()
+  await expect(nav(page).getByText('Найдено 3 результата', { exact: true })).toBeVisible()
   await expect(nav(page).locator('[data-object-id="m1"]')).toHaveCount(2); await expect(nav(page).getByRole('heading', { name: 'Без области', exact: true })).toBeVisible()
   await page.evaluate(() => { (window as unknown as TestWindow).originalCanvas = document.querySelector('canvas') })
   const scale = (await camera(page)).scale
@@ -161,7 +162,7 @@ test('search and combined filters persist across tabs/close; multi-bound groupin
 test('map creation and rename preserve typed names and existing data after a late write error, then retry atomically', async ({ page }) => {
   await seed(page); const before = await stored(page)
   await page.getByRole('button', { name: 'Карты проекта', exact: true }).click()
-  await page.getByRole('menuitem', { name: 'New map', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Новая карта', exact: true }).click()
   const create = page.getByRole('dialog', { name: 'Новая карта', exact: true })
   await create.getByLabel('Название новой карты').fill('Новая карта')
   const failWrites = async () => page.evaluate(() => { const w = window as unknown as TestWindow; w.originalPut = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function (...args) { if (this.name === 'projects') throw new Error('Нет места для карты'); return w.originalPut.apply(this, args) } })
@@ -248,7 +249,7 @@ test('header actions do not switch on rename/delete; confirmation, atomic failur
   await expect(page.getByRole('button', { name: 'Карты проекта', exact: true })).toContainText('Башня')
   await nav(page).getByRole('button', { name: /Фильтры и группировка/ }).click(); await expect(nav(page).getByLabel('Фильтр по карте')).toContainText('Нижний этаж')
   await nav(page).getByLabel('Область поиска').selectOption('project'); await nav(page).getByLabel('Фильтр по карте').selectOption(b.id)
-  await expect(canvas(page)).toHaveAttribute('data-map-id', a.id); await expect(nav(page).getByText('Найдено: 1', { exact: true })).toBeVisible()
+  await expect(canvas(page)).toHaveAttribute('data-map-id', a.id); await expect(nav(page).getByText('Найден 1 результат', { exact: true })).toBeVisible()
   expect(await camera(page)).toEqual(cameraA)
   await mapAction(page, 'Нижний этаж', 'Удалить')
   const deletion = page.getByRole('dialog', { name: 'Удаление карты', exact: true })
@@ -260,12 +261,12 @@ test('header actions do not switch on rename/delete; confirmation, atomic failur
   expect(await stored(page)).toEqual(renamed); expect(await imageData(page)).toEqual(images); expect(await camera(page)).toEqual(cameraA)
   await restoreWrites(page); await deletion.getByRole('button', { name: 'Удалить карту', exact: true }).click()
   await expect(deletion).toBeHidden(); await expect(canvas(page)).toHaveAttribute('data-map-id', a.id); expect(await camera(page)).toEqual(cameraA)
-  await expect(nav(page).getByLabel('Фильтр по карте')).toContainText('Карта удалена'); await expect(nav(page).getByText('Найдено: 0', { exact: true })).toBeVisible()
+  await expect(nav(page).getByLabel('Фильтр по карте')).toContainText('Карта удалена'); await expect(nav(page).getByText('Найдено 0 результатов', { exact: true })).toBeVisible()
   await nav(page).getByRole('button', { name: 'Сбросить фильтры', exact: true }).click(); await expect(nav(page).getByLabel('Фильтр по карте')).toHaveValue('')
   expect((await stored(page)).regions).toEqual(regions.filter((r) => r.mapId === a.id)); expect((await stored(page)).markers).toEqual(markers.filter((m) => m.mapId === a.id)); expect((await stored(page)).entities).toEqual(entities)
   expect((await imageData(page)).placements).toEqual(images.placements.filter((p) => p.mapId === a.id))
   // Re-create a destination to check deletion of the active map without an intermediate fit.
-  await page.getByRole('button', { name: 'Карты проекта', exact: true }).click(); await menu(page).getByRole('menuitem', { name: 'New map' }).click()
+  await page.getByRole('button', { name: 'Карты проекта', exact: true }).click(); await menu(page).getByRole('menuitem', { name: 'Новая карта' }).click()
   await page.getByLabel('Название новой карты').fill('Следующая'); await page.getByRole('button', { name: 'Создать карту', exact: true }).click()
   const next = (await stored(page)).maps.find((m) => m.name === 'Следующая')!
   await expect(canvas(page)).toHaveAttribute('data-map-id', next.id); await canvas(page).focus(); await page.keyboard.press('+'); await page.keyboard.press('ArrowLeft'); const cameraNext = await camera(page)
@@ -325,13 +326,14 @@ test('map menu is available by keyboard and touch, and dirty switching closes on
   const { a, b } = await seed(page)
   await nav(page).getByRole('tab', { name: 'Маркеры', exact: true }).click(); await nav(page).locator('[data-object-id="m1"]').click(); await card(page).getByRole('button', { name: 'Редактировать', exact: true }).click(); await page.getByLabel('Название маркера').fill('Несохранённый страж')
   const trigger = page.getByRole('button', { name: 'Карты проекта', exact: true }); await trigger.focus(); await trigger.press('ArrowDown')
-  await expect(menu(page).getByRole('menuitem', { name: 'New map' })).toBeDisabled(); await expect(menu(page).getByRole('menuitem', { name: 'Перейти на карту «Башня»' })).toBeFocused()
+  await expect(menu(page).getByRole('menuitem', { name: 'Новая карта' })).toBeDisabled(); await expect(menu(page).getByRole('menuitem', { name: 'Перейти на карту «Башня»' })).toBeFocused()
   await page.keyboard.press('End'); await expect(menu(page).getByRole('menuitem', { name: 'Перейти на карту «Подвал»' })).toBeFocused(); await page.keyboard.press('Enter')
   const prompt = page.getByRole('dialog', { name: 'Несохранённые изменения маркера' }); await expect(prompt).toBeVisible(); await expect(canvas(page)).toHaveAttribute('data-map-id', a.id)
   await prompt.getByRole('button', { name: 'Продолжить редактирование' }).click(); await expect(page.getByLabel('Название маркера')).toHaveValue('Несохранённый страж')
   await switchMapRequest(page, b.id); await prompt.getByRole('button', { name: 'Отбросить изменения' }).click(); await expect(canvas(page)).toHaveAttribute('data-map-id', b.id); await expect(page.locator('.region-card')).toHaveCount(0)
   expect((await stored(page)).entities.find((e) => e.id === 'e1')!.name).toBe('Страж башни')
   const touch = await browser.newContext({ hasTouch: true, baseURL: new URL(page.url()).origin, viewport: { width: 640, height: 900 } })
+  await configureRussianLocale(touch)
   try {
     const touchPage = await touch.newPage(); const { a: touchMap } = await seed(touchPage)
     await touchPage.getByRole('button', { name: 'Карты проекта', exact: true }).tap()

@@ -1,3 +1,4 @@
+import { localizedFailure } from '../localizedTestFailure'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { ProjectSession } from './projectSession'
@@ -88,7 +89,7 @@ describe('UI-03 shared information and storage', () => {
     expect(documentText(session.getSnapshot().information!.document)).toBe('Первый этаж')
     expect(session.getSnapshot().information?.mapId).toBe(saved.maps[0].id)
     const before = session.getSnapshot()
-    expect(() => session.adoptMap({ mapId: saved.maps[1].id, kind: 'region', id: 'missing' }, { ...before, assets: [], map: saved.maps[1] })).toThrow('больше не существует')
+    expect(localizedFailure(() => session.adoptMap({ mapId: saved.maps[1].id, kind: 'region', id: 'missing' }, { ...before, assets: [], map: saved.maps[1] }))).toThrow('больше не существует')
     expect(session.getSnapshot()).toBe(before)
   })
   it('cancels staged creation without records or orphan images; failed final write is atomic', async () => {
@@ -151,7 +152,7 @@ describe('UI-03 shared information and storage', () => {
   })
   it('rolls back a late deletion failure, including assets and project selection', async () => {
     const { repository, projects, original, snapshot } = await setup(); const before = await snapshot()
-    const spy = failStore('delete', 'projects'); await expect(projects.remove(original.project)).rejects.toThrow('Недостаточно места'); spy.mockRestore()
+    const spy = failStore('delete', 'projects'); await expect(localizedFailure(projects.remove(original.project))).rejects.toThrow('Недостаточно места'); spy.mockRestore()
     expect(await snapshot()).toEqual(before); expect(await repository.restore()).toEqual(original.project); expect(projects.getSnapshot().loading).toBe(false)
     await projects.remove(original.project); expect(await repository.list()).toEqual([]); expect(await repository.restore()).toBeUndefined(); expect(projects.getSnapshot().project).toBeUndefined()
   })
@@ -173,7 +174,7 @@ describe('UI-03 shared information and storage', () => {
     for (const kind of ['project', 'map']) {
       const invalid = await snapshot(); const doc = { type: 'doc' as const, content: [{ type: 'image', attrs: { assetId: 'missing', alt: '' } }] }
       if (kind === 'project') invalid.project.context = doc; else invalid.maps[0].description = doc
-      await expect(buildArchive(invalid)).rejects.toThrow('отсутствующее изображение')
+      await expect(localizedFailure(buildArchive(invalid))).rejects.toThrow('отсутствующее изображение')
     }
   })
   it('rolls back a failed v8 context migration and retains the original database version', async () => {
@@ -185,7 +186,7 @@ describe('UI-03 shared information and storage', () => {
       for (const name of ['regions', 'imagePlacements', 'markerPlacements']) r.result.createObjectStore(name, { keyPath: 'id' }).createIndex('mapId', 'mapId')
     }; r.onsuccess = () => resolve(r.result) })
     await new Promise<void>((resolve) => { const tx = db.transaction(['projects', 'maps'], 'readwrite'); tx.objectStore('projects').add(legacy.project); tx.objectStore('maps').add({ ...legacy.maps[0], notesMd: null }); tx.oncomplete = () => resolve() }); db.close()
-    await expect(new IndexedDbProjectRepository(() => factory).list()).rejects.toThrow('Исходные данные не изменены')
+    await expect(localizedFailure(new IndexedDbProjectRepository(() => factory).list())).rejects.toThrow('Исходные данные не изменены')
     const unchanged = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME); r.onsuccess = () => resolve(r.result) })
     expect(unchanged.version).toBe(8); expect(await requestResult(unchanged.transaction('projects').objectStore('projects').get(original.project.id))).toEqual(legacy.project); unchanged.close()
   })

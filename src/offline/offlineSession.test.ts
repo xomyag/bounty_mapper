@@ -1,3 +1,4 @@
+import { localize } from '../i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OfflineSession } from './offlineSession'
 
@@ -15,7 +16,7 @@ describe('Offline cache and explicit updates', () => {
     vi.stubGlobal('MessageChannel', Channel)
     const failed = browser(false); const session = new OfflineSession(() => true)
     await session.initialize(true, failed.api, '/')
-    expect(session.getSnapshot().phase).toBe('error'); expect(session.getSnapshot().message).toContain('не полностью')
+    expect(session.getSnapshot().phase).toBe('error'); expect(localize(session.getSnapshot().message)).toContain('не полностью')
     failed.worker.postMessage.mockImplementation((_message, ports) => ports?.[0]?.postMessage({ ready: true }))
     await session.checkUpdate(); expect(session.getSnapshot().phase).toBe('ready'); session.dispose()
   })
@@ -42,6 +43,6 @@ describe('Offline cache and explicit updates', () => {
     vi.stubGlobal('MessageChannel', Channel)
     const env = browser(); const session = new OfflineSession(() => true, vi.fn()); await session.initialize(true, env.api, '/')
     env.registration.waiting = { postMessage: () => { throw new Error('Вкладка недоступна') } }; await session.checkUpdate(); session.applyUpdate()
-    expect(session.getSnapshot().phase).toBe('error'); expect(session.getSnapshot().message).toContain('Вкладка недоступна'); session.dispose()
+    expect(session.getSnapshot().phase).toBe('error'); expect(localize(session.getSnapshot().message)).toContain('Вкладка недоступна'); session.dispose()
   })
 })

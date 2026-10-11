@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import { emptyDocument } from '../domain/richText'
 import type { NavigationRepository } from '../application/navigationRepository'
 import type { NavigationData } from '../domain/navigation'
@@ -27,21 +28,21 @@ export class IndexedDbNavigationRepository implements NavigationRepository {
       for (const entity of entities) validateEntity(entity)
       for (const marker of markers.flat()) {
         validateMarker(marker)
-        if (!entities.some((e) => e.id === marker.entityId) || marker.regionIds.some((id) => !regions.flat().some((r) => r.id === id && r.mapId === marker.mapId))) throw new Error('Некорректные ссылки маркера в навигации.')
+        if (!entities.some((e) => e.id === marker.entityId) || marker.regionIds.some((id) => !regions.flat().some((r) => r.id === id && r.mapId === marker.mapId))) throw new Error(message("ui.invalid.marker.references.in.navigation"))
       }
       const tagHistory = await requestResult(tx.objectStore('settings').get(`tagHistory:${projectId}`)) as string[] | undefined
       return { maps: maps.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)), regions: regions.flat(), entities, markers: markers.flat(), tagHistory: tagHistory ?? [] }
     })
   }
   private mutate(project: Project, name: string, mapId?: string) {
-    if (!name.trim() || name.length > 512) return Promise.reject(new Error('Укажите название карты длиной от 1 до 512 символов.'))
+    if (!name.trim() || name.length > 512) return Promise.reject(new Error(message("ui.enter.a.map.name.between.1.and.512.characters")))
     return this.db.transaction(['projects', 'maps'], 'readwrite', async (tx) => {
       const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
       if (stored.revision !== project.revision) throw new RevisionConflictError()
       const maps = await requestResult(tx.objectStore('maps').index('projectId').getAll(project.id)) as Map[]
       const previous = mapId ? maps.find((m) => m.id === mapId) : undefined
-      if (mapId && !previous) throw new Error('Карта не найдена в текущем проекте.')
-      if (!mapId && maps.length >= MAX_PROJECT_MAPS) throw new Error(`Допустимо не более ${MAX_PROJECT_MAPS} карт проекта.`)
+      if (mapId && !previous) throw new Error(message("ui.map.not.found.in.the.current.project"))
+      if (!mapId && maps.length >= MAX_PROJECT_MAPS) throw new Error(message("ui.a.project.can.have.at.most.value.maps", { p0: MAX_PROJECT_MAPS }))
       const map: Map = previous ? { ...previous, name: name.trim() } : { id: crypto.randomUUID(), projectId: project.id, name: name.trim(), description: emptyDocument(), order: Math.max(-1, ...maps.map((m) => m.order)) + 1, coordinateBounds: { x: 0, y: 0, width: 1000, height: 1000 } }
       const next = { ...stored, revision: stored.revision + 1, updatedAt: new Date().toISOString() }
       await requestResult(tx.objectStore('maps').put(map)); await requestResult(tx.objectStore('projects').put(next))
@@ -55,7 +56,7 @@ export class IndexedDbNavigationRepository implements NavigationRepository {
       const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
       if (stored.revision !== project.revision) throw new RevisionConflictError()
       const maps = await requestResult(tx.objectStore('maps').index('projectId').getAll(project.id)) as Map[]
-      if (!maps.some((map) => map.id === mapId)) throw new Error('Карта не найдена в текущем проекте.')
+      if (!maps.some((map) => map.id === mapId)) throw new Error(message("ui.map.not.found.in.the.current.project"))
       const regions = (await Promise.all(maps.map((map) => requestResult(tx.objectStore('regions').index('mapId').getAll(map.id)) as Promise<Region[]>))).flat()
       const placements = (await Promise.all(maps.map((map) => requestResult(tx.objectStore('imagePlacements').index('mapId').getAll(map.id)) as Promise<ImagePlacement[]>))).flat()
       const markers = await requestResult(tx.objectStore('markerPlacements').index('mapId').getAll(mapId)) as MarkerPlacement[]

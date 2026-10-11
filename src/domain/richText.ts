@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 export interface RichMark { type: string; attrs?: Record<string, unknown> }
 export interface RichNode { type: string; text?: string; attrs?: Record<string, unknown>; marks?: RichMark[]; content?: RichNode[] }
 export interface RichDocument extends RichNode { type: 'doc'; content: RichNode[] }
@@ -6,8 +7,8 @@ export function safeLink(value: unknown): string {
   if (typeof value !== 'string' || [...value].some((c) => c.charCodeAt(0) < 33 || c.charCodeAt(0) === 127)) return ''
   try { return ['http:', 'https:', 'mailto:'].includes(new URL(value, 'https://bounty-mapper.invalid').protocol) ? value : '' } catch { return '' }
 }
-export function documentText(node: RichNode): string {
-  return node.text ?? (node.type === 'hardBreak' ? '\n' : node.type === 'image' ? '[Изображение]' : (node.content ?? []).map(documentText).join(['doc', 'blockquote', 'bulletList', 'orderedList', 'table', 'tableRow'].includes(node.type) ? '\n' : ''))
+export function documentText(node: RichNode, imageLabel = '[Image]'): string {
+  return node.text ?? (node.type === 'hardBreak' ? '\n' : node.type === 'image' ? imageLabel : (node.content ?? []).map((child) => documentText(child, imageLabel)).join(['doc', 'blockquote', 'bulletList', 'orderedList', 'table', 'tableRow'].includes(node.type) ? '\n' : ''))
 }
 export function documentHasContent(node: RichNode): boolean {
   return node.type === 'image' || !!node.text?.trim() || (node.content ?? []).some(documentHasContent)
@@ -22,7 +23,7 @@ export function remapDocumentAssets(doc: RichDocument, ids: Map<string, string>)
 }
 
 export function validateRichDocument(value: unknown): asserts value is RichDocument {
-  const invalid = (): never => { throw new Error('Некорректный формат текста области.') }
+  const invalid = (): never => { throw new Error(message("ui.invalid.region.text.format")) }
   const blocks = ['paragraph', 'heading', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'horizontalRule', 'table', 'image']
   const children: Record<string, string[]> = { doc: blocks, paragraph: ['text', 'hardBreak'], heading: ['text', 'hardBreak'], codeBlock: ['text'], bulletList: ['listItem'], orderedList: ['listItem'], listItem: blocks, blockquote: blocks, table: ['tableRow'], tableRow: ['tableCell', 'tableHeader'], tableCell: blocks, tableHeader: blocks }
   const attributes: Record<string, string[]> = { heading: ['level'], codeBlock: ['language'], orderedList: ['start', 'type'], tableCell: ['colspan', 'rowspan', 'colwidth', 'align'], tableHeader: ['colspan', 'rowspan', 'colwidth', 'align'], image: ['assetId', 'alt'] }

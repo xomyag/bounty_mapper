@@ -1,3 +1,4 @@
+import { message } from '../../i18n/message'
 import type { ProjectAccess } from '../../application/projectAccess'
 
 /** A project lock lives with its tab; the browser also releases it on a crash. */
@@ -27,10 +28,10 @@ export class BrowserProjectAccess implements ProjectAccess {
     if (!projectId) return
     this.projectId = projectId
     let manager: LockManager | undefined
-    try { manager = this.manager() } catch (error) { this.reason = `Не удалось получить право редактирования. ${error instanceof Error ? error.message : ''}`; return }
+    try { manager = this.manager() } catch (error) { this.reason = message("ui.could.not.acquire.editing.access.value", { p0: error instanceof Error ? error.message : '' }); return }
     if (!manager) {
       // Older/insecure browsers retain the existing transactional revision check.
-      this.owned = true; this.reason = 'Web Locks недоступен: конфликты вкладок защищены проверкой версии проекта.'
+      this.owned = true; this.reason = message("ui.web.locks.is.unavailable.cross.tab.conflicts.are.protected")
       return
     }
     let resolve!: () => void
@@ -42,10 +43,10 @@ export class BrowserProjectAccess implements ProjectAccess {
       this.owned = true; this.unlock = release; resolve()
       await held
     })).catch((error: unknown) => {
-      if (generation === this.generation) { this.owned = false; this.reason = `Не удалось получить право редактирования. ${error instanceof Error ? error.message : ''}` }
+      if (generation === this.generation) { this.owned = false; this.reason = message("ui.could.not.acquire.editing.access.value", { p0: error instanceof Error ? error.message : '' }) }
       resolve()
     })
     await acquired
-    if (generation === this.generation && !this.owned && !this.reason) this.reason = 'Проект редактируется в другой вкладке. Здесь доступен просмотр. Закройте её или освободите редактирование, затем получите право здесь.'
+    if (generation === this.generation && !this.owned && !this.reason) this.reason = message("ui.this.project.is.being.edited.in.another.tab.this")
   }
 }

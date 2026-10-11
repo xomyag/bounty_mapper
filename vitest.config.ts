@@ -3,5 +3,5 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  test: { include: ['src/**/*.test.{ts,tsx}'], restoreMocks: true },
+  test: { include: ['src/**/*.test.{ts,tsx}'], restoreMocks: true, setupFiles: ['src/testLocale.ts'] },
 })

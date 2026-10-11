@@ -1,3 +1,5 @@
+import { localizedFailure } from '../localizedTestFailure'
+import { localize } from '../i18n'
 import { legacyTestMetadata } from '../storage/backup/legacyTestMetadata'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
@@ -87,7 +89,7 @@ describe('UI-02 persisted card content', () => {
       expect((await snapshot()).entities).toEqual([])
     }
     session.editMarkerDetails({ ...draft.fields, checks: [{ ...check, condition: ' ' }] }); await session.saveMarkerDetails()
-    expect(session.getSnapshot().markerDraft!.error).toContain('назначение')
+    expect(localize(session.getSnapshot().markerDraft!.error)).toContain('назначение')
     session.editMarkerDetails({ ...draft.fields, checks: [check] })
     vi.spyOn(repository, 'save').mockRejectedValueOnce(new Error('Нет места')); await session.saveMarkerDetails()
     expect((await snapshot()).markerPlacements).toEqual([]); expect(session.getSnapshot().markerDraft!.fields.checks).toEqual([check])
@@ -143,7 +145,7 @@ describe('UI-02 persisted card content', () => {
   it('rolls back a v7 upgrade when an entity is invalid, retaining original region rows and version', async () => {
     const { session, snapshot } = await setup(); await area(session); session.startMarker('enemy'); session.placeMarker({ x: 5, y: 5 }); await session.saveMarkerDetails()
     const old = await snapshot(); old.entities[0].name = ''; const factory = new IDBFactory(); await seedV7(factory, old)
-    await expect(new IndexedDbProjectBackupRepository(() => factory).snapshot(old.project.id)).rejects.toThrow('перенести сущности')
+    await expect(localizedFailure(new IndexedDbProjectBackupRepository(() => factory).snapshot(old.project.id))).rejects.toThrow('перенести сущности')
     const db = await new Promise<IDBDatabase>((resolve) => { const r = factory.open(DATABASE_NAME); r.onsuccess = () => resolve(r.result) })
     expect(db.version).toBe(7); const tx = db.transaction(['regions', 'entities', 'projects'])
     const region = await requestResult(tx.objectStore('regions').get(old.regions[0].id))

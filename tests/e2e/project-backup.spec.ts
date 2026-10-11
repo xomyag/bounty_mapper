@@ -8,7 +8,8 @@ import { clickMenuAction, control } from './controls'
 import { readFile } from 'node:fs/promises'
 import { Buffer } from 'node:buffer'
 import { zipSync, unzipSync } from 'fflate'
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './testLocale'
 import type { Page } from '@playwright/test'
 
 async function seed(page: Page) {

@@ -1,36 +1,38 @@
 # Bounty Mapper
 
-Рабочее пространство ведущего настольной ролевой игры. Продуктовые требования и порядок задач: [docs/product-design.md](docs/product-design.md).
+A tabletop RPG game master's workspace. Product requirements and task order: [docs/product-design.md](docs/product-design.md).
 
-Реализованы **BM-001…009**: React + TypeScript + Vite, локальные проекты в IndexedDB, карта на Konva/react-konva, резервные копии ZIP, полигональные области, маркеры с единой панелью карточки и навигация с поиском. Через «Проекты» можно создать или открыть приключение; через «Контекст приключения» — просмотреть и изменить название и форматированные заметки; через «Описание карты» — отдельное описание этажа; через «Загрузить карту» — добавить PNG, JPEG или WebP. «Добавить область» запускает рисование контура. «Добавить маркер» предлагает тип и размещение на карте: новая карточка остаётся черновиком до общей кнопки «Сохранить». Клик или тап открывает карточку, hover показывает краткое описание и теги области либо название, тип, статус и теги маркера. Меню справа в хедере показывает текущую карту: `New map` создаёт новую, строки карт позволяют перейти, переименовать или удалить с подтверждением. «Навигация и поиск» открывает компактный поиск объектов с раскрываемыми фильтрами. Подсказки тегов общие для карточек проекта. «Экспорт проекта» скачивает все карты, объекты и оригиналы изображений; «Импорт проекта» создаёт независимую копию. После перезагрузки восстанавливается проект, открывается первая карта; навигация и карточки закрыты.
+Implemented **BM-001…009**: React + TypeScript + Vite, local IndexedDB projects, Konva/react-konva maps, ZIP backups, polygon regions, markers with a single card panel and searchable navigation. Use Projects to create/open an adventure, Adventure context to view/edit its name and formatted notes, Map description for independent floor notes, and Upload map for PNG/JPEG/WebP. Add region starts an outline. Add marker offers a type/position; its card remains a draft until Save. Click/tap opens cards; hover shows region summary/tags or marker name/type/status/tags. The right-header menu shows the current map: New map creates, separate row actions navigate/rename/delete with confirmation. Navigation and search provides compact search and expandable filters. Tag suggestions are project-wide. Export project includes every map/object/original image; Import project creates an independent copy. Reload restores the selected project and opens its first map with navigation/cards closed.
 
-**BM-009 принята вручную и перенесена в main.** Переключатель «Подготовка» / «Игра» в хедере сохраняет режим проекта после reload. В игре геометрия защищена, карты и поиск доступны, единая карточка показывает сохранённые данные, форматирование и изображения. В просмотре маркера можно сразу менять статус и отдельно отменять его изменения. Переход с черновиком требует сохранить, отбросить или продолжить редактирование; камера и поиск не сбрасываются. Подробности и решение о совместимости: [docs/play-mode.md](docs/play-mode.md).
+**BM-009 manually accepted and merged into main.** Preparation / Play in the header restores the project mode after reload. Play protects geometry while retaining maps/search and saved formatted/image cards. Marker view supports immediate status changes and separate status undo. Draft transitions require save/discard/continue without camera/search resets. [Behavior/compatibility](docs/play-mode.md).
 
-**BM-010 включена в перенос всего снимка в main по явному разрешению пользователя вместе с принятой UI-01.** Надёжность хранения, офлайн-запуск и повтор после ошибок сохранены; Web Locks временно выключены, revision-проверки действуют. [Ограничения BM-010](docs/reliability-offline.md).
+**BM-010 joined the full main snapshot by explicit user authorization with accepted UI-01.** Reliability, offline startup and failure retries remain; Web Locks are temporarily disabled while revision checks stay active. [BM-010 limitations](docs/reliability-offline.md).
 
-**UI-01 принята вручную и перенесена в main обычным merge.** Хедер: бургер, имя проекта с «i» для контекста, режим, поиск, меню карты справа. Проекты/импорт/экспорт и офлайн-обновление доступны в бургере; фон — в меню карты. Создание, undo/redo и камера находятся в отдельных группах поверх карты. Весь контур можно двигать только при редактировании его карточки; перемещение входит в общий Save/Cancel и не двигает маркеры. Добавлена `lucide-react` 1.55.0 для единых иконок управления. [Поведение, версии и ручной сценарий UI-01](docs/ui-controls.md).
+**UI-01 manually accepted and normally merged into main.** Header: burger, project with context information button, mode, search, map menu. Projects/import/export/offline updates are in the burger; background actions in the map menu. Creation, undo/redo and camera have separate overlay groups. Whole regions move only while their cards are editing; movement joins Save/Cancel and does not move markers. lucide-react 1.55.0 provides consistent control icons. [Behavior/versions/manual steps](docs/ui-controls.md).
 
-**UI-02 принята вручную, зафиксирована (`1ad2792`) и перенесена в main обычным merge (`cd91543`).** Общая регулируемая ширина карточки, компактная панель форматирования, краткое описание области, общие плашки тегов в hover и «Ловушка» с проверками и игровыми статусами. Новых зависимостей нет. Версии UI-02: **IndexedDB 8 / Project 1 / ZIP 7**, старые данные мигрируют без потери текста и изображений. [Поведение, совместимость и ручной сценарий UI-02](docs/ui-cards-tooltips-traps.md).
+**UI-02 accepted, committed (`1ad2792`), normally merged (`cd91543`).** Shared resizable card width, compact formatting, region summary, shared hover tag badges and Trap checks/game statuses. No new dependencies. UI-02 versions: **IndexedDB 8 / Project 1 / ZIP 7** with lossless text/image migration. [Behavior/compatibility/manual steps](docs/ui-cards-tooltips-traps.md).
 
-**UI-03 вместе с исправлениями принята вручную.** Контекст приключения и независимое описание каждой карты используют общий визуальный редактор, одну правую панель и черновик Save/Cancel. Создание с контекстом и изображениями атомарно; отмена не создаёт проект. В списке проектов добавлено отдельное меню удаления с подтверждением и откатом при ошибке. Текущие версии: **IndexedDB 9 / Project 2 / ZIP 8**, совместимость со старыми данными сохранена. [Поведение и миграция UI-03](docs/ui-project-map-context.md).
+**UI-03 and fixes manually accepted.** Adventure context and independent map descriptions use the same visual editor/right panel/Save-Cancel draft. Creation with text/images is atomic; cancel leaves no project. Project-list menus support confirmed deletion with rollback. Current versions: **IndexedDB 9 / Project 2 / ZIP 8**, retaining legacy compatibility. [Behavior/migration](docs/ui-project-map-context.md).
 
-## Требования
+**Localization and the empty-map upload state were manually accepted on October 12, 2026; the user authorized merging and production publication.** English is default without a saved preference; English / Русский in the burger switches immediately and restores after reload. Labels, types/statuses, editor, confirmations/errors and offline UI are localized. User names/context/descriptions/tags/checks/imported text are unchanged. Language stays outside Project/ZIP. For a selected map without a background, Preparation shows Add a map image, supported formats and the central Add map image button; it uses the existing upload path without obscuring object interactions. Play shows a message without upload. [Implementation and manual checks](docs/localization.md).
 
-- Node.js 24 LTS и npm. Проверено с Node.js 24.21.0 и npm 11.19.0.
-- Современный браузер: Chrome, Edge или Firefox.
-- Для установки зависимостей нужен доступ к npm registry.
+## Requirements
+
+- Node.js 24 LTS and npm. Tested with Node.js 24.21.0 / npm 11.19.0.
+- A modern Chrome, Edge or Firefox browser.
+- npm registry access to install dependencies.
 
 ## GitHub Pages
 
-Репозиторий: [xomyag/bounty_mapper](https://github.com/xomyag/bounty_mapper). Целевой адрес сайта после успешного deployment: [Bounty Mapper](https://xomyag.github.io/bounty_mapper/). Подтверждение публикации — успешный workflow **Publish GitHub Pages** в Actions и открывающийся сайт; наличие ссылки само по себе не означает завершённый deployment.
+Repository: [xomyag/bounty_mapper](https://github.com/xomyag/bounty_mapper). Site: [Bounty Mapper](https://xomyag.github.io/bounty_mapper/). A successful **Publish GitHub Pages** workflow and a working site confirm deployment; a link alone does not establish a completed deployment. Accepted localization updates use the same publication workflow.
 
-В Settings → Pages выберите Source → **GitHub Actions**. Workflow `.github/workflows/pages.yml` запускается при push в `main` и вручную через Actions → Publish GitHub Pages → Run workflow. Он использует Node.js 24, `npm ci`, unit-тесты, typecheck, lint, production-сборку и браузерные проверки. После проверки обычного запуска сборка повторяется с путём Pages из `configure-pages`, проверяются ресурсы и офлайн-перезагрузка под этим путём, затем публикуется только `dist/`. Изображения и приключения пользователя в сборку не входят.
+Settings → Pages → Source → GitHub Actions. `.github/workflows/pages.yml` runs on main pushes or manually through Actions → Publish GitHub Pages → Run workflow. It uses Node.js 24, npm ci, unit tests, typecheck, lint, production build and browser checks. After root-path checks it rebuilds with configure-pages' base, verifies resources/offline reload under that path and publishes only dist/. User adventures/images never enter the build.
 
-Обновления: работайте в отдельной ветке, выполните проверки и согласованное слияние в `main`, затем `git push origin main` и дождитесь успешного workflow. Force push не требуется. Если сайт уже был открыт, новая офлайн-оболочка применяется через «Проверить обновления» / «Применить обновление» после сохранения черновиков; автоматического сброса страницы при редактировании нет.
+Updates: work in a separate branch, run checks, complete the agreed merge to main, then git push origin main and wait for a successful workflow. No force push. Existing offline installations apply through Check for updates / Apply update after resolving drafts; editing never causes automatic page reset.
 
-Все приключения и оригиналы изображений остаются в IndexedDB вашего браузера. GitHub получает исходники и оболочку приложения; серверного хранения, аккаунтов и синхронизации нет. Переход с localhost на GitHub Pages меняет origin и не переносит данные: сначала экспортируйте каждый нужный проект в ZIP в локальном приложении, затем импортируйте ZIP на сайте. Аналогично переносите проекты между браузерами/профилями. На одном origin пути сами по себе не изолируют IndexedDB; офлайн-кэш и область Service Worker ограничены путём приложения.
+Adventures/original images remain in your browser's IndexedDB. GitHub hosts source/app shell, with no server storage, accounts or synchronization. Moving from localhost to Pages changes origin and does not transfer data: export each needed project locally to ZIP, then import on the site. Use the same process between browser profiles. Paths on one origin do not isolate IndexedDB; offline cache/worker are scoped to the app path. Language preference is local to origin/profile and is not transferred by backups.
 
-Обычный `npm run dev` сохраняет корневой путь. Проверить сборку для Pages локально в PowerShell:
+Ordinary npm run dev keeps the root path. Check Pages build locally in PowerShell:
 
 ```powershell
 $env:BM_BASE_PATH = '/bounty_mapper/'
@@ -42,22 +44,22 @@ npm run test:e2e -- pages-hosting
 Remove-Item Env:BM_PAGES_TEST_BASE
 ```
 
-Для возврата к обычному `npm run preview` снова выполните `npm run build` без `BM_BASE_PATH`. Роутера и web app manifest нет; приложение открывается по корневому URL своего подкаталога. Vite переписывает пути JS/CSS, перечень офлайн-ресурсов содержит тот же base, а `sw.js` регистрируется только в его области. Подход основан на [официальной инструкции Vite](https://vite.dev/guide/static-deploy.html#github-pages) и [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+To return to ordinary preview, rebuild without BM_BASE_PATH. No router/web app manifest; open the subdirectory root URL. Vite rewrites JS/CSS paths, offline resources use the same base, and sw.js registers within that scope. Based on [official Vite instructions](https://vite.dev/guide/static-deploy.html#github-pages) and [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
-Favicon — упрощённая сложенная карта: золотой контур `#dfb577` на тёмном фоне `#171c21`. Локальные `public/favicon.svg` и PNG fallback 32×32 подключены через Vite `BASE_URL`, работают в `/` и под путём Pages, входят в существующий офлайн-кэш. Проверка `pages-hosting` загружает и декодирует обе иконки с сетью и после офлайн-перезагрузки. Для ручной проверки откройте приложение через `npm run dev` либо `npm run preview`: значок виден во вкладке, запросы `favicon.svg` и `favicon.png` возвращают 200 в Network. Браузер может удерживать старую иконку до повторного открытия вкладки.
+Favicon is a simplified folded map: gold #dfb577 on dark #171c21. Local public/favicon.svg and 32×32 PNG fallback use Vite BASE_URL at root/Pages and join the existing offline cache. pages-hosting loads/decodes both online and after offline reload. Manually open dev/preview: tab icon visible, favicon.svg/png return 200 in Network. Browsers may cache old icons until reopening the tab.
 
-## Запуск
+## Startup
 
-Из корня проекта:
+From the project root:
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Откройте <http://127.0.0.1:5173>. Сервер привязан к локальному интерфейсу; если порт занят, команда завершится ошибкой вместо смены адреса. Остановка — Ctrl+C в терминале.
+Open <http://127.0.0.1:5173>. The server binds locally; an occupied port fails rather than changing the address. Stop with Ctrl+C.
 
-## Проверки
+## Checks
 
 ```sh
 npm run typecheck
@@ -67,22 +69,22 @@ npm test
 npm run test:e2e
 ```
 
-`typecheck` проверяет приложение, тесты и конфигурации; `lint` завершается ошибкой при предупреждениях; `build` проверяет типы и создаёт сборку в `dist/`. `npm test` запускает Vitest: репозиторий IndexedDB проверяется через fake-indexeddb, интерфейс — через Testing Library и jsdom. Эти зависимости нужны только для разработки.
+typecheck covers app/tests/config; lint treats warnings as errors; build checks types and outputs dist/. Vitest uses fake-indexeddb for repositories and Testing Library/jsdom for UI; these are development-only dependencies.
 
-`test:e2e` запускает Playwright в настоящем браузере, проверяя отрисовку, PNG/JPEG/WebP, pan/zoom, области и вершины, undo/redo, reload, ZIP round-trip, конфликт вкладок и ошибки записи. Перед первым запуском установите браузер:
+Playwright uses a real browser for rendering, PNG/JPEG/WebP, pan/zoom, regions/vertices, undo/redo, reload, ZIP round-trip, tab conflicts/write failures and both interface languages. Existing Russian regression fixtures explicitly select Russian; localization scenarios check English defaults and both dictionaries. Before first run:
 
 ```sh
 npx playwright install chromium
 ```
 
-В Windows можно использовать уже установленный Edge без скачивания Chromium:
+Windows can use installed Edge without downloading Chromium:
 
 ```powershell
 $env:PLAYWRIGHT_CHANNEL = 'msedge'
 npm run test:e2e
 ```
 
-Playwright запускает локальный dev-сервер либо использует уже запущенный сервер проекта на 5173. Тесты работают в отдельных временных профилях и не меняют ваши проекты. Отчёты и результаты тестов исключены из Git. Чтобы проверить готовую сборку независимо от dev-сервера, после `npm run build` используйте:
+Playwright starts the local dev server or reuses the project server at 5173. Isolated temporary profiles do not change your projects. Reports/results are Git-ignored. Check the production build after npm run build:
 
 ```powershell
 $env:PLAYWRIGHT_CHANNEL = 'msedge'
@@ -91,181 +93,188 @@ npm run test:e2e
 Remove-Item Env:PLAYWRIGHT_PREVIEW
 ```
 
-Этот режим запускает preview на 4173. Дополнительные тесты `reliability-offline` проверяют готовые файлы `dist/` на изолированном локальном origin: отключают сеть браузеру, открывают редактор и изображения из кэша/IndexedDB, сохраняют и экспортируют, проверяют отключение блокировки вкладок, сохранность черновика при конфликте revision и настоящее обновление Service Worker. В dev-режиме эти четыре проверки пропускаются: после изменения кода сначала нужна новая сборка. После изменения зависимостей перезапустите свой dev-сервер, если Vite сообщает `Outdated Optimize Dep`.
-
-Просмотр готовой сборки:
+This starts preview at 4173. reliability-offline checks dist/ on isolated local origins: browser network is disabled, cached/IndexedDB editor/images open, saves/exports work, disabled tab locks and revision-conflict drafts are checked, and real worker updates are tested. These four checks are skipped in dev: changed code first needs a fresh build. Restart your dev server after dependency changes if Vite reports Outdated Optimize Dep.
 
 ```sh
 npm run preview
 ```
 
-Откройте <http://127.0.0.1:4173>. Это локальное превью, а не сервер для публикации.
+Open <http://127.0.0.1:4173>. This is local preview, not a publication server.
 
-## Ручная приёмка BM-002
+## Manual acceptance BM-002
 
-1. Откройте приложение: сверху компактная панель Bounty Mapper, ниже пустая рабочая область с текстом «Здесь будет ваша карта».
-2. Нажмите «Проекты», введите название и нажмите «Создать». Откроется черновик контекста в общей панели; до «Сохранить» проект не записывается.
-3. Измените название и контекст через визуальный редактор, нажмите «Сохранить». Статусы: «Есть изменения» → «Сохранение…» → «Сохранено на устройстве».
-4. Закройте панель, обновите страницу и откройте «Контекст приключения»: название и текст сохранены; боковая навигация и карточки сами не открываются.
-5. Создайте второй проект. Через «Проекты» откройте первый и проверьте его контекст. После перезагрузки должен восстановиться именно выбранный проект.
-6. Откройте тот же проект во второй вкладке: в UI-01 блокировка временно выключена. После записи контекста первой вкладкой устаревшая запись второй отклоняется с сохранением текста. После явной отмены перечитайте проект; синхронизации нет.
-7. Сузьте окно до 375 px, проверьте Tab/Enter и закрытие окна через Esc. Проверьте консоль браузера на ошибки.
+1. Open the app: compact Bounty Mapper header above an empty map workspace.
+2. Projects → name → Create opens context draft; it is not stored until Save.
+3. Edit name/context in the visual editor and Save. Changed → Saving → Saved on this device.
+4. Close/reload/open Adventure context: name/text retained, navigation/cards never open themselves.
+5. Create another project; reopen the first and inspect context. Reload restores the explicitly selected project.
+6. Open the same project in another tab. UI-01 temporarily disables locks; after the first saves, the other's stale write fails with text retained. Cancel explicitly/reopen for fresh data; no synchronization.
+7. At 375 px check Tab/Enter, Escape and browser console errors.
 
-Ошибка квоты, отказ записи и отмена транзакции проверяются автотестами. Черновик сохраняется в памяти открытой страницы после ошибки, а не на диске; при переходе к другому проекту нужно сохранить, отбросить или продолжить редактирование. При попытке перезагрузки с несохранёнными данными браузер получает запрос на предупреждение.
+Quota, write refusal and transaction abort are automated. Failed drafts remain in open-page memory, not disk; switching projects requires save/discard/continue. Reload with unsaved data invokes the browser warning.
 
-## Локальное хранение
+## Local storage
 
-Данные привязаны к адресу приложения и профилю браузера. `127.0.0.1`, `localhost`, другой порт и другой протокол имеют отдельные базы. Очистка данных браузера удаляет проекты и офлайн-кэш. ZIP-экспорт позволяет перенести проект в другой профиль или адрес через импорт. Для разработки используется 5173, для проверки офлайн — production-preview на 4173: переносите нужный проект ZIP-архивом.
+Data belongs to app origin/browser profile. 127.0.0.1, localhost, ports/protocols have separate databases. Clearing browser data removes projects/offline cache. ZIP moves projects between profiles/addresses. Development uses 5173, production offline preview 4173; transfer needed data by ZIP.
 
-Офлайн-запуск включён только в production-сборке. Первое открытие требует сети, HTTPS или localhost (включая `127.0.0.1`) и поддержки Service Worker. Дождитесь «Готово к работе без сети», затем приложение может перезагружаться на том же origin и профиле без сети; canvas, визуальный редактор, карты и вставленные картинки доступны локально. `npm run dev` не устанавливает Service Worker. Для локального preview после остановки Node-сервера и отключения сети уже установленная оболочка также доступна. Офлайн-кэш не заменяет резервный ZIP: браузер может удалить данные, особенно в приватном профиле или при нехватке места.
+Offline startup is production-only. First opening requires network, HTTPS/localhost (including 127.0.0.1) and Service Worker support. Wait for Ready to work offline, then reload on the same origin/profile without network; canvas, editor, maps and inserted images remain local. Dev installs no worker. An installed preview shell can reopen even after stopping its Node server/disabling network. Cache is no ZIP substitute: browsers can evict it/data, especially in private profiles or low storage.
 
-«Проверить обновления» проверяет новую оболочку. «Применить обновление» появляется при доступном обновлении и блокируется несохранёнными карточками, контекстом, активным инструментом или записью. Автоматической перезагрузки во время редактирования нет. Применение обновления перезагружает страницу обычным образом: данные и режим сохранены, панели закрыты, камеры начинают с обычного начального вида. До явного применения сохранение и ошибки не сбрасывают viewport.
+Check for updates checks a new shell. Apply update appears when available and is blocked by dirty cards/context, active tools or writing. Editing never auto-reloads. Applying reloads normally: data/mode survive, panels close and cameras start with their ordinary initial view. Until explicit application, writes/errors retain viewport.
 
-Текущие версии: IndexedDB 9 / Project.schemaVersion 2 / ZIP 8. Upgrade 8 → 9 переносит прежний Markdown-контекст в Project.context и Map.notesMd в отдельный rich-документ Map.description; уже преобразованные документы сохраняются. Обычный текст и переносы строк не становятся HTML. Прежние миграции областей, сущностей и множественных привязок сохранены. ZIP 8 читает версии 1…7, экспортирует оба документа и оригиналы картинок, переназначает все image.assetId копии. Контекст, описания и новая карточка создания сохраняются только явно; ошибки не удаляют черновики. Удаление проекта и его данных/settings атомарно, чужие данные и общая ширина сохраняются. Камера и настройки не входят в документ проекта. Подробнее: [docs/storage.md](docs/storage.md).
+Current versions: IndexedDB 9 / Project.schemaVersion 2 / ZIP 8. Upgrade 8→9 converts Markdown context into Project.context and Map.notesMd into independent Map.description rich JSON; already converted documents remain. Plain text/line breaks never become HTML. Prior region/entity/multiple-binding migrations remain. ZIP 8 reads 1…7, includes both documents/original images and remaps all image.assetId. Context/descriptions/new-project cards save only explicitly; errors retain drafts. Project/data/settings deletion is atomic, preserving others/shared width. Camera/settings are not project data. [Storage](docs/storage.md).
 
-## Ручная приёмка BM-003
+## Manual acceptance BM-003
 
-1. Откройте или создайте проект, закройте контекст. Нажмите «Загрузить карту» и выберите PNG, JPEG или WebP. После загрузки и записи изображение должно целиком поместиться в рабочую область с сохранением пропорций.
-2. Перетащите карту мышью, покрутите колесо над заметной деталью: масштаб меняется относительно указателя. «Показать всю карту» возвращает изображение целиком. При фокусе на карте доступны стрелки и +/−.
-3. Обновите страницу: изображение восстановится и снова поместится в вид. Навигация и карточки закрыты. Камера — временное UI-состояние; pan/zoom не записывают координаты изображения.
-4. Создайте второй проект с другим изображением; переключитесь между проектами и проверьте, что каждый показывает свою карту и контекст.
-5. Через «Заменить изображение» выберите другой растр. После reload остаётся новое изображение. Для проверки ошибки выберите SVG/PDF или повреждённый PNG: появится понятная ошибка, прежняя карта останется.
-6. Во второй вкладке замена изображения доступна, но устаревшая revision отклоняется. Ошибка квоты/записи оставляет прежнее изображение и возможность повтора; этот отказ проверяется автоматическими тестами.
-7. Нажмите «Удалить изображение» и подтвердите: фон исчезнет, проект и контекст останутся. После reload фон отсутствует. Следующая загрузка использует ту же карту.
+1. Open/create a project, close context, Upload map and select PNG/JPEG/WebP. Image renders proportionally after preparation/write. Show entire map fits explicitly; adding a background to an already open empty map preserves its current camera.
+2. Drag to pan and wheel over a recognizable detail for pointer-relative zoom. Show entire map fits; arrows/+/- work with map focus.
+3. Reload: image restores/fits, panels closed. Camera is temporary UI state; pan/zoom do not write image coordinates.
+4. Create another project/image and switch; each retains its own map/context.
+5. Replace image with another raster and reload. Try SVG/PDF/corrupt PNG: explanatory error, previous map remains.
+6. Another tab can replace images, but stale revision is rejected. Quota/write failures retain old image/retry; automated.
+7. Remove image and confirm: background disappears, map/project/context remain; reload has no background. Next upload reuses the map. The centered upload prompt returns in Preparation.
 
-Одно фоновое изображение на карту; в BM-003 интерфейс открывает первую карту проекта. Новый растр располагается в `(0, 0)`, его исходные пиксели задают размер в независимых координатах карты. При замене сохраняется позиция, размер берётся из нового файла. Изображение не перетаскивается отдельно: мышь управляет видом. Перед загрузкой нужно сохранить изменения контекста; во время загрузки и записи переключение проекта временно блокируется.
+One background per map; BM-003 originally opened the first project map. A new raster is at (0,0) with original pixels as independent map units. Replacement retains position/adopts new dimensions. Image itself does not drag; mouse controls the view. Resolve context edits before upload; project switching is blocked during preparation/write.
 
-## Ручная приёмка BM-004
+## Manual acceptance BM-004
 
-1. Откройте проект, загрузите изображение и измените контекст. Сохраните карточку общей кнопкой, закройте её и нажмите «Экспорт проекта». В UI-03 изменённый контекст требует явного Save/Cancel перед экспортом. Сохраните скачанный ZIP.
-2. Откройте архив обычным ZIP-просмотрщиком: внутри `manifest.json`, `project.json` и `assets/` с оригинальными изображениями. Manifest перечисляет файлы содержимого, их размеры и SHA-256. Сам manifest и пустой каталог `assets/` не включаются в перечень контрольных сумм.
-3. Нажмите «Импорт проекта» и выберите ZIP. После проверки и записи откроется проект «… (копия)» с тем же контекстом и картой; боковые панели останутся закрыты. Обновите страницу и проверьте изображение и контекст копии.
-4. Измените контекст копии или удалите её изображение. Через «Проекты» откройте исходный проект: его данные и изображение должны остаться прежними.
-5. Для проверки ошибки попробуйте импортировать повреждённый ZIP либо архив с `formatVersion: 99` в manifest. Появится понятная ошибка; новый проект не появится, исходный проект и выбор не изменятся. Ошибка записи в конце импорта проверяется автоматически с принудительным отказом IndexedDB.
-6. Можно импортировать архив в другом браузерном профиле либо в превью на порту 4173. Импорт доступен и без открытого проекта. Перед импортом изменения текущего проекта нужно сохранить.
+1. Upload/edit context, explicitly Save/close the card, Export project and retain ZIP. UI-03 context requires explicit Save/Cancel before export.
+2. Inspect manifest.json, project.json, assets/ with originals. Manifest lists content paths/sizes/SHA-256, excluding itself and the empty directory from checksums.
+3. Import project: after validation/write an independent “… (copy)” opens with same context/map and closed panels. Suffix follows interface language; source names/text do not translate. Reload and verify.
+4. Edit copy context/remove its image; reopen original: unchanged.
+5. Import corrupt ZIP or manifest formatVersion:99: explanatory error, no copy, unchanged original/selection. Late IndexedDB write failure is automated.
+6. Import into another profile or preview at 4173, even with no project open. Resolve current changes before import.
 
-Формат резервной копии — версия 8; принимаются также архивы v1 (BM-004, без областей), v2 (BM-005, с пустыми новыми полями), v3 (предыдущая BM-006 с Markdown), v4 (принятая BM-006 с rich JSON), v5 (первая BM-007 с одиночной привязкой), v6 (множественные привязки) и v7 (UI-02 с кратким описанием и ловушками). Архивы v1…4 получают пустые массивы сущностей и маркеров, v5 — список с прежней привязкой; прежние contextMd/notesMd преобразуются в rich-документы. Перед экспортом сохраните или отмените черновик карточки; затем проект читается одной транзакцией. Карты переключаются через меню в хедере. Импорт переназначает ID проекта, карт, assets, положений изображений, областей, проверок, сущностей и маркеров, включая все внутренние привязки и ссылки на изображения в текстах, контексте и описаниях карт, и добавляет «(копия)» к названию. Настройки пользователя, камера, активный выбор, черновой контур, несохранённые формы, история undo и дополнительные поля секретов в архив не входят. При ошибке экспорта файл не выдаётся; при ошибке проверки или записи импорта существующая база не изменяется.
+Backup format 8 also reads v1 (BM-004, no regions), v2 (BM-005, empty later fields), v3 (early BM-006 Markdown), v4 (accepted rich JSON), v5 (early single binding), v6 (multiple bindings), v7 (UI-02 summaries/traps). v1…4 receive empty entities/markers; v5 a list containing the old binding; contextMd/notesMd convert to documents. Save/cancel card drafts before the one-transaction snapshot. Header switches maps. Import remaps project/map/asset/image-placement/region/check/entity/marker IDs and all bindings/text/context/map-description image references. User settings, camera, selection, draft outline/forms, undo and extra secret fields are excluded. Failed export emits no file; failed validation/import leaves existing data unchanged.
 
-Лимиты формата: ZIP до **128 МиБ**, распакованные данные до **256 МиБ**, одно изображение до **64 МиБ**, `project.json` до **4 МиБ**, `manifest.json` до **512 КиБ**, до **512 ZIP-записей**, **128 карт** и **256 assets**. Размеры декодируемого изображения ограничены 64×1024×1024 пикселями. Проверяются как заявленные размеры, так и фактический объём потоковой распаковки. Поддерживаются обычные ZIP с методами Store/Deflate; ZIP64, шифрование, повторяющиеся и недопустимые пути отклоняются. Подробная схема: [docs/backup-format.md](docs/backup-format.md).
+Limits: ZIP **128 MiB**, expanded **256 MiB**, image **64 MiB**, project.json **4 MiB**, manifest.json **512 KiB**, **512 entries**, **128 maps**, **256 assets**, **64×1024×1024 pixels** per image. Declared sizes and actual streamed output are checked. Store/Deflate allowed; ZIP64, encryption, duplicate/invalid paths rejected. [Full format](docs/backup-format.md).
 
-## Ручная приёмка BM-005
+## Manual acceptance BM-005
 
-BM-005 вместе с исправлениями вершин и палитры принята вручную 2026-10-09. Поведение ниже сохраняется в следующих итерациях.
+BM-005 with vertex/palette fixes was manually accepted on 2026-10-09; retain these regressions.
 
-1. Создайте проект и загрузите карту. Нажмите «Добавить область», расставьте минимум три вершины. Контур и предварительные рёбра следуют указателю. Уже поставленные ручки можно перетаскивать; двойной клик по ручке удаляет вершину, не завершая создание. Завершите Enter, двойным кликом по свободному месту (последняя новая вершина) или кнопкой «Готово»: область замкнётся, появятся номер и название, заливка — 40%. При завершающем двойном клике новая вершина добавляется один раз.
-2. Начните другой контур и нажмите Esc: он исчезнет. До завершения он не сохраняется и не включается в ZIP. Попробуйте завершить две вершины, прямую линию или «бабочку» с пересечением: появится ошибка, область не создастся; Esc отменяет черновик.
-3. Нажмите правой кнопкой на свободном месте карты → «Добавить область»: точка меню станет первой вершиной. Создайте второй полигон, перекрывающий первый. Перекрытие допустимо; выбирается верхняя область в месте наложения, нижнюю можно выбрать в её свободной части.
-4. После создания карточка закрыта. Клик открывает единую панель; номер, название, цвет, непрозрачность и перенос целого контура входят в общий Save/Cancel. Заполненная карточка сначала открывается в просмотре: включите «Редактировать», чтобы двигать область. Палитра не закрывается после выбора; клик снаружи или Esc закрывает её, оставляя цвет в черновике. Перетащите область, затем «Отменить» / «Повторить»: один законченный drag черновика отменяется целиком. В просмотре и при закрытой карточке жест изнутри области перемещает вид. Zoom — колесом или кнопками снизу справа; геометрия от камеры не меняется.
-5. Включите «Редактировать вершины». Перетащите ручку, щёлкните по ребру для добавления вершины. Двойной клик по ручке удаляет вершину; также доступны кнопка «Удалить вершину» и Delete после выбора ручки. У готовой области ниже трёх вершин удалить нельзя; изменение, создающее пересечение или нулевую площадь, отклоняется. Undo/redo работают и для этих изменений. После «Закончить правку вершин» общий перенос доступен через «Редактировать» карточки.
-6. Удалите область и восстановите через undo. При фокусе на карте доступны Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y. Обновите страницу: сохранённые области восстановятся, выделение и панель свойств будут закрыты, история отмен сбросится.
-7. Экспортируйте проект, импортируйте ZIP как копию и измените её область. Откройте оригинал: его области прежние. Импортируйте также ZIP, сохранённый на BM-004: карты и изображения восстановятся без областей. Замена/удаление фона не удаляет и не перемещает контуры.
-8. Вторая вкладка теперь доступна только для чтения; после освобождения первой она получает право и перечитывает данные. Отказ квоты, rollback и сохранность черновика проверяются автотестами. Проверка конфликта revision для браузера без Web Locks сохранена: повтор не перезаписывает чужие данные, текст остаётся в форме.
+1. Add region and at least three vertices. Outline/preliminary edges follow pointer. Move existing handles during creation; double-click a handle deletes without finishing. Enter, double-click free space (last new vertex) or Done closes with number/title/40% fill. Completing double-click adds its point once.
+2. Start another outline/Escape: removed, never saved/exported. Two vertices, a line or crossing bow-tie fail validation without creating a region; Escape cancels.
+3. Right-click empty map → Add region: menu point becomes first vertex. Create an overlapping region; overlap is legal, the top one selects, lower ones are reachable in free space/navigation.
+4. Creation leaves card closed; click opens one panel. Number/title/color/opacity/whole-outline movement share Save/Cancel. Filled cards open view; Edit enables movement. Palette stays after selection; outside click/Escape closes with draft color retained. One completed draft drag undoes/redoes as a whole. View/closed-card interior drag pans. Wheel/camera controls change only viewport.
+5. Edit vertices: drag handles, click edge to add. Double-click handle/Delete selected/Delete vertex remove, retaining three vertices and valid geometry. Invalid intersection/zero area rejected. Undo/redo includes these changes. Finish vertex editing; whole movement uses card Edit.
+6. Delete/undo a region; with map focus Ctrl+Z, Ctrl+Shift+Z/Ctrl+Y. Reload restores saved regions with closed panels/cleared selection/history.
+7. Export/import copy and edit its region; original unchanged. BM-004 archives restore maps/images without regions. Background replace/remove preserves contours.
+8. The isolated Web Locks mechanism can make the second tab view-only and reread upon acquisition; UI-01 currently disables it, so both edit with revision-conflict protection. Quota/rollback/draft retention are automated; retry never overwrites another revision.
 
-Состояние «Сохранение объектов карты…» сменяется успехом только после завершения транзакции. Неудачный контур остаётся черновиком; неудачная правка оставляет сохранённую геометрию и кнопку повтора. Черновики, введённые свойства и повтор операции живут в памяти страницы. История хранит последние 100 операций геометрии текущей карты; новая правка очищает redo. Поля карточки используют отдельный текстовый undo. Лимиты и модель: [docs/regions.md](docs/regions.md). Первая карта создаётся загрузкой изображения; после удаления фона области можно продолжать редактировать на той же карте.
+Saving map objects becomes success only after transaction completion. Failed creation remains a draft; failed edits retain saved geometry/retry. Drafts/form input/retry are page-memory only. History holds 100 current-map geometry operations; new edits clear redo. Card text has separate undo. [Limits/model](docs/regions.md). First map may be created by upload; removing its background still allows regions.
 
-## Ручная проверка BM-006
+## Manual check BM-006
 
-BM-006 и доработки визуального редактора, изображений и общего режима карточки проверены вручную и приняты пользователем.
+BM-006 visual editor/images/shared-card refinements were manually accepted.
 
-1. Создайте две области: карточки закрыты. Кликните или тапните по пустой области: откроется ровно одна панель в редактировании. Все свойства, включая цвет и заливку, находятся в ней. Вторая панель геометрии не появляется.
-2. Введите заметки, выделите несколько слов и примените жирный, курсив, подчёркивание и ссылку. Проверьте заголовок, списки и цитату для текущего блока; выделение при нажатии toolbar сохраняется. Добавьте отдельное описание, проверки с пустой/заданной СЛ, теги, измените номер и название.
-3. Вставьте HTML из браузера с заголовками, выделением, списком, ссылкой и таблицей; поддерживаемое форматирование сохранится, внешний дизайн страницы может измениться. Вставьте обычный текст — он останется текстом. Произвольный HTML, обработчики событий и опасные ссылки не выполняются.
-4. Вставьте скриншот из буфера (Ctrl+V) и PNG/JPEG/WebP кнопкой «Вставить изображение». Проверьте пропорции, ширину карточки и удаление картинки. Нажмите общую «Отмена»: все поля и новые изображения возвращаются к сохранённым значениям. Введите заново и нажмите «Сохранить»; дождитесь подтверждения и режима просмотра. Повторное открытие заполненной области показывает просмотр с «Редактировать» / «Удалить область».
-5. Начните редактировать и кликните другую область либо закройте карточку. Проверьте три варианта: сохранить и продолжить, отбросить изменения, продолжить редактирование. Быстро переключайтесь с разными текстами: они не смешиваются. Ctrl+Z в тексте не отменяет геометрию. Пустые абзацы и только изменение номера/цвета не переводят область в категорию заполненных.
-6. Измените pan/zoom, откройте и закройте карточку: камера прежняя. Перенесите контур с закрытой карточкой — она не открывается. В открытой панели включите «Редактировать вершины», переместите/добавьте/удалите ручки: остаётся та же панель. Проверьте перенос и двойной клик по вершинам черновика и незакрывающуюся палитру BM-005.
-7. Сохраните, обновите страницу, откройте область: форматирование, изображения, проверки и теги восстановятся. Экспортируйте ZIP, импортируйте копию и измените/удалите её картинку: оригинал прежний. Старые ZIP v1/v2 получают пустые поля; ZIP v3 и база v4 переносят старые Markdown-заметки в rich text.
-8. При отказе записи введённые данные и картинки остаются в черновике; «Сохранено» не появляется. Сохранение через диалог закрытия тоже оставляет ошибку и возможность продолжить редактирование. Принудительный отказ записи изображений, rollback и конфликт revision без Web Locks покрыты браузерными и модульными тестами.
+1. Create two regions, cards closed. Click/tap an empty region: exactly one editing panel with all properties/color/fill, no geometry window.
+2. Enter notes; select words and apply bold/italic/underline/link. Headings/lists/quotes affect the block, toolbar retains selection. Add separate description, checks with optional DC, tags, number/title.
+3. Paste browser HTML with heading/emphasis/list/link/table: supported formatting stays, external layout may change. Plain paste remains text. Arbitrary HTML/events/unsafe links never execute.
+4. Paste clipboard screenshot/Ctrl+V or Insert image PNG/JPEG/WebP. Verify proportions/card width/removal. Cancel restores saved fields/removes new images; reenter/Save, wait for confirmation/view. Filled reopening shows Edit/Delete region.
+5. Edit then select another region/close. Check save-and-continue/discard/continue; rapid switches never mix text. Ctrl+Z in text leaves geometry. Empty paragraphs/only number/color changes are not filled content.
+6. Pan/zoom and open/close preserve camera. With card closed, interior drag pans and does not open it. Vertex editing uses the same panel. Retain creation-time handle/double-click/palette regressions.
+7. Save/reload: formatting/images/checks/tags restore. ZIP copy changes/image deletion leave original intact. v1/v2 get empty fields; v3 ZIP/v4 DB migrate Markdown.
+8. Write failure retains input/images without Saved. Dialog-triggered save also retains error/continue path. Forced image failure/rollback/revision conflict are automated.
 
-Карточка сохраняется только общей кнопкой. Экспорт, смена проекта и команды геометрии блокируются до сохранения/отмены изменённой карточки. Во время записи и подготовки картинки закрытие и переключение временно недоступны. При уходе со страницы с несохранёнными данными браузер запрашивает подтверждение; черновики в памяти не переживают принудительный reload. В UI-03 контекст также сохраняется общей кнопкой через черновик.
+Card saves only via common button. Export/project changes/geometry commands require saving/canceling changed cards. Writing/image preparation temporarily blocks close/switch. Browser warns on unsaved page exit; forced reload loses memory drafts. UI-03 context uses the same explicit pattern.
 
-Tiptap 3.31.4 (React, ProseMirror, StarterKit, TableKit и Image) обеспечивает визуальное редактирование, DOMPurify 3.4.16 очищает вставляемый HTML. unified 11.0.5, remark-parse 11.0.0 и remark-gfm 4.0.1 нужны для миграции старого Markdown. Тексты хранятся только в rich JSON с ссылками assetId; оригинальные изображения — в IndexedDB. Удаление узла не удаляет общий asset; неиспользуемые сохранённые assets пока удерживаются. Подробнее: [docs/region-details.md](docs/region-details.md).
+Tiptap 3.31.4 (React/ProseMirror/StarterKit/TableKit/Image) edits visually; DOMPurify 3.4.16 cleans HTML. unified 11.0.5, remark-parse 11.0.0 and remark-gfm 4.0.1 migrate old Markdown. Text is solely rich JSON with assetId; originals IndexedDB. Removing a node retains a shared asset; unused saved assets remain. [Details](docs/region-details.md).
 
-## Ручная проверка BM-007
+## Manual check BM-007
 
-BM-007 и перечисленные доработки приняты вручную 11 октября 2026. Модель, IndexedDB 7 и ZIP 6 используют regionIds[]; одиночные привязки IndexedDB 6 / ZIP 5 преобразуются в список. При удалении области очищается только её привязка, остальные сохраняются. Запись и перенос объектов сохраняют viewport без мерцания.
+BM-007/refinements accepted October 11, 2026. Its IndexedDB 7 / ZIP 6 use regionIds[]; v6 DB/v5 ZIP single links migrate. Region deletion removes only its link. Writes/movement preserve viewport without flicker.
 
-Переходы между связанными карточками: привяжите маркер к двум областям, измените zoom/pan. В карточке маркера нажмите любую кнопку в «Связанные области», затем вернитесь через «Связанные маркеры». Выбранный элемент оказывается в центре карты, масштаб остаётся прежним. Повторите с несохранённым текстом: «Продолжить редактирование» сохраняет текст и вид, «Отбросить изменения» либо успешное «Сохранить и продолжить» выполняет переход. Закрытие карточки, дальнейшее перемещение вида, запись и resize не повторяют центрирование. Обычный клик/тап по карте сохраняет положение вида.
+Link a marker to two regions and set zoom/pan. Related regions → a region → Related markers centers the selected element without scale changes. With dirty text, Continue editing retains text/view; Discard or successful Save and continue navigates. Closing/pan/writing/resize never repeats centering; ordinary click/tap does not reposition.
 
-1. Создайте проект, загрузите карту и добавьте две перекрывающиеся области. Нажмите «Добавить маркер», выберите противника и кликните внутри перекрытия. Откроется единственная карточка в редактировании; области не выбраны автоматически. Введите текст и переместите маркер до первого сохранения: текст остаётся, меняется только точка черновика. Нажмите «Отмена»: маркер исчезнет. Перезагрузка и экспорт не содержат этого черновика. Повторите через ПКМ → «Добавить маркер» → тип: черновик появляется в точке ПКМ. Первая строка меню по-прежнему создаёт область, Esc и клик снаружи закрывают меню.
-2. Создайте и сохраните двух противников с разными названиями. Измените статус первого на «Скрыт», второго на «Повержен»: состояния независимы. Скрытый противник остаётся виден. Проверьте остальные семь типов, их иконки и доступные статусы; символы статуса различаются независимо от цвета. Выберите цвет: палитра закрывается только при клике вне неё.
-3. Добавьте описание с форматированием, вставленным текстом и PNG/JPEG/WebP, теги и флажками привяжите маркер к обеим областям. «Без привязки» снимает все флажки. «Сохранить» переводит карточку в просмотр только после записи. В каждой связанной области маркер входит в вычисляемый список; выбор открывает ту же панель. Клик по маркеру над областью открывает только маркер; тап работает аналогично.
-4. Измените текст и кликните другую область/маркер либо закройте панель. Проверьте сохранение, отмену и продолжение редактирования через диалог. Ctrl+Z в редакторе отменяет текст. Установите pan/zoom, очистите и заполните поля, сохраните области/маркеры, переместите маркер и измените размер окна: камера остаётся прежней без промежуточных скачков. «Показать всю карту» явно пересчитывает вид.
-5. Увеличьте карту и переместите маркер: размер иконки на экране прежний, привязка не изменилась. Карточка после drag сама не открывается. «Отменить» возвращает весь перенос одной операцией, «Повторить» восстанавливает его. Закрепите положение: перенос запрещён, карточка открывается.
-6. Удалите маркер и отмените удаление. Удалите одну из связанных областей: снимается только её привязка, вторая остаётся; отмена восстанавливает область и обе связи. Сущности сохраняются даже после удаления размещений.
-7. Перезагрузите страницу: поля, изображения, статусы, цвет, привязки и блокировка сохранены, карточки закрыты. Экспортируйте ZIP и импортируйте копию. Измените описание/статус копии; оригинал прежний. Старые архивы BM-006 открываются с прежними областями и без маркеров.
-8. Откройте проект во второй вкладке: блокировка временно выключена UI-01, редактирование доступно. Устаревшая запись после изменения в другой вкладке сообщает конфликт и сохраняет черновик. Отказ квоты и атомарность покрыты автотестами. Несохранённые черновики находятся в памяти и теряются при принудительном reload.
+1. Add two overlapping regions. Add enemy in overlap: one editing card, no automatic links. Enter text/move before first Save: text retained, only draft point changes. Cancel removes it; reload/export contain no draft. Repeat via right-click → Add marker → type at the menu point. First menu row still creates regions; Escape/outside closes.
+2. Save two differently named enemies; hidden/defeated statuses are independent and hidden remains visible. Check other types/icons/legal statuses, non-color symbols, persistent palette.
+3. Add formatted/pasted/image description, tags and both region checkboxes. No binding clears them. Save enters view after confirmed write. Each region's computed list links to the same panel. Marker above a region opens only itself, including touch.
+4. Edit and select another object/close, test three decisions/text undo. Clear/refill fields, save regions/markers, move marker/resize: no camera jumps. Show entire map explicitly fits.
+5. Zoom/drag: icon size fixed, links unchanged, no accidental card. One undo reverses drag; redo restores. Lock blocks movement without blocking card.
+6. Delete marker/undo; delete one bound region, only its link removed; undo restores region/both links. Entities survive placement deletion.
+7. Reload restores fields/images/status/color/bindings/lock, cards closed. ZIP-copy description/status edits do not affect original. BM-006 archives retain regions/no markers.
+8. Second tab can edit with UI-01 locks disabled; stale writes report conflict/retain draft. Quota/atomicity automated; forced reload loses memory drafts.
 
-Каждый новый маркер создаёт независимую сущность. Удаление убирает только размещение; библиотека неиспользуемых сущностей будет позже. История текущей карты объединяет геометрию областей, создание/удаление и перемещение маркеров; до 100 операций, без восстановления после reload. Изменение полей карточки не является отдельной операцией геометрического undo. До 4096 сущностей проекта и 4096 размещений на карте; архив ограничен 4096 размещениями всего проекта. Подробности: [docs/markers.md](docs/markers.md). Новые зависимости для BM-007 не добавлены.
+Every new marker gets its own entity. Deletion removes placement only; unused-entity library later. One current-map history combines region geometry and marker create/delete/move, max 100, reset on reload. Card fields are not separate geometry operations. Limits: 4096 project entities, 4096 placements/map, ZIP 4096 total. [Details](docs/markers.md). No BM-007 dependency additions.
 
-## Ручная проверка BM-008
+## Manual check BM-008
 
-BM-008 и UI/UX-доработки приняты вручную 2026-10-11. Сценарий ниже сохраняется для регрессий следующих этапов.
+BM-008/refinements accepted 2026-10-11; these scenarios remain regressions.
 
-1. Откройте тестовый проект: карта видна, панели закрыты. Откройте меню справа в хедере: текущая карта отмечена, первый пункт `New map`. Переименуйте первую карту, создайте вторую и загрузите её изображение; новая открывается после записи. Переименование другой карты не переключает рабочую. Название обновляется в меню и фильтрах. Проверьте Tab/Enter, стрелки/Home/End, Esc и тап: действия доступны без hover. Добавьте области и маркеры на обеих картах; одному маркеру назначьте две области, другому оставьте «Без привязки».
-2. В карточке области добавьте «Ловушка», сохраните. В карточке маркера сфокусируйте пустой ввод тега: до пяти общих подсказок. Введите « ловУШ » и выберите стрелкой/Enter; появится «Ловушка», поле очистится. Попытка добавить « ловушка » не создаёт дубль. Esc закрывает только подсказки. Добавьте новый тег и отмените карточку: история прежняя. Сохраните тег: он поднимается в недавних; после reload порядок сохраняется. При отказе записи текст и теги остаются в черновике, история не меняется (отказ квоты покрыт автотестами; ручная подмена записи описана в BM-010).
-3. Откройте «Навигация и поиск»: управления картами здесь нет, фильтры изначально свёрнуты. Найдите область по названию, номеру и тегу с другим регистром. Сравните «Текущая карта» и «Весь текущий проект». Раскройте «Фильтры и группировка», совместите карту и несколько тегов, переключите «Любой из выбранных» / «Все выбранные». Фильтр карты не переключает рабочую карту. Сверните настройки: видны их активность и сброс. Проверьте количество и пустой результат.
-4. На вкладке «Маркеры» совместите карту, тип, статус, теги и связанную область. Проверьте все группировки; у областей — также «По тегу». В группировке «По связанной области» маркер с двумя связями появляется дважды, но счётчик учитывает одно размещение; есть «Без области». Выбор любой строки открывает ту же карточку без создания копии.
-5. Измените zoom/pan первой карты, через меню перейдите на вторую и задайте другой вид. Обычное переключение восстанавливает каждый viewport и закрывает прежнюю карточку. Найдите объект на другой карте в области поиска «Весь текущий проект»: нужная карта, выделение и одна карточка открываются сразу; элемент центрирован, масштаб сохранён, промежуточного fit/мерцания нет. Проверьте ссылки область ↔ маркер и обычный клик/тап по canvas без центрирования. Запись, очистка полей и drag сохраняют viewport.
-6. Измените поле карточки и попробуйте перейти через меню или поиск. «Продолжить редактирование» сохраняет текст и вид; «Отбросить изменения» выполняет переход; «Сохранить и продолжить» сначала записывает правки. Ошибка записи не меняет карту и не теряет текст. Для создания/переименования/удаления сначала сохраните или отмените карточку.
-7. До удаления сделайте ZIP тестового проекта. Выберите «Удалить» у другой карты: в подтверждении видны название и описание удаления. «Отмена» ничего не меняет. Подтвердите: текущий viewport прежний, её объекты исчезли, объекты/изображения текущей карты и общие изображения карточек сохранены. Удалите текущую при наличии ещё одной: открывается следующая с её последним видом и закрытой карточкой. Удалите последнюю: пустая область с «Создать карту», действие снова создаёт рабочую карту. Отказ записи не оставляет частичного удаления и не показывает успех (проверен автоматически).
-8. Закройте и откройте навигацию, переключите вкладки: настройки остались, canvas не пересоздан. Обновите страницу: данные и история тегов сохранены, панели закрыты. Импортируйте ранее экспортированный проект: все карты, привязки, теги и изображения восстановлены с новыми ID. Подсказки копии начинают с предсказуемо упорядоченных сохранённых тегов, затем ведут собственную историю. Оригинал и его история не меняются.
+1. Project opens map/panels closed. Right-header menu marks current, New map first. Rename first/create second/upload; new map opens after write. Renaming another does not switch. Menu/filters update. Check Tab/Enter/arrows/Home/End/Escape/touch without hover. Populate both maps; one marker bound twice, another unbound.
+2. Save Trap as a region tag. Empty marker tag field offers five shared suggestions. Type a trimmed mixed-case substring, arrows/Enter select canonical spelling/clear input; equivalent lower-case tag adds no duplicate. Escape closes only suggestions. New tag+Cancel leaves history; Save moves it into recent/reload retains order. Failed writes retain draft/tags without history changes; injection described in BM-010.
+3. Navigation/search contains no map management; extra filters closed initially. Match names/numbers/tags case-insensitively, compare map/project scope. Combine map/tags and Any/All. Map filter never switches workspace. Collapse settings: activity/reset stay visible; check unique count/empty state.
+4. Marker filters combine map/type/status/tags/region. Check all groups and region By tag. Multi-bound marker appears twice under region grouping but counts once; No region exists. Both rows open the same card/placement.
+5. Set distinct viewport on each map; ordinary switching restores each/closes previous card. Project-wide result opens correct map/selection/one card and centers at remembered scale without intermediate fit/flicker. Check region↔marker links and ordinary canvas click/tap without centering. Save/clear/drag retain camera.
+6. Dirty card transitions via menu/search: Continue retains text/view; Discard proceeds; Save and continue writes first. Failure stays on source map with text. Resolve card before map create/rename/delete.
+7. Back up test project before deletion. Another-map Delete confirmation names target/consequences. Cancel unchanged; confirm removes its objects while preserving current camera/objects/shared images. Delete current: next map's remembered view, card closed. Delete last: empty Create map; creation works again. Failed write leaves no partial deletion/success.
+8. Panel close/reopen/tab switching retains settings/canvas. Reload retains data/tag history, panels closed. Import earlier ZIP: all maps/bindings/tags/images remapped. Copy suggestions start predictable, then own history; original/history unchanged.
 
-Настройки навигации и viewport каждой карты живут в памяти страницы и после reload сбрасываются. Открывается первая карта по order. История тегов хранится в settings по проекту, обновляется атомарно с успешным сохранением карточки и переживает reload; как настройки пользователя, в ZIP не входит. Сами теги экспортируются. Undo относится к текущей карте, сбрасывается при смене карты; удаление карты не отменяется через undo. Создание/переименование/удаление карт атомарны; при ошибке название остаётся в поле и существующие данные не меняются. Версии IndexedDB 7 / ZIP 6 прежние: новый ключ в существующем settings не требует upgrade, без него используются теги старых объектов. Новых зависимостей нет. Подробности: [docs/navigation-search.md](docs/navigation-search.md).
+Navigation/cameras are page-memory only; reload opens first map by order. Tag history is transactional project settings, survives reload and is not exported; tags are. Map switching clears geometry undo; map deletion is not undoable. Map operations are atomic, retaining typed name on error. BM-008 versions 7/6 unchanged because settings already exists; old objects supply fallback. No dependencies. [Details](docs/navigation-search.md).
 
-## Ручная приёмка BM-009
+## Manual acceptance BM-009
 
-1. Создайте проект или откройте существующий: режим «Подготовка», панели закрыты. Подготовьте две карты, области, два отдельных противника и связи с областями. Заполните заметки ведущего, описание для игроков, проверки и теги; вставьте изображение в текст. Установите удобный zoom/pan.
-2. Измените карточку без сохранения и нажмите «Игра». Проверьте «Продолжить редактирование», затем «Сохранить и продолжить»; отдельно повторите с «Отбросить изменения». Текст сохраняется/отбрасывается только по выбору, карточка переходит в просмотр, карта/выделение/масштаб/положение и настройки открытого поиска остаются прежними. Новый несохранённый маркер при отбрасывании исчезает без пустой записи.
-3. В игре попробуйте drag области и маркера, Delete, двойной клик по вершине и ПКМ: геометрия не меняется. Создание/правка/удаление карт и фонового изображения недоступны. Pan/zoom, hover, тап/клик, переключение карт и поиск по проекту работают. Поиск и ссылки центрируют нужный объект при прежнем масштабе, открыта одна карточка. Пустая область открывается для просмотра с подсказкой.
-4. Проверьте разделение заметок ведущего и описания для игроков, форматирование и изображения карточек. В маркере измените «Быстрая смена статуса»: после записи меняются значок, карточка, список связанных маркеров области и результаты поиска. Второй противник не меняется. «Отменить статус» / «Повторить статус» и Ctrl+Z / Ctrl+Shift+Z на карте отменяют только статусы, без перемещения вида. «Скрыт» остаётся видимым ведущему.
-5. Обновите страницу: режим «Игра» и статусы сохранились, панели снова закрыты. Экспортируйте и импортируйте ZIP: данные, связи, форматирование и картинки восстановились с новыми ID, копия открывается в подготовке. Режим — локальная UI-настройка, в архив не входит. История отмены статусов хранится в памяти проекта и сбрасывается после reload.
-6. Вернитесь в «Подготовку»: редактирование текста, цвета, вершин, drag, фон и управление картами снова доступны. Во второй вкладке блокировка выключена UI-01. При конфликте revision показаны ошибка и прежний подтверждённый статус; повтор не затирает чужую revision. Ошибки квоты, задержанные транзакции, повтор записи и отсутствие мерцания проверяются автоматически.
+1. New project starts Preparation with closed panels; old projects restore their last saved mode. Prepare two maps/regions/two independent enemies/bindings, GM/player content/checks/tags/images, and zoom/pan.
+2. With dirty card click Play, check Continue, Save and continue and separately Discard. Text follows choice; card enters view while map/selection/camera/search persist. Discarding unsaved marker leaves no record.
+3. In Play try region/marker drag, Delete, vertex double-click and right-click: geometry unchanged. Map create/edit/delete/background actions unavailable. Pan/zoom/hover/tap/maps/project search work; results/links center at old scale in one card. Empty region opens view with empty-state help.
+4. Verify distinct GM/player sections, formatting/images. Quick status change updates icon/card/region lists/search only after writing; second enemy unaffected. Status undo/redo and map Ctrl+Z/Ctrl+Shift+Z handle only statuses without camera change. Hidden remains visible.
+5. Reload restores Play/statuses with closed panels. ZIP copy has data/bindings/formatting/images/new IDs, starts Preparation. Mode is unarchived local UI state; status history resets on reload.
+6. Return Preparation: text/color/vertices/drag/background/map editing restored. UI-01 allows second tab edits; revision conflicts show errors/last confirmed status, retries cannot overwrite fresh revisions. Quota/delay/retry/flicker automated.
 
-Версии IndexedDB **7**, Project **1**, ZIP **6** сохранены: режим добавлен ключом `workspaceMode:<projectId>` в существующее `settings`, отсутствие ключа означает подготовку. Изменение статуса атомарно обновляет Entity и revision Project. Новых зависимостей нет. Это экран ведущего; отдельный экран игроков и следующие BM-задачи не реализованы.
+BM-009 retained IndexedDB **7**, Project **1**, ZIP **6**; workspaceMode:<projectId> in existing settings defaults Preparation. Status updates atomically write Entity/Project revision. No dependencies. GM-only screen; player view/future BM tasks excluded.
 
-## Ручная приёмка BM-010
+## Manual acceptance BM-010
 
-1. Выполните `npm run build`, затем `npm run preview`; откройте <http://127.0.0.1:4173> с сетью. Дождитесь «Готово к работе без сети». Создайте проект с двумя картами, областью с форматированием/картинкой и маркером, связанным с двумя областями. Сохраните, измените zoom/pan, проверьте поиск и режим игры.
-2. В DevTools → Network включите Offline и перезагрузите тот же адрес. Карта, сохранённые тексты/картинки и редактор доступны. Измените карточку и сохраните; перезагрузите снова. Экспортируйте ZIP офлайн, импортируйте копию и проверьте все данные; изменение копии не затрагивает оригинал.
-3. Верните сеть, откройте оригинал в двух вкладках. Плашки передачи права нет, запись доступна в обеих. Сохраните изменение первой, затем попробуйте сохранить устаревшую карточку второй: ошибка конфликта оставляет её черновик, скрытой перезаписи нет. После явной отмены переоткройте проект, чтобы перечитать данные. Это не синхронизация.
-4. Для ручной проверки отказа записи и повтора используйте короткую подмену IndexedDB из [инструкции](docs/reliability-offline.md#проверка-ошибки-записи). Карточка и текст остаются открыты, камера прежняя, «Сохранено» нет. Восстановите запись и повторите сохранение.
-5. Повреждённый ZIP не создаёт копию и не меняет оригинал. Реальные старые базы/архивы, отказ последней записи импорта и неизвестные версии проверяются автотестами.
-6. Для обновления оставьте черновик открытым, пересоберите приложение после небольшого изменения текста UI и нажмите «Проверить обновления». Автоматического reload нет; «Применить обновление» недоступна. Сохраните/отмените карточку и примените обновление явно. Записанные данные остаются.
+1. Build/preview at <http://127.0.0.1:4173> online; wait Ready to work offline. Create two maps, formatted/image region and marker linked to two regions. Save, pan/zoom, search/Play.
+2. DevTools Network → Offline, reload same address. Map/text/images/editor work. Edit/save/reload again. Export/import ZIP offline, verify data/copy independence.
+3. Online, open original in two tabs. No ownership banner; both edit. Save first, then stale second: conflict/draft, no silent overwrite. Cancel/reopen to reread; not synchronization.
+4. Inject IndexedDB failure using [instructions](docs/reliability-offline.md#testing-a-write-failure): card/text/camera retained, no Saved. Restore and retry.
+5. Corrupt ZIP creates no copy/changes; real old databases/archives, final-write failure and unknown versions automated.
+6. Leave draft open, rebuild after small UI text change, Check for updates. No automatic reload; Apply update unavailable. Resolve card, explicitly apply; saved data remains.
 
-## Структура проекта
+## Project structure
 
 ```text
-src/main.tsx       точка входа React
-src/App.tsx        стартовый экран
-src/styles.css     оформление и адаптивность
-src/domain/        модели Project, Map, Asset, Region, Entity, MarkerPlacement и геометрия
-src/application/   контракт репозитория и состояние редактирования
-src/storage/       IndexedDB и проверки транзакций
-src/storage/backup/ ZIP, валидация формата и лимиты распаковки
-src/offline/       production Service Worker, состояния кэша и явного обновления
-build/             сборка перечня всех офлайн-ресурсов
-src/features/projects/ выбор/удаление проектов, контекст и описание в общей панели
-src/features/map/  canvas, камера и проверка растровых файлов
-src/features/regions/ единая карточка, визуальный редактор и очистка HTML
-src/features/markers/ карточка сущности и её размещения
-src/features/navigation/ поиск, фильтры, меню карт и подтверждение удаления
-src/features/tags/ общий ввод и подсказки тегов
-tests/e2e/         браузерные сценарии карты и ошибок
-docs/             продуктовый документ
-AGENTS.md         правила разработки
+src/main.tsx        React entry point and language initialization
+src/App.tsx         workspace
+src/styles.css      styling/responsiveness
+src/i18n/           English/Russian dictionaries, preferences, messages
+src/domain/         Project/Map/Asset/Region/Entity/Placement and geometry
+src/application/    repository contracts and editing sessions
+src/storage/        IndexedDB and transaction validation
+src/storage/backup/ ZIP, schema validation, decompression limits
+src/offline/        production worker, cache states, explicit updates
+build/              offline resource-list generation
+src/features/projects/ project selection/deletion/context/description
+src/features/map/   canvas, camera, raster validation
+src/features/regions/ shared card, visual editor, HTML sanitization
+src/features/markers/ entity/placement cards
+src/features/navigation/ search, filters, map menu/deletion
+src/features/tags/  shared tag input/suggestions
+tests/e2e/          browser map/error/localization scenarios
+docs/               product/format documentation
+AGENTS.md           development rules
 ```
 
-Библиотека важных сущностей, связи, статблоки, отдельные вложения, AI, прилипание и групповые операции остаются следующим BM-задачам. Версии пакетов фиксируются в `package.json` и `package-lock.json`; для воспроизводимой установки используйте `npm ci`.
+Important-entity library, relationships, statblocks, separate attachments, AI, snapping and group operations remain later BM tasks. Versions are pinned in package.json/package-lock.json; use npm ci for reproducibility.
 
-## Ручная проверка UI-01
+## Manual check UI-01
 
-Запустите `npm run dev`. Проверьте бургер, «i», меню карт с подтверждениями, создание и поиск. Потяните изнутри области при закрытой карточке и в просмотре: движется камера. Включите «Редактировать»: движется только этот контур; Save/Cancel вместе обрабатывают геометрию и текст. Проверьте подтверждения переходов, undo/redo, игру, узкое окно и вторую вкладку. Полный короткий сценарий: [docs/ui-controls.md](docs/ui-controls.md).
+Start dev. Check burger/information/map menus/confirmations/creation/search. Interior region drag with closed/view card pans; Edit moves only that outline. Save/Cancel handles geometry/text together. Check dirty transitions, undo/redo, Play, narrow window and second tab. [Full short scenario](docs/ui-controls.md).
 
-## Ручная проверка UI-02
+## Manual check UI-02
 
-После `npm run dev` откройте область: задайте краткое описание, проверьте Save/Cancel и hover без заметок ведущего. Потяните разделитель, измените ширину стрелками и уменьшите окно: камера и черновик сохраняются. Сохраните карточку и перезагрузите: содержимое и предпочитаемая ширина восстановлены, панели закрыты. Проверьте выделение и «Ещё» в редакторе. Создайте ловушку, исправьте нецелую СЛ на 15, свяжите с двумя областями, проверьте Cancel, игровой статус/undo, reload и ZIP-копию. Подробности: [сценарий UI-02](docs/ui-cards-tooltips-traps.md#ручная-проверка).
+Open region, set summary, Save/Cancel, hover without GM notes. Resize divider/arrows/window: camera/draft retained. Save/reload restores content/preferred width with closed panels. Check selection/More toolbar. Add trap, correct fractional DC to 15, bind twice, Cancel, game status/undo, reload/ZIP. [Full scenario](docs/ui-cards-tooltips-traps.md#manual-check).
 
+## Manual check UI-03
 
-## Ручная проверка UI-03
+Create formatted/image context, cancel/save. Add independent descriptions on two maps. View in Play; check shared width, zoom/pan and dirty transitions. Reload/ZIP preserve content/images. Cancel/confirm project deletion: other project/camera retained; current deletion returns list. [Full scenario](docs/ui-project-map-context.md#manual-check).
 
-Создайте проект с форматированным контекстом и картинкой, проверьте отмену и сохранение. На двух картах задайте разные описания. Откройте их в игре, проверьте общую ширину панели, zoom/pan и подтверждения переходов с черновиком. После reload и ZIP-импорта документы и картинки доступны. В меню проекта отмените удаление, затем подтвердите: другой проект и его камера сохраняются; удаление текущего возвращает список. [Полный короткий сценарий UI-03](docs/ui-project-map-context.md#ручная-проверка).
+## Manual check localization and empty maps
+
+1. Run dev at 5173. Without a saved language choice, controls are English. Burger → Русский changes immediately; choose English again and reload to verify persistence. Repeat with project/context/map/object cards and search open.
+2. Enter unsaved mixed-language user content/tags/checks; set zoom/pan/search and switch languages. Text, selected object, card draft/editor and camera remain; only controls/type/status/error labels change. Save/reload/ZIP-import verify unchanged content.
+3. Create/select a map without background. Central Add map image supports PNG/JPEG/WebP; cancel changes nothing, invalid/corrupt files show localized retryable errors, valid upload hides the prompt. Removing background restores it without removing regions/markers; objects and pan remain interactive outside the button. Play has only the no-image message.
+4. In both languages check traps/DC validation, confirmations, filters/groups, long labels and 375 px layout. Build/preview, wait for offline readiness, disconnect/reload and switch languages; both dictionaries are bundled. Repeat pages-hosting for the subdirectory base. No localization changes are published before acceptance.
+
+Known limits remain: memory-only drafts/viewport/undo, browser-origin storage/eviction, temporarily disabled tab ownership, no synchronization/backend. The existing Vite >500 kB main-chunk warning remains; localization adds bundled dictionaries without dependencies or network translation. New automatic region/marker/map names and copy suffixes follow the language at creation; existing saved names never change automatically.

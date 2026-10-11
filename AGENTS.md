@@ -1,16 +1,16 @@
-# Правила разработки Bounty Mapper
+# Bounty Mapper development rules
 
-- Перед работой прочитайте `docs/product-design.md`, `README.md` и код затрагиваемого участка. Явные указания пользователя определяют текущий объём задачи.
-- Одна итерация / задача / PR — один понятный пользовательский сценарий с наблюдаемыми критериями приёмки. Реализуйте только согласованный BM-ID; следующие задачи не начинайте автоматически.
-- Сохраняйте возможность запустить приложение после каждой итерации. Начальный экран — карта с компактной панелью; навигация и карточки закрыты до явного действия пользователя. Не добавляйте демонстрационную базу объектов.
-- Первая версия интерфейса — на русском. У контролов должны быть понятные названия, видимый клавиатурный фокус и честные состояния доступности.
-- Работайте в отдельной ветке. Не делайте commit, merge, push и публикацию без согласованного процесса или явного поручения пользователя.
-- Domain не зависит от React, Konva и конкретного хранилища. Добавляйте слои и каталоги по потребности задачи, без реализации будущей архитектуры заранее.
-- Данные проекта отделяйте от UI-состояния (выделение, панели, viewport) и изображений-предпросмотров. Не используйте дерево canvas как бизнес-модель.
-- Изменения модели и публичных контрактов документируйте. Каждое изменение формата хранения сопровождайте явным решением о версии и миграции.
-- Не показывайте «Сохранено» до подтверждённой записи. Не затирайте данные автоматически и не скрывайте ошибки хранения или импорта.
-- Не добавляйте API-ключи, секреты и реальные материалы приключения в репозиторий. AI, сервер и синхронизация реализуются только в соответствующих будущих задачах.
-- Добавляйте зависимости только при необходимости текущего сценария и объясняйте назначение. Фиксируйте версии и обновляйте lockfile вместе с `package.json`.
-- Перед сдачей выполните `npm run typecheck`, `npm run lint`, `npm run build`. Проверяйте поведение по короткому ручному сценарию; добавляйте содержательные тесты для новой логики и рисков, а не тесты, повторяющие разметку.
-- Независимый review особенно полезен для хранилища, импорта, миграций и геометрии: проверяйте сохранность данных, координаты при zoom и реальные сценарии. Делегирование и параллельная работа требуют согласованных границ задач.
-- В результате сообщайте, что изменилось, результаты проверок, ограничения и способ ручной проверки. Обновляйте README при изменении команд; значимые продуктовые решения фиксируйте в документации. При неясности сначала ищите ответ в документации и коде.
+- Before working, read `docs/product-design.md`, `README.md`, and the affected code. The user's explicit instructions determine the current scope.
+- One iteration / task / PR covers one clear user scenario with observable acceptance criteria. Implement only the agreed BM-ID; do not start subsequent tasks automatically.
+- Keep the application runnable after every iteration. The initial screen is a map with compact controls; navigation and cards stay closed until an explicit user action. Do not add a demonstration object database.
+- The first interface version was Russian. The current agreed interface supports English (the default without a saved choice) and Russian. Controls must have clear names, visible keyboard focus, and honest availability states.
+- Work on a separate branch. Do not commit, merge, push, or publish without an agreed process or the user's explicit instruction.
+- Domain code must not depend on React, Konva, or a concrete storage implementation. Add layers and directories when the task requires them; do not implement future architecture in advance.
+- Separate project data from UI state (selection, panels, viewport) and image previews. Do not use the canvas tree as the business model.
+- Document model and public contract changes. Every storage format change must include an explicit versioning and migration decision.
+- Do not show “Saved” before a write is confirmed. Do not overwrite data automatically or conceal storage and import errors.
+- Do not add API keys, secrets, or real adventure materials to the repository. AI, servers, and synchronization belong only to their corresponding future tasks.
+- Add dependencies only when required by the current scenario and explain their purpose. Pin versions and update the lockfile together with `package.json`.
+- Before delivery, run `npm run typecheck`, `npm run lint`, and `npm run build`. Verify behavior with a short manual scenario; add meaningful tests for new logic and risks, rather than tests that repeat markup.
+- Independent review is especially useful for storage, import, migrations, and geometry: check data preservation, coordinates under zoom, and real scenarios. Delegation and parallel work require agreed task boundaries.
+- Report what changed, verification results, limitations, and manual verification steps. Update README when commands change; record significant product decisions in the documentation. When something is unclear, look for the answer in documentation and code first.

@@ -1,3 +1,5 @@
+import { localizedFailure } from '../../localizedTestFailure'
+import { localize } from '../../i18n'
 import { legacyContextDocument } from '../../storage/migrateProjectContext'
 import { describe, expect, it } from 'vitest'
 import { BrowserProjectAccess } from './browserProjectAccess'
@@ -18,7 +20,7 @@ describe('Single editor per project', () => {
   it('holds the lock for the tab, allows other projects, and grants editing after release', async () => {
     const manager = locks(); const first = new BrowserProjectAccess(() => manager); const second = new BrowserProjectAccess(() => manager)
     await first.select('a'); await second.select('a')
-    expect(first.canEdit('a')).toBe(true); expect(second.canEdit('a')).toBe(false); expect(second.message()).toContain('другой вкладке')
+    expect(first.canEdit('a')).toBe(true); expect(second.canEdit('a')).toBe(false); expect(localize(second.message())).toContain('другой вкладке')
     await second.select('b'); expect(second.canEdit('b')).toBe(true)
     await first.release(); await second.select('a'); expect(second.canEdit('a')).toBe(true)
     await second.release()
@@ -28,7 +30,7 @@ describe('Single editor per project', () => {
     await Promise.all([access.select('old'), access.select('new')]); expect(access.canEdit('old')).toBe(false); expect(access.canEdit('new')).toBe(true)
     await access.release()
     const denied = new BrowserProjectAccess(() => { throw new Error('Запрещено') })
-    await denied.select('a'); expect(denied.canEdit('a')).toBe(false); expect(denied.message()).toContain('Запрещено')
+    await denied.select('a'); expect(denied.canEdit('a')).toBe(false); expect(localize(denied.message())).toContain('Запрещено')
   })
   it('protects a reader, exports its saved snapshot, and rereads the revision before editing', async () => {
     const factory = new IDBFactory(); const repo = new IndexedDbProjectRepository(() => factory); const project = await repo.save(createProject('Общий'))
@@ -37,7 +39,7 @@ describe('Single editor per project', () => {
     await owner.initialize(); await reader.initialize()
     expect(reader.getSnapshot().readOnly).toBe(true)
     reader.edit({ name: 'Перезапись', context: legacyContextDocument('Чужой') }); expect(reader.getSnapshot().project).toEqual(project)
-    await expect(reader.mutateProject(async (p) => p)).rejects.toThrow('только для чтения')
+    await expect(localizedFailure(reader.mutateProject(async (p) => p))).rejects.toThrow('только для чтения')
     let inspected = false; await reader.inspectProject(async () => { inspected = true }); expect(inspected).toBe(true)
     owner.edit({ name: project.name, context: legacyContextDocument('Актуальный текст') }); await owner.save(); await owner.releaseEditing()
     let refreshed = false; await reader.requestEditing(async () => { refreshed = true })
@@ -48,12 +50,12 @@ describe('Single editor per project', () => {
   })
   it('keeps revision protection when Web Locks is unavailable', async () => {
     const access = new BrowserProjectAccess(() => undefined); await access.select('a')
-    expect(access.canEdit('a')).toBe(true); expect(access.message()).toContain('проверкой версии')
+    expect(access.canEdit('a')).toBe(true); expect(localize(access.message())).toContain('проверкой версии')
   })
   it('does not leave loading stuck or create a project when lock acquisition fails', async () => {
     const factory = new IDBFactory(); const repo = new IndexedDbProjectRepository(() => factory)
     const access = new BrowserProjectAccess(() => { throw new Error('Блокировки запрещены') }); const projects = new ProjectSession(repo, access)
-    await projects.initialize(); await expect(projects.create('Название в форме')).rejects.toThrow('Блокировки запрещены')
+    await projects.initialize(); await expect(localizedFailure(projects.create('Название в форме'))).rejects.toThrow('Блокировки запрещены')
     expect(projects.getSnapshot().loading).toBe(false); expect(projects.getSnapshot().project).toBeUndefined(); expect(await repo.list()).toEqual([])
   })
 })

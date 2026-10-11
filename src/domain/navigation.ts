@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import type { Map } from './project'
 import type { Region } from './region'
 import { markerTypes, statusLabel, statusesOf } from './marker'
@@ -33,14 +34,14 @@ export function filterNavigation(data: NavigationData, tab: NavigationTab, filte
 export function groupNavigation(results: NavigationResult[], grouping: NavigationGrouping, data: NavigationData): NavigationGroup[] {
   if (grouping === 'none') return [{ key: 'all', title: '', results }]
   const groups = new globalThis.Map<string, NavigationGroup>()
-  const mapName = (id: string) => data.maps.find((m) => m.id === id)?.name ?? 'Карта'
+  const mapName = (id: string) => data.maps.find((m) => m.id === id)?.name ?? message("ui.map")
   for (const item of results) {
     let keys: { key: string; title: string }[]
     if (grouping === 'map') keys = [{ key: item.mapId, title: mapName(item.mapId) }]
-    else if (grouping === 'tag') keys = item.tags.length ? item.tags.map((t) => ({ key: `tag:${normalizeSearch(t)}`, title: t })) : [{ key: 'untagged', title: 'Без тегов' }]
+    else if (grouping === 'tag') keys = item.tags.length ? item.tags.map((t) => ({ key: `tag:${normalizeSearch(t)}`, title: t })) : [{ key: 'untagged', title: message("ui.no.tags.1bbe13") }]
     else if (grouping === 'type') keys = [{ key: item.entity!.kind, title: markerTypes[item.entity!.kind].label }]
     else if (grouping === 'status') keys = [{ key: item.entity!.status, title: navigationStatuses()[item.entity!.status] }]
-    else keys = item.marker!.regionIds.length ? item.marker!.regionIds.map((id) => { const r = data.regions.find((r) => r.id === id)!; return { key: id, title: `${r.number}. ${r.title} · ${mapName(r.mapId)}` } }) : [{ key: 'unbound', title: 'Без области' }]
+    else keys = item.marker!.regionIds.length ? item.marker!.regionIds.map((id) => { const r = data.regions.find((r) => r.id === id)!; return { key: id, title: `${r.number}. ${r.title} · ${mapName(r.mapId)}` } }) : [{ key: 'unbound', title: message("ui.no.region") }]
     for (const { key, title } of keys) {
       const group = groups.get(key) ?? { key, title, results: [] }
       if (!group.results.some((r) => r.id === item.id)) group.results.push(item)

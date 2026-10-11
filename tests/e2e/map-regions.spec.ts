@@ -3,7 +3,8 @@ import { clickMenuAction } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import { unzipSync } from 'fflate'
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './testLocale'
 import type { Page } from '@playwright/test'
 import type { Region } from '../../src/domain/region'
 import type { ImagePlacement } from '../../src/domain/project'
@@ -182,7 +183,7 @@ test('double-click finishes without duplicate, Esc/draft export, context menu an
   await page.getByRole('button', { name: 'Готово', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Тестовая ошибка области')
   expect((await stored(page)).regions).toHaveLength(1)
-  await expect(page.getByRole('group', { name: 'Создание области' })).toContainText('Вершин: 3')
+  await expect(page.getByRole('group', { name: 'Создание области' })).toContainText('3 вершины')
   await page.evaluate(() => { IDBObjectStore.prototype.put = (window as unknown as { __regionPut: typeof IDBObjectStore.prototype.put }).__regionPut })
   await page.getByRole('button', { name: 'Повторить запись объектов карты', exact: true }).click()
   await expect.poll(async () => (await stored(page)).regions.length).toBe(2)
@@ -258,12 +259,12 @@ test('moves draft handles under pan/zoom and deletes handles by double click wit
   const first = worldToScreen(vertices[0], camera)
   await page.mouse.move(box.x + first.x, box.y + first.y); await page.mouse.down()
   await page.mouse.move(box.x + first.x + 30, box.y + first.y + 10, { steps: 12 }); await page.mouse.up()
-  await expect(page.getByRole('group', { name: 'Создание области' })).toContainText('Вершин: 4')
+  await expect(page.getByRole('group', { name: 'Создание области' })).toContainText('4 вершины')
   expect((await stored(page)).regions).toEqual([])
   await expect(page.getByRole('button', { name: 'Отменить', exact: true })).toBeDisabled()
   const second = worldToScreen(vertices[1], camera)
   await page.mouse.dblclick(box.x + second.x, box.y + second.y)
-  await expect(page.getByRole('group', { name: 'Создание области' })).toContainText('Вершин: 3')
+  await expect(page.getByRole('group', { name: 'Создание области' })).toContainText('3 вершины')
   expect((await stored(page)).regions).toEqual([])
   await page.keyboard.press('Enter')
   await expect.poll(async () => (await stored(page)).regions.length).toBe(1)

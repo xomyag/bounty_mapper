@@ -1,523 +1,524 @@
-# Bounty Mapper — дизайн-документ v0.2
+# Bounty Mapper — product design v0.2
 
-Дата: 7 октября 2026. Обновлено: 8 октября 2026. Статус: проектная основа для обсуждения и итеративной разработки.
+Date: October 7, 2026. Updated: October 8, 2026. Status: a design foundation for discussion and iterative development, with subsequent implementation decisions recorded below.
 
-Источник требований: `mapper.md`. Решения пользователя: сначала личное использование; хранение на одном устройстве; синхронизация и проверка спроса позже; AI после основного редактора. Остальные решения ниже — предложения, которые можно менять по результатам работы и игр. Название Bounty Mapper — рабочее.
+Requirements source: `mapper.md`. User decisions: personal use first; storage on one device; synchronization/demand validation later; AI after the core editor. Other decisions are proposals that may change after development and games. Bounty Mapper is a working name.
 
-## 1. Что мы создаём
+## 1. What we are building
 
-Рабочее пространство ведущего настольной ролевой игры, в котором карта становится способом находить нужную информацию. Комната, персонаж, дверь или награда связаны с заметками и игровым состоянием. Во время игры ведущий выбирает объект на карте и сразу получает описание, проверки, противников и важные детали.
+A tabletop RPG game master's workspace in which the map is a way to find information. Rooms, characters, doors and rewards link to notes and game state. During play, selecting a map object immediately reveals descriptions, checks, enemies and important details.
 
-Основная задача: сократить переключения между картой, книгой приключения и разрозненными заметками при подготовке и проведении сессии.
+The main task is to reduce switching between the map, adventure book and scattered notes during preparation and sessions.
 
-Первый пользователь — автор проекта, ведущий D&D. Структура должна допускать другие системы, но отдельную поддержку каждой системы пока не разрабатываем.
+The first user is the project author, a D&D GM. Structure should accommodate other systems, but separate system-specific support is not yet being developed.
 
-**Продуктовая гипотеза:** пространственно привязанные заметки позволят быстрее находить детали сцены и реже прерывать игру на поиск информации. Это гипотеза, а не установленный результат.
+**Product hypothesis:** spatial notes let the GM find scene details faster and interrupt play less often. This is a hypothesis, not an established result.
 
-**Первый полезный результат:** подготовить одну карту реального приключения, провести с ней сессию и продолжить работу после перезагрузки приложения без потери данных.
+**First useful outcome:** prepare one real adventure map, run a session with it and continue after reloading without losing data.
 
-Это не требует сразу реализовывать боевую систему, правила D&D, совместный стол, управление бросками или публичный каталог приключений. Такие направления не входят в текущую задачу.
+This does not require a combat engine, D&D rules, shared tabletop, dice management or a public adventure catalog. Those directions are outside the current task.
 
-## 2. Основные сценарии
+## 2. Main scenarios
 
-| Сценарий | Действия пользователя | Ожидаемый результат |
+| Scenario | User actions | Expected result |
 | --- | --- | --- |
-| Подготовить приключение | Создать проект; добавить карту; загрузить изображение; записать общий контекст | Есть рабочая карта и место для верхнеуровневых заметок |
-| Разметить локацию | Нарисовать область; дать номер и название; записать заметки, текст для игроков и проверки | Детали сцены доступны по выбору комнаты |
-| Добавить объекты | Поставить маркеры NPC, врагов, двери и награды; заполнить описание | Объекты можно найти по карте и списку |
-| Провести игру | Включить режим игры; выбирать комнаты; читать подготовленный текст; менять статусы объектов | Информация под рукой, случайное перемещение геометрии заблокировано |
-| Продолжить позже | Открыть проект после перезагрузки | Сохранены заметки, геометрия и состояния |
-| Сделать резервную копию | Экспортировать проект; импортировать архив как копию | Восстановлены изображения и связи, исходный проект не затронут |
-| Развивать кампанию | Добавить этажи; перенести важного NPC; связать переходы | Один персонаж сохраняет общее описание при перемещении |
-| Помочь себе с AI | Выбрать область; проверить контекст; получить черновик; принять его | Генерация дополняет подготовку, существующие заметки сохраняются |
+| Prepare an adventure | Create project/map, upload image, enter general context | A working map and top-level notes |
+| Annotate a location | Draw region; give number/title; enter GM notes, player text and checks | Scene details available by selecting a room |
+| Add objects | Place NPC/enemy/door/reward markers and descriptions | Objects discoverable on map and in lists |
+| Run a game | Enter Play; select rooms; read prepared text; change object status | Information at hand; accidental geometry movement blocked |
+| Continue later | Reopen after reload | Notes, geometry and state retained |
+| Back up | Export project, import archive as a copy | Images/references restored without changing original |
+| Develop a campaign | Add floors, move an important NPC, link passages | One character retains shared description while moving |
+| Use AI assistance | Select region, inspect context, request/accept draft | Generation supplements preparation without erasing notes |
 
-## 3. Информационная архитектура
+## 3. Information architecture
 
-Необходимо различать три понятия, которые в исходных набросках называются слоями.
+Distinguish three concepts called layers in the original sketches:
 
-1. **Проект / приключение** — контейнер карт, общего контекста, объектов и вложений. В MVP это один уровень организации. Отдельную иерархию «кампания → приключения → проекты» вводим только при подтверждённой необходимости.
-2. **Карта** — отдельная локация или этаж. Между картами переключаемся в навигации. Этаж не является графическим слоем другого этажа.
-3. **Графические слои карты** — изображения, области, маркеры, связи, опциональная сетка. Порядок слоёв, видимость и блокировка определяют отображение и редактирование.
+1. **Project / adventure:** contains maps, context, objects and attachments. One organizational level in MVP; introduce campaign → adventures → projects only if needed.
+2. **Map:** a location/floor switched through navigation. A floor is not another floor's graphical layer.
+3. **Map graphical layers:** images, regions, markers, links and optional grid. Layer order, visibility and locking control display/editing.
 
-На карте используется независимая система координат. Изображение — объект в этой системе, поэтому его масштабирование или перемещение не должно незаметно изменять области. Если позже понадобится переместить карту вместе с разметкой, это отдельная команда группового преобразования.
+Maps use independent coordinates. An image is an object in that space; scaling/moving it must not silently alter regions. Moving a map together with annotations would be a separate group-transform command later.
 
-Описание на уровне проекта задаёт общий контекст приключения; на уровне карты — особенности локации; на уровне области — конкретную сцену. Метки относятся к содержимому и не заменяют иерархию.
+Project descriptions establish adventure context; map descriptions establish location specifics; region descriptions establish a scene. Tags describe content and do not replace hierarchy.
 
-## 4. Границы MVP
+## 4. MVP boundaries
 
-MVP — первая версия, которую можно использовать на реальной игре. Она складывается из нескольких небольших работающих итераций.
+MVP is the first version usable in a real game, built from small working iterations.
 
-### Входит
+### Included
 
-- Локальные проекты: создать, открыть, переименовать, удалить.
-- Общие заметки проекта и карты.
-- Одна или несколько независимых карт в проекте; по одному фоновому изображению на карте.
-- Загрузка PNG/JPEG/WebP, пропорциональное масштабирование фонового изображения; перемещение и блокировка изображения.
-- Перемещение рабочей области, масштабирование относительно указателя, команда «Показать всю карту».
-- Полигональные области: создание, изменение вершин, перемещение целиком, удаление, перекрытие, цвет и непрозрачность. Начальная непрозрачность — 40%.
-- Карточка области: номер/название, заметки ведущего, описание для игроков, проверки, теги.
-- Визуальный редактор карточки: заголовки, списки, bold/italic/underline, ссылки, цитаты, таблицы и изображения из файла/буфера. Поддерживаемое HTML-форматирование очищается при вставке; произвольный HTML и скрипты исключены. Старый Markdown мигрирует в единый rich JSON.
-- Стандартные маркеры: противник, босс, дверь, проход, награда, герой, союзник, NPC. Одинаковый экранный размер, цвет, название, описание, статус, блокировка положения.
-- Ручная привязка маркера к области; доступ к связанным объектам из карточки области.
-- Разделение сущности и её положения на карте в модели данных.
-- Сворачиваемая навигация: вкладки «Области» / «Маркеры», поиск по названию, номеру и тегам, фильтр маркеров по типу/статусу, группировка по карте; переход к результату.
-- Автосохранение; видимые состояния сохранения и ошибки; базовые undo/redo.
-- Режим «Игра»: геометрия заблокирована, описания и статусы доступны.
-- Экспорт/импорт проекта вместе с изображениями, версионирование формата.
-- Язык интерфейса первой версии — русский; настройка языка будущей генерации предусмотрена в модели.
-- После завершения основного сценария — кэш приложения для повторного открытия без сети, проверенный отдельным сценарием. Локальное хранение само по себе не означает, что приложение запустится без сети.
+- Local projects: create, open, rename, delete.
+- Shared project notes and independent map notes.
+- One or more independent maps; one background image per map.
+- PNG/JPEG/WebP upload, proportional background scaling, image movement/locking.
+- Workspace pan, pointer-relative zoom and Show entire map.
+- Polygon regions: create, edit vertices, move whole shape, delete, overlap, color/opacity. Initial fill opacity 40%.
+- Region card: number/title, GM notes, player description, checks, tags.
+- Visual card editor: headings, lists, bold/italic/underline, links, quotes, tables and file/clipboard images. Supported pasted HTML is sanitized; arbitrary HTML/scripts excluded. Old Markdown migrates to one rich JSON representation.
+- Standard markers: enemy, boss, door, passage, reward, hero, ally, NPC. Constant screen size, color, name, description, status, position lock.
+- Manual marker-region bindings and access to related objects from region cards; accepted BM-007 expands these to several regions.
+- Entity separated from its map placement in the data model.
+- Collapsible Regions / Markers navigation, name/number/tag search, marker type/status filters, map grouping and result navigation.
+- Visible changed/saving/saved/error states and basic undo/redo. Initial autosave plans were superseded by the accepted shared Save/Cancel drafts.
+- Play mode: protected geometry, accessible descriptions/statuses.
+- Versioned project export/import with images.
+- The original first interface was Russian. The current localization iteration adds English as the default without a saved preference and retains Russian; generation language remains a separate future setting.
+- After the core scenario: app caching for offline reopening, checked separately. Local data storage alone does not guarantee offline startup.
 
-### После MVP
+### After MVP
 
-AI, сервер и аккаунты, синхронизация, подключение существующей базы, произвольное количество изображений на карте, галерея вложений, связи и журнал перемещений, массовое редактирование, прилипание вершин, кастомные иконки, отдельный экран для игроков.
+AI, server/accounts, synchronization, existing-reference integration, arbitrary images per map, attachment gallery, object links/movement log, bulk editing, vertex snapping, custom icons and a separate player screen.
 
-В MVP описание противника можно заполнить вручную или вставить ссылку на статблок. Автоматическое получение статблоков из базы не обещаем до изучения её структуры.
+MVP enemies can have manual descriptions/statblock links. Automatic statblock retrieval is not promised before examining the source database.
 
-## 5. Полная карта требований
+## 5. Full requirements map
 
-Обозначения: **M** — MVP; **R1** — развитие редактора; **R2** — справочник и интеграция данных; **R3** — AI; **R4** — синхронизация и дальнейшее развитие. Порядок R2/R3 допускает пересмотр после MVP.
+**M** — MVP; **R1** — editor development; **R2** — reference library/data integration; **R3** — AI; **R4** — synchronization/further development. R2/R3 order can change after MVP.
 
-| Требование из набросков | Этап | Решение / уточнение |
+| Sketch requirement | Stage | Decision / clarification |
 | --- | --- | --- |
-| Общие настройки пользователя | M / R3 | Локальные настройки; AI-ключи и маршрутизация задач позже |
-| Итоговый язык генерации | R3 | Язык результата задаётся отдельно от языка исходного текста |
-| Несколько ботов под разные задачи | R3+ | Сначала один провайдер текста; затем профили text/image |
-| Карта, этажи, навигация | M | Несколько карт; графические слои внутри каждой |
-| Несколько изображений на одной карте | R1 | Независимые объекты с порядком, видимостью, блокировкой |
-| Удаление, масштабирование и перемещение изображения | M | В MVP одно фоновое изображение; общая система координат |
-| Общий контекст, структурированные заметки, метки карты | M / R1 | Общий текст в MVP; расширенные поля и метки карты в R1 |
-| Сетка / свободная разметка | M / R1 | Полигональные области в MVP; настраиваемая сетка в R1 |
-| Область из независимых точек | M | Координаты области не принадлежат изображению |
-| Создание правой кнопкой, даблклик | M | Контекстное меню и видимая кнопка; даблклик завершает контур |
-| Добавление, удаление, перемещение точек | M | Минимум три различные вершины; замкнутый простой полигон |
-| Цепочка точек, наложение областей | M | Порядок вершин сохранён; список помогает выбрать перекрытые области |
-| Прилипание к соседним областям | R1 | Экранный порог; возможность временно выключить |
-| Цвет, прозрачность 40%, отмена, перенос всей области | M | 40% означает непрозрачность заливки; прозрачность 60% |
-| Связи областей, двери, проходы | R1 | Связь объектов с типом перехода; межэтажные переходы |
-| Категории маркеров, одинаковый размер, раскраска | M | Размер постоянен на экране при зуме; категории видны по символу и названию |
-| Кастомная иконка | R1 | Растровые пользовательские иконки; безопасный импорт |
-| Статусы маркеров | M | Разные допустимые статусы для разных категорий |
-| Якорь / блокировка, перемещение, удаление | M | Блокировка препятствует движению, не запрещает открыть карточку |
-| Несколько выделенных маркеров | R1 | Групповой перенос одной командой undo |
-| Линки «монстр владеет наградой» | R1 | Типизированная связь между сущностями |
-| Редактируемый лог перемещений | R1 | Переходы между областями, а не каждый пиксель drag; ручные события отдельно |
-| Важные/уникальные сущности и библиотека | R1 | Одна сущность, несколько представлений; перенос отдельно от копирования |
-| Общее описание между маркерами | M-модель / R1-UI | Карточка сущности и локальное положение разделены |
-| Номер/название на карте; заметки ведущего при hover; вся информация по клику | M | Уточнение пользователя 2026-10-08; на сенсорном экране заметки доступны в карточке |
-| Описание и статблоки из БД | R2 | Адаптер внешнего справочника; ручное описание в MVP |
-| Заметки ведущего, описание местности, Markdown | M | Отдельные поля, чтобы не смешивать секреты и текст для игроков |
-| Проверки для игроков | M | Название/условие, характеристика или навык, СЛ, результат; всё опционально кроме текста |
-| Генерация и повторная генерация описания | R3 | Предпросмотр результата; существующий текст не перезаписывается автоматически |
-| Генерация местности и персонажа | R3+ | Раздельные задачи и промпты; после текстовой генерации |
-| Анализ общего текста и разбиение на сцены/промпты | R3+ | Предложения привязок, подтверждаемые ведущим |
-| Вложения: добавить, удалить, подпись, теги | R1 | Общее хранилище изображений, ссылки из карточек |
-| Поиск изображения по тегам и повторное использование | R1 / R2 | Сначала в проекте, затем общая библиотека |
-| Скопировать изображение в буфер обмена | R1 | При недоступности — скачать файл; проверка браузера |
-| Лейблы: добавить, удалить, переименовать | M / R1 | Теги для фильтра; видимые подписи на карте управляются отдельно |
-| Монстры и награды области связаны с иконками | M | Вычисляем по placements с regionIds[]; не дублируем списки |
-| Сохранение, удаление, поиск и фильтры | M | Автосохранение; undo удаления; поиск в текущем проекте |
-| Генерация учитывает контекст проекта и области | R3 | Иерархия project → map → region → selected entity |
-| Бестиарий/артефакты/приключения как standalone | R2 | Самостоятельный справочник; карта использует адаптер, не копию всей базы |
-| Фронтенд, бэкенд, БД | M / R4 | Фронтенд + локальная БД в MVP; сервер для AI/синхронизации по необходимости |
+| General user settings | M / R3 | Local preferences; AI keys/task routing later |
+| Generated-output language | R3 | Set independently of source-text language |
+| Several task-specific bots | R3+ | One text provider first, then text/image profiles |
+| Map, floors, navigation | M | Several maps with graphical layers inside each |
+| Several images on one map | R1 | Independent objects with order, visibility, locking |
+| Delete/scale/move images | M | One background in MVP, common coordinate space |
+| Context, structured notes, map tags | M / R1 | General text in MVP; extended fields/map tags in R1 |
+| Grid / free annotation | M / R1 | Polygon regions first; configurable grid later |
+| Region of independent points | M | Coordinates do not belong to the image |
+| Right-click creation / double-click | M | Context menu plus visible button; double-click finishes outline |
+| Add/delete/move points | M | At least three distinct vertices, closed simple polygon |
+| Point chain / overlapping regions | M | Preserve vertex order; list helps select overlapping regions |
+| Snap to neighboring regions | R1 | Screen-space threshold, temporarily disableable |
+| Color, 40% opacity, undo, whole-region movement | M | 40% fill opacity means 60% transparency |
+| Region links / doors / passages | R1 | Typed transitions, including floors |
+| Marker categories, constant size, colors | M | Screen size fixed during zoom; symbol/name identify category |
+| Custom icon | R1 | Raster user icons, safe import |
+| Marker statuses | M | Valid statuses depend on category |
+| Anchor/lock, movement, deletion | M | Lock blocks movement, not card access |
+| Multiple selected markers | R1 | Group movement as one undo command |
+| “Monster owns reward” links | R1 | Typed entity relationship |
+| Editable movement log | R1 | Region transitions, not each drag pixel; manual events separately |
+| Important/unique entities and library | R1 | One entity, several representations; moving differs from copying |
+| Shared marker description | M model / R1 UI | Entity card separated from local position |
+| Map number/title, hover notes, full click details | M | User clarification 2026-10-08; touch notes accessible in card; UI-02 later changes hover to summary/tags |
+| Database descriptions/statblocks | R2 | Reference adapter; manual descriptions in MVP |
+| GM notes, terrain description, Markdown | M | Separate secrets/player text; accepted editor stores rich JSON |
+| Player checks | M | Condition/purpose, ability/skill, DC, result; initial proposal made all but text optional; implemented validation is documented in card specs |
+| Generate/regenerate description | R3 | Preview; no automatic overwrite |
+| Generate terrain/character | R3+ | Separate tasks/prompts after text generation |
+| Analyze text into scenes/prompts | R3+ | Proposed bindings confirmed by GM |
+| Attachments: add/delete/caption/tags | R1 | Shared image store, card references |
+| Image tag search/reuse | R1 / R2 | Project first, then shared library |
+| Copy image to clipboard | R1 | Download fallback and browser capability check |
+| Labels: add/delete/rename | M / R1 | Filter tags separate from visible map labels |
+| Region monsters/rewards linked to icons | M | Compute from placements.regionIds[], no duplicate lists |
+| Saving/deletion/search/filters | M | Initially autosave; accepted explicit card saves, deletion undo, project search |
+| Generation considers project/region context | R3 | project → map → region → selected entity |
+| Standalone bestiary/artifacts/adventures | R2 | Independent reference app; adapter, not full copied database |
+| Frontend/backend/database | M / R4 | Frontend + local DB first; server for AI/sync if needed |
 
-## 6. UX и правила взаимодействия
+## 6. UX and interaction rules
 
-### 6.1. Рабочее пространство
+### 6.1. Workspace
 
-Начальное рабочее пространство — карта на всю доступную ширину и компактная панель управления: проект/карта, режим «Подготовка / Игра», навигация/поиск, состояние сохранения и экспорт. После открытия карты панели навигации и деталей закрыты. В хедере нет списка комнат, маркеров или всех объектов.
+The initial workspace is a full-width map with compact controls: project/map, Preparation / Play, navigation/search, saving state and export. Navigation/details start closed after opening a map. Header contains no room/marker/object list.
 
-На карте постоянно видны номер и название области. При наведении на область показываются заметки ведущего; для длинного текста — краткий просмотр, полный текст доступен по клику. Наведение не выбирает область и не открывает карточку. Один клик открывает полную карточку: заметки ведущего, описание для игроков, проверки, связанные маркеры, теги и доступные вложения. Карточка закрывается явно; её открытие не должно сбрасывать zoom/pan.
+Region number/title stay visible. Originally hover showed saved GM notes, shortened if long; UI-02 uses summary/tags instead, with full notes in the card. Hover never selects or opens. One click opens the full card: GM notes, player description, checks, related markers, tags and available attachments. Close explicitly; opening preserves zoom/pan.
 
-Навигация открывается по кнопке и содержит вкладки «Области» и «Маркеры», поиск, область поиска (текущая карта / проект), фильтры и группировку. Вкладки переключают содержимое панели, карта остаётся рабочим пространством. Выбор результата открывает нужную карту, фокусирует область/маркер и показывает карточку. Панель можно закрыть, сохранив фильтры.
+Navigation opens by button with Regions / Markers tabs, query, scope (map/project), filters and grouping. Tabs change panel contents while the map remains the workspace. Selecting a result opens its map, focuses the object and shows its card. Closing retains filters.
 
-В BM-008 поиск по названию/номеру/тегам действует по текущей карте либо проекту. Все фильтры совмещаются: карта и теги для областей; дополнительно тип, статус и связанная область для маркеров. Для нескольких тегов явно выбирается «любой» / «все». Области группируются по карте или тегу, маркеры — по карте, типу, статусу или связанной области. Повторные представления многосвязного маркера открывают одно размещение, общий счётчик остаётся уникальным. Номер/название области остаются читаемыми при зуме; избежать наложения подписей — задача реального редактора.
+BM-008 name/number/tag search supports current map or project. Filters combine: map/tags for regions; also type/status/linked region for markers. Several tags explicitly use any/all. Regions group by map/tag; markers by map/type/status/linked region. Repeated representations of multi-bound markers open one placement; counts remain unique. Region number/title remain readable under zoom; label overlap needs real-editor assessment.
 
-Управление картами BM-008 — выпадающее меню справа в хедере с названием текущей карты. Первый пункт `New map`, затем строки карт с отдельными действиями перехода, переименования и удаления; вложенных кнопок и зависимости от hover нет. Переключение разрешает несохранённую карточку, закрывает её и восстанавливает viewport. Удаление требует подтверждения с названием; карта и её содержимое удаляются атомарно, общие Entity и используемые изображения остаются. Удаление текущей открывает следующую доступную; последней — пустое пространство с созданием карты. В поиске управления картами нет: дополнительные фильтры/группировка раскрываются отдельно, их активность и сброс видны постоянно. Фильтр карты не переключает рабочую карту.
+Map management is a right-header dropdown showing the current name: New map, then rows with independent navigation/rename/delete actions, no nested buttons or hover requirement. Switching resolves dirty cards, closes them and restores viewport. Deletion confirms the name, atomically removes map/content and preserves shared entities/used images. Deleting current opens the next map; deleting last shows creation. Search has no map management: extra filters/grouping expand separately, with persistent active/reset indicators. Map filters do not switch the workspace.
 
-Общие подсказки тегов областей и маркеров показывают до пяти недавних либо совпадающих тегов проекта, исключая добавленные в карточку. Сравнение без регистра и trim предотвращают дубликаты, написание согласуется с каталогом. Стрелки/Enter/Escape относятся к списку подсказок. История изменяется лишь после успешной записи карточки и переживает reload; отмена/ошибка её не меняют. Для старых проектов и импортированных копий без истории используется предсказуемый каталог сохранённых тегов. История хранится в существующем settings отдельно от Project и ZIP; версии IndexedDB 7 / ZIP 6 остаются прежними. Подробнее: [navigation-search.md](navigation-search.md).
+Shared region/marker tag suggestions offer up to five recent or matching project tags, excluding already added ones. Case-insensitive trimmed comparison prevents duplicates; spelling follows the catalog. Arrows/Enter/Escape control suggestions. History changes only after successful card writing, survives reload and remains unchanged on cancel/error. Old projects/imported copies without history use a predictable existing-tag catalog. History lives in settings outside Project/ZIP; at BM-008 IndexedDB 7 / ZIP 6 stayed unchanged. See [navigation-search.md](navigation-search.md).
 
-Макет v0.2 проверяет сценарий «карта → hover → клик → полная карточка» и сворачиваемую навигацию. Данные демонстрационные; визуальная схема подземелья не является картой из книги. Изменения в макете не означают готовности хранения или редактора.
+The v0.2 mockup checks map → hover → click → full card and collapsible navigation. Its data is illustrative; the dungeon diagram is not a book map. Mockup changes do not establish ready storage/editor functionality.
 
-Первый приоритет — ноутбук/настольный компьютер с мышью или трекпадом. На узком экране открытые панели располагаются над/под картой; полноценное мобильное рисование откладываем. При отсутствии hover один тап открывает карточку, где также доступны заметки ведущего. Управление не должно зависеть только от hover или правой кнопки мыши.
+Desktop/laptop mouse/trackpad is first priority. On narrow screens open panels sit above/below the map; complete mobile drawing is deferred. Without hover, one tap opens the card and GM notes. Controls must not rely exclusively on hover/right-click.
 
-### 6.2. Области
+### 6.2. Regions
 
-- Кнопка «Область» или контекстное меню запускает создание. Каждый одиночный клик добавляет вершину.
-- Даблклик по свободному месту, Enter или кнопка «Готово» завершает контур, только если он валиден. Конечная точка не дублируется при даблклике.
-- Вершины можно перетаскивать уже при создании. Даблклик по существующей ручке удаляет вершину и не завершает черновик; в режиме правки готовой области удаление сохраняет минимум три вершины и валидную геометрию.
-- Esc отменяет незавершённый контур. Черновик не становится областью и не попадает в экспорт.
-- Не менее трёх различных вершин; нулевая площадь и самопересечения запрещены в первой версии. Перекрытие разных областей разрешено.
-- В режиме изменения вершин можно вставить вершину на ребро и удалить существующую, пока осталось не менее трёх.
-- Режим «Переместить область» двигает весь контур, сохраняя его форму и описание. По умолчанию привязанные маркеры остаются на месте: привязка семантическая. Совместный перенос — будущая явная команда.
-- При перекрытии выбираем верхнюю область; другие доступны из списка. Порядок отображения сохраняется.
-- Название и теги редактируются в карточке. Прозрачная заливка не закрывает исходную карту.
-- Палитра остаётся открытой после выбора оттенка; клик вне палитры закрывает её. Esc также закрывает палитру с возвратом фокуса на кнопку цвета.
+- Add region or context menu starts creation; each single click adds a vertex.
+- Double-clicking free space, Enter or Done finishes only a valid outline; the last point is not duplicated.
+- Vertices can move during creation. Double-clicking an existing handle deletes it without finishing; deleting from a finished region retains at least three vertices and valid geometry.
+- Escape cancels unfinished outlines; drafts are not regions and not exported.
+- At least three distinct vertices; zero area/self-intersections forbidden. Different regions may overlap.
+- Vertex mode supports edge insertion and deletion while retaining three vertices.
+- Whole-region movement preserves shape/description. Bound markers normally stay put because bindings are semantic; joint movement is a later explicit command. UI-01 permits this only within the region card's edit draft.
+- Overlap selects the top region; others are accessible from lists. Display order persists.
+- Title/tags edit in the card; translucent fill leaves the background visible.
+- Palette remains open after choosing color; outside click closes it. Escape closes and returns focus to the color button.
 
-### 6.3. Маркеры и сущности
+### 6.3. Markers and entities
 
-Маркер — представление сущности на карте. В MVP добавление маркера создаёт сущность и placement. Позднее библиотека позволяет повторно выбрать сущность.
+A marker represents an entity on a map. Adding in MVP creates entity+placement; a later library can reuse an entity.
 
-Враг/босс: жив, скрыт, повержен. Дверь: открыта, заперта, скрыта. Проход: доступен, заблокирован, скрыт. Награда: доступна, спрятана, получена. Герой/союзник/NPC: на месте, скрыт, ушёл. Статус сопровождается текстом/символом, а не только цветом. «Скрыт» — игровое состояние; на экране ведущего объект остаётся видимым.
+Enemy/boss: alive, hidden, defeated. Door: open, locked, hidden. Passage: available, blocked, hidden. Reward: available, concealed, collected. Hero/ally/NPC: present, hidden, gone. Text/symbols accompany status, not only color. Hidden is game state; the GM still sees the object. UI-02 adds armed/disarmed traps.
 
-Привязки в BM-007 всегда ручные: явный выбор одной или нескольких областей текущей карты либо пустой список. Области под указателем, в том числе при перекрытии, автоматически не выбираются. Drag маркера не меняет привязки. Удаление области снимает только её привязку, сохраняя остальные; undo возвращает связь.
+BM-007 bindings are always explicit: select one/several current-map regions or none. Regions under the pointer, including overlaps, are never chosen automatically. Drag preserves bindings. Region deletion removes only its link, retains others and undo restores it.
 
-Глобальное описание NPC хранится в сущности. Игровой статус конкретного NPC также хранится в сущности и одинаков во всех представлениях. Положение, локальная подпись, привязка к комнате и блокировка — у placement. Несколько обычных гоблинов могут ссылаться на один справочный шаблон, но каждый имеет собственную сущность и статус.
+An NPC's shared description and actual game status belong to Entity, consistent across representations. Position, local label, room binding and lock belong to placement. Ordinary goblins may reference one future template but each has its own entity/status.
 
-Перенести уникального NPC на другую карту = изменить карту и координаты placement. Создать ещё одно представление = добавить placement той же сущности. Создать независимую копию = новая сущность. Эти операции нельзя объединять одной неясной командой «Дублировать».
+Moving a unique NPC to another map changes placement map/coordinates. Another representation adds a placement of the same entity. Independent copying creates another entity. Do not combine these into an ambiguous Duplicate command.
 
-При удалении области привязки её маркеров очищаются, сами объекты остаются; действие отменяемо. Удаление маркера убирает placement, но не удаляет сущность автоматически. Неиспользуемые сущности сохраняются; их библиотека и отдельное удаление сущности с перечнем представлений относятся к следующим этапам.
+Deleting a region clears its marker links, retaining objects and supporting undo. Deleting a marker removes placement, not automatically Entity. Unused entities remain; their library/separate deletion listing representations is future work.
 
-BM-007 начинает новый маркер с выбора типа и точки; до «Сохранить» это только черновик, «Отмена» не оставляет сущность в хранилище. Существующий маркер открывается в просмотре в общей панели BM-006; название, описание с форматированием/изображениями, теги, статус, цвет, область и блокировка редактируются вместе. Переход между областью и маркером обрабатывает несохранённые изменения. Иконки сохраняют экранный размер, hover показывает название/статус; drag и события маркера не открывают карточку области под ним. [Модель и ограничения BM-007](markers.md).
+BM-007 starts a marker with type/point; until Save it is only a draft and Cancel leaves no stored entity. Existing markers open in the BM-006 shared panel's view mode; name, formatted/image description, tags, status, color, regions and lock edit together. Region/marker navigation handles unsaved changes. Icons stay constant screen size; hover shows name/status; marker drag/events cannot open the region beneath. See [model/limits](markers.md).
 
-### 6.4. Заметки и игровой режим
+### 6.4. Notes and Play
 
-Поля: «Заметки ведущего», «Описание для игроков», «Проверки», «Объекты», «Вложения». Первые четыре входят в MVP, отдельные вложения — позже. По уточнению BM-006 изображения внутри двух текстовых полей входят в текущий этап и используют существующие Assets.
+Fields: GM notes, Player description, Checks, Objects, Attachments. First four are MVP; separate attachments later. BM-006 explicitly includes images inside both text fields using existing Assets.
 
-BM-006 открывает ровно одну панель области. Пустая область открывается в редактировании, заполненная — в просмотре. Автоматическое название/номер, цвет и геометрия не считаются пользовательским содержимым; тексты, изменённое название, изображения, проверки и теги считаются. Пустые блоки редактора не считаются содержимым. Номер, название, оба текста, проверки, теги, цвет и opacity редактируются одним черновиком с общими «Сохранить» / «Отмена». Закрытие или смена области с изменениями предлагает сохранить, отбросить или продолжить редактирование. Ошибка оставляет черновик. Вершины включаются явным действием в той же панели, без второго окна.
+Exactly one region panel opens. Empty regions open editing; filled regions viewing. Automatic number/title, color/geometry are not user content; text, customized title, images, checks and tags are. Empty editor blocks are not content. Number/title, both documents, checks/tags, color/opacity share Save/Cancel. Closing/switching dirty cards asks save/discard/continue; failure retains draft. Vertex editing enables explicitly in the same panel without another window.
 
-Визуальный редактор применяет команды к выделению/блоку без потери выделения. HTML буфера сохраняет поддерживаемые стили после очистки, plain text остаётся текстом; точная верстка любого сайта не обещается. Картинки из файла/bitmap буфера отображаются внутри текста с сохранением пропорций. Документ хранит assetId, временные blob URL используются только для показа. Удаление ссылки не повреждает общий Asset. [Модель, миграция и ограничения](region-details.md).
+The visual editor applies commands to selection/block while retaining selection. Clipboard HTML retains supported sanitized styles; plain text stays text; arbitrary website layouts are not guaranteed. File/bitmap images preserve proportions inside text. Documents store assetId; temporary blob URLs are display-only. Removing a reference does not damage a shared Asset. See [model/migration/limits](region-details.md).
 
-В режиме подготовки редактируем геометрию и тексты. В режиме игры открываем карточки, просматриваем подготовленные тексты, меняем статусы. Геометрию можно изменить только после явного перехода в подготовку. Игровой режим остаётся экраном ведущего и показывает его секретные заметки. Безопасный отдельный экран игроков проектируется позднее.
+Preparation edits geometry/content. Play opens cards, reads prepared content and changes statuses. Geometry requires explicit return to Preparation. Play is the GM's screen and includes secret notes; a separate safe player screen is designed later.
 
-Теги — фильтруемые ключевые слова: «ловушка», «фракция», «важное». Подпись — отображаемое название/номер на карте. Теги не обязаны печататься на карте.
+Tags are filterable keywords (trap, faction, important); map labels are title/number. Tags need not appear on the map.
 
-## 7. Данные и инварианты
+## 7. Data and invariants
 
-Предлагаемая модель, не готовая схема БД:
+The following is the proposed model, not a claim that every future entity is implemented:
 
-| Сущность | Основные поля | Ответственность |
+| Entity | Main fields | Responsibility |
 | --- | --- | --- |
-| Project | id, name, context (rich JSON), schemaVersion, revision, createdAt, updatedAt | Приключение и общий контекст |
-| Map | id, projectId, name, description (rich JSON), order, coordinateBounds | Отдельная карта/этаж |
-| ImagePlacement | id, mapId, assetId, x, y, width, height, rotation, order, locked, visible | Изображение в координатах карты |
-| Region | id, mapId, vertices[], order, number, title, titleCustomized, gmNotes, playerDescription, checks[], tags[], color, fillOpacity | Контур и содержимое области; тексты — rich JSON с assetId |
-| Entity (BM-007) | id, projectId, kind, name, description, status, tags[] | Персонаж, дверь, награда и их общее состояние; описание — rich JSON с assetId |
-| MarkerPlacement (BM-007) | id, mapId, entityId, regionIds[], x, y, color, locked, order | Представление сущности на карте; несколько областей одной карты |
-| Asset | id, projectId, mimeType, byteSize, pixelWidth, pixelHeight, checksum, caption?, tags[], blob | Изображение без дублирования в каждой карточке |
-| Reference | sourceId, recordId, kind, sourceVersion?, cachedSnapshot? | Ссылка на запись внешнего справочника |
-| Relation (R1) | id, projectId, fromId, toId, type, notesMd | Переход, владение, союз и другие связи |
-| MovementEvent (R1) | id, entityId, placementId, fromMapId, toMapId, fromRegionId?, toRegionId?, occurredAt, note, origin | Переходы и ручные события |
-| UserSettings | interfaceLanguage, generationLanguage, preferences | Настройки интерфейса; секреты сюда не включаем |
+| Project | id, name, rich context, schemaVersion, revision, createdAt, updatedAt | Adventure/context |
+| Map | id, projectId, name, rich description, order, coordinateBounds | Map/floor |
+| ImagePlacement | id, mapId, assetId, x, y, width, height, rotation, order, locked, visible | Image in map coordinates |
+| Region | id, mapId, vertices[], order, number, title, titleCustomized, gmNotes, playerDescription, checks[], tags[], color, fillOpacity; UI-02 shortDescription | Shape/content; rich documents reference assetId |
+| Entity (BM-007) | id, projectId, kind, name, description, status, tags[]; UI-02 checks[] | Character/door/reward and shared state; rich description references assetId |
+| MarkerPlacement | id, mapId, entityId, regionIds[], x, y, color, locked, order | Representation; several same-map regions |
+| Asset | id, projectId, mimeType, byteSize, pixelWidth, pixelHeight, checksum, caption?, tags[], blob | Shared original image |
+| Reference | sourceId, recordId, kind, sourceVersion?, cachedSnapshot? | External reference record |
+| Relation (R1) | id, projectId, fromId, toId, type, notesMd | Transition/ownership/alliance/etc. |
+| MovementEvent (R1) | id, entityId, placementId, fromMapId, toMapId, fromRegionId?, toRegionId?, occurredAt, note, origin | Transitions/manual events |
+| UserSettings | interfaceLanguage, generationLanguage, preferences | UI preferences; no secrets |
 
-Идентификаторы стабильны. Координаты — числа в пространстве карты; экранный zoom/pan хранится отдельно как настройка представления. При создании карты изображение можно расположить в `(0, 0)`, приняв пиксели оригинала за стартовые единицы. Масштаб картинки меняет ImagePlacement, а не все координаты проекта.
+IDs are stable. Coordinates are numbers in map space; screen zoom/pan is separate view state. Initially place an image at (0,0), treating original pixels as starting units. Scaling changes ImagePlacement, not all project coordinates.
 
-Инварианты:
+Invariants:
 
-- Область и её placement-привязки относятся к одной карте; entity и map принадлежат одному проекту.
-- Нет ссылок на отсутствующие assets/entities/maps. Удаление выполняется согласованной командой.
-- Полигон валиден; значения координат конечны; opacity в пределах 0…1.
-- «Unique» сообщает о намерении использовать одну сущность, но не запрещает несколько отображений. UI отличает перенос от второго представления.
-- Сохраняем документ проекта и assets; не используем сериализованное дерево Konva как бизнес-модель.
-- Undo/redo относятся к пользовательским изменениям. Один drag — одна команда, не сотни записей. После перезагрузки история undo может сбрасываться в MVP.
-- Библиотека важных объектов в R1 сначала ограничена проектом. Межпроектное совместное редактирование описания не вводим неявно.
+- Region/bound placement belong to one map; entity/map belong to one project.
+- No missing asset/entity/map references; deletion is a coordinated command.
+- Valid polygon, finite coordinates, opacity 0…1.
+- Unique expresses intent to use one entity, not a prohibition on several representations; UI distinguishes movement from another representation.
+- Store project documents/assets, not a serialized Konva business model.
+- User changes support undo/redo; one drag is one command, not hundreds of records. MVP history may reset on reload.
+- R1 important-object library starts project-local; no implicit cross-project shared editing.
 
-## 8. Технический подход
+## 8. Technical approach
 
-### 8.1. MVP на одном устройстве
+### 8.1. MVP on one device
 
-Предлагаемый стартовый стек: React + TypeScript + Vite; Konva/react-konva для карты; IndexedDB для локальных данных; Vitest для логики и Playwright для ключевых пользовательских сценариев. Это проектная рекомендация. Версии зависимостей выбираем и фиксируем при создании репозитория после проверки совместимости.
+Initial proposed stack: React + TypeScript + Vite; Konva/react-konva for maps; IndexedDB; Vitest logic and Playwright key scenarios. Dependency versions are chosen/pinned at repository creation after compatibility checks.
 
-Konva выбран как кандидат для интерактивной геометрии: официальный React-пример показывает выбор, перенос и изменение размера. До окончательного закрепления нужен небольшой технический прототип полигонов, зума и большого фонового изображения. HTML-панели заметок и списков не рисуем на canvas.
-
-Слои приложения:
+Konva was selected as an interactive-geometry candidate: its official React example covers selection/movement/resizing. A small polygon/zoom/large-image prototype was required before final adoption. Notes/lists remain HTML, not canvas.
 
 ```text
-UI (React-панели и canvas)
-  → application (пользовательские команды, undo/redo, валидация)
-  → domain (проекты, геометрия, сущности, правила)
+UI (React panels/canvas)
+  → application (commands, undo/redo, validation)
+  → domain (projects, geometry, entities, rules)
   → ports (ProjectRepository, AssetRepository, ReferenceProvider, GenerationProvider)
-  → adapters (IndexedDB и архивы; позже API и провайдеры)
+  → adapters (IndexedDB/archives; later API/providers)
 ```
 
-Минимальная структура репозитория:
+Suggested minimal layout (actual feature directories evolved with implementation):
 
 ```text
-src/domain/             модели и чистые функции
-src/application/        команды и сценарии
-src/storage/            IndexedDB, миграции, экспорт/импорт
-src/features/projects/  список и открытие проектов
-src/features/map/       canvas, viewport, области, маркеры
-src/features/inspector/ карточки объектов
-src/features/search/    поиск и фильтры
-src/shared/             общие элементы интерфейса
-docs/                   продуктовый документ, задачи, решения
-tests/e2e/              сохранение и основные сценарии
+src/domain/             models and pure functions
+src/application/        commands and scenarios
+src/storage/            IndexedDB, migrations, export/import
+src/features/projects/  project listing/opening
+src/features/map/       canvas, viewport, regions, markers
+src/features/inspector/ object cards
+src/features/search/    search and filters
+src/shared/             shared controls
+docs/                   design, tasks, decisions
+tests/e2e/              persistence and core scenarios
 ```
 
-Не нужны микросервисы, универсальная система плагинов или сервер «на будущее». Нужны понятные границы данных и хранения. Будущую синхронизацию упрощают стабильные ID и revision, но они сами по себе её не реализуют.
+No microservices, universal plugin system or speculative server. Clear data/storage boundaries matter. Stable IDs/revision help future synchronization but do not implement it.
 
-### 8.2. Сохранение и переносимость
+### 8.2. Saving and portability
 
-IndexedDB хранит структурированные данные и blobs изображений. В UI-03 контекст приключения, описание карты и карточки объектов используют общий черновик и явные Save/Cancel; новые изображения записываются вместе с документом. Создание проекта до Save существует только в памяти и отменяется без записей. Команды геометрии сохраняются после завершения. Состояния UI: «Есть изменения», «Сохранение», «Сохранено на устройстве», «Ошибка сохранения». Последнее не маскируется галочкой успеха. Экспорт требует сначала сохранить или отменить изменённую карточку.
+IndexedDB stores structured data/image blobs. UI-03 context, map description and object cards use common drafts and explicit Save/Cancel; new images save with documents. New projects exist only in memory until Save; cancellation writes nothing. Geometry saves on command completion. UI states: Changed, Saving, Saved on this device, Save failed; failures never masquerade as success. Export first resolves changed cards.
 
-В UI-01 обе вкладки могут редактировать; Web Locks временно выключены, конкурентная запись защищена транзакционной revision-проверкой. Совместного редактирования и синхронизации нет. Простое last-write-wins без предупреждения недопустимо для заметок.
+UI-01 lets both tabs edit with Web Locks temporarily disabled; transactional revision checks prevent concurrent stale overwrite. There is no collaboration/synchronization. Silent last-write-wins is unacceptable for notes.
 
-Формат резервной копии: ZIP с `manifest.json`, `project.json` и `assets/`. Manifest включает версию формата, список файлов, размеры и контрольные суммы. Настройки и секреты AI не экспортируются. При экспорте берём согласованный снимок проекта.
+Backups are ZIPs with manifest.json, project.json, assets/. Manifest specifies version, files, sizes/checksums. User settings/AI secrets are excluded; export takes a consistent snapshot.
 
-Импорт сначала проверяет версию, структуру, ссылки и содержимое архива; лимиты количества/размеров защищают от непреднамеренно огромных архивов. Новая версия формата не читается как старая. Только после проверки создаём проект-копию с согласованным отображением ID. Ошибка импорта оставляет существующие проекты нетронутыми. Не используем merge до появления отдельного понятного сценария.
+Import validates version, structure, references/content and count/size limits. New formats are not interpreted as old ones. Only after validation create an independent project with consistent remapped IDs. Errors retain existing projects. Import merging waits for a separate clear scenario.
 
-До обновления схемы предусмотрены миграции и экспорт старых данных. Локальное сохранение привязано к origin и профилю браузера: смена домена/порта не переносит базу автоматически. Поэтому стабильный адрес приложения и резервные копии — часть эксплуатации MVP.
+Schema changes require migration/old-data export planning. Browser storage belongs to origin/profile; changing domain/port does not transfer it. Stable app URLs and backups are operational requirements.
 
-Квоты и удаление браузерных данных зависят от браузера. Запрос persistent storage может быть отклонён; он не заменяет экспорт. Ошибка квоты должна оставлять предыдущий сохранённый снимок целым, давать повторить сохранение или экспортировать доступные данные. Это требование следует из выбранного локального хранения, а не из необходимости облака.
+Browser quotas/eviction vary. Persistent-storage requests may be declined and do not replace export. Quota errors preserve the saved snapshot and allow retry or export of available data. This follows from local storage, not a need for cloud.
 
-### 8.3. Изображения и производительность
+### 8.3. Images and performance
 
-Для старта предлагаем загрузку растровых изображений, без SVG/PDF. Проверяем фактическую декодируемость, MIME и размеры. Оригинал хранится как Asset; preview создаётся отдельно. На canvas не отправляем все полные вложения одновременно. Высвобождаем object URLs при закрытии.
+Start with raster uploads, not SVG/PDF. Verify decoding, MIME and dimensions. Store originals as Assets and derive previews separately. Do not draw all full attachments simultaneously; release object URLs on close.
 
-Предварительные ориентиры приёмки, требующие замера на устройстве пользователя: карта 4096×4096, 100 областей, 200 маркеров; выбор объекта менее 200 мс; pan/zoom без заметных зависаний. Это тестовый бюджет, не доказанная производительность и не обещанный предел. Лимиты файлов утверждаем после прототипа и оценки потребления памяти.
+Preliminary acceptance targets, requiring measurement on the user's device: 4096×4096 map, 100 regions, 200 markers; selection under 200 ms; pan/zoom without noticeable stalls. These are a test budget, not proven performance or guaranteed limits. Approve file limits after prototype/memory evaluation.
 
-## 9. Справочник и существующий проект
+## 9. Reference library and existing project
 
-Файл набросков сообщает о проекте с бестиарием, артефактами и приключениями, но не содержит кода, примеров записей или API. Мы не знаем его технологию, стабильность ID, модель данных и правила использования содержимого. Интеграцию до этого не оцениваем как готовую или простую.
+Sketches mention a bestiary/artifact/adventure app but provide no code, records or API. Its technology, ID stability, model and content-use rules are unknown; integration cannot yet be called ready/easy.
 
-Первый шаг R2: исследовать небольшой обезличенный пример — по одной записи существа, предмета и приключения, способ хранения и способ запуска. В результате выбрать одну стратегию:
+First R2 step: inspect a small anonymized creature/item/adventure example plus storage/startup, then choose:
 
-| Что есть в справочнике | Предпочтительный способ подключения |
+| Existing reference source | Preferred integration |
 | --- | --- |
-| Локальные JSON/другие файлы со стабильными ID | Импортируемый пакет данных + адаптер чтения |
-| Приложение с API | Адаптер API и локальный кэш выбранных записей |
-| Только UI без API | Сначала ручные ссылки/экспорт; автоматическое подключение требует отдельной работы |
+| Local JSON/other files with stable IDs | Importable package and read adapter |
+| App with API | API adapter, local selected-record cache |
+| UI only | Manual links/export first; automation needs separate work |
 
-Справочник работает отдельно: поиск → запись → статблок. Bounty Mapper хранит reference на запись и при необходимости её снимок для игры без сети. Поведение при изменении исходной записи: показываем доступное обновление, не заменяем отредактированное содержимое незаметно. Если справочник недоступен, карта и пользовательские заметки продолжают работать.
+The reference app remains independent: search → record → statblock. Bounty Mapper stores references and optional offline snapshots. Source updates are offered, not silently substituted over edited content. Map/user notes remain usable if reference source is unavailable.
 
-Состояние конкретного врага хранится в Entity, параметры вида «гоблин» — в справочном шаблоне. Подключение справочника не должно размножать полные записи в каждой области. Перед публичным распространением встроенных материалов отдельно проверяем право их распространять; это не блокирует ручные локальные заметки MVP.
+Actual enemy state belongs to Entity; species parameters such as goblin belong to templates. Integration must not duplicate full records in every region. Distribution rights for bundled materials are checked before public distribution; this does not block manual local MVP notes.
 
-## 10. AI как расширение подготовки
+## 10. AI as preparation assistance
 
-Первая AI-итерация — только текст, один провайдер, одна задача «Черновик описания для игроков». К ней переходим после проверки редактора на игре.
+First AI iteration: text only, one provider, one Player-description draft task, after testing the editor in a game.
 
-Сценарий: выбрать область → открыть генерацию → увидеть включаемый контекст → выбрать язык/тон/длину → запросить черновик → сравнить → принять, вставить рядом либо отклонить. Повторная генерация создаёт новый вариант. Отмена запроса не обязательно отменяет уже понесённую стоимость; интерфейс не обещает обратного.
+Flow: select region → open generation → inspect included context → choose language/tone/length → request draft → compare → accept/insert alongside/reject. Regeneration creates another variant. Canceling may not cancel incurred cost; UI must not promise that.
 
-Контекст: описание проекта → заметки карты → выбранная область → явно выбранные объекты. Теги/соседние области включаем только по выбору. Нельзя отправлять всё приключение для каждой комнаты по умолчанию. Заметки ведущего могут содержать секреты: генерация текста для игроков получает инструкции исключить секреты, но ведущий обязательно просматривает результат.
+Context: project description → map notes → selected region → explicitly selected objects. Tags/neighbors are optional, never the whole adventure by default for every room. GM notes may contain secrets: player-text generation is instructed to omit them, but the GM must review the result.
 
-Базовые профили позже: `textGeneration` и `imageGeneration`. Пользователь может использовать разных провайдеров. Каждый профиль содержит provider, model, language и параметры задачи. Секрет ключа хранится отдельно от проекта, не попадает в архивы, URL и логи.
+Later profiles: textGeneration/imageGeneration, possibly different providers. Profiles contain provider/model/language/task parameters. Key secrets remain outside projects/archives/URLs/logs.
 
-Для API-ключей предлагается backend/BFF при добавлении AI: приложение передаёт задачу своему серверному слою, тот обращается к провайдеру. Сервер с одним владельцем может хранить ключ в окружении; публичный BYOK потребует управления пользовательскими секретами и разграничения доступа. Прямую браузерную интеграцию не объявляем универсально безопасной: поддержка браузера, CORS и правила провайдера проверяются отдельно перед выбором.
+Proposed API-key approach when adding AI: backend/BFF receives tasks and calls providers. Single-owner servers can use environment keys; public BYOK requires user-secret management/access isolation. Direct browser integration is not declared universally safe: browser support, CORS and provider rules need checking.
 
-Далее: генерация изображения местности/персонажа → сохранение результата как обычного Asset → варианты и подписи. После этого — анализ текста с предложением сцен, областей и промптов. Сгенерированные привязки всегда подтверждаются; AI не меняет геометрию и игровой статус автоматически.
+Then terrain/character image generation → normal Asset → variants/captions; later text analysis proposes scenes/regions/prompts. Generated bindings are confirmed; AI never automatically changes geometry/game state.
 
-Нужны состояния запроса, лимиты контекста/затрат, обработка отказов, журнал принятого результата и версии промпта. Точные модели, тарифы и допустимые параметры выбираем на этапе интеграции, не фиксируем заранее в этом документе.
+Requests need states, context/cost limits, refusal handling, accepted-result logs and prompt versions. Exact models/prices/parameters are selected at integration, not fixed in advance.
 
-## 11. Roadmap с точками проверки
+## 11. Roadmap and checkpoints
 
-План определяется завершёнными сценариями, а не обещанными календарными датами. При AI-разработке главный источник неопределённости — интеграция, исправления и обратная связь, а не скорость генерации кода.
+Completion of scenarios determines the plan, not promised calendar dates. AI-assisted development uncertainty comes mainly from integration, fixes and feedback, not code-generation speed.
 
-| Этап | Результат | Условие перехода |
+| Stage | Result | Advancement criterion |
 | --- | --- | --- |
-| P0: дизайн и прототип | Этот документ, макеты, вопросы и техническая проверка canvas/storage | Понятны основной сценарий, границы MVP и опасные предположения |
-| M1: проект и изображение | Создание проекта, карта, upload, pan/zoom, сохранение и ранний export | Перезагрузка и round-trip сохраняют изображение и контекст |
-| M2: области и заметки | Полигон, редактирование, Markdown, undo | Реальную карту можно разметить и сохранить |
-| M3: объекты и игра | Маркеры, связи с областью, статусы, поиск, игровой режим | Сценарий комнаты доступен без открытия отдельных заметок |
-| M4: готовность к сессии | Проверенный импорт, ошибки, offline-запуск, миграция, резервная копия | Одно приключение подготовлено, проведена реальная сессия, данные восстановлены |
-| R1: развитие редактора | Много изображений, связи, переходы, вложения, важные NPC, лог, сетка/snap | Новые возможности закрывают наблюдавшиеся трудности подготовки |
-| R2: справочник | Standalone-библиотека и ссылки/кэш из карты | Записи доступны напрямую и из комнаты без дублирования состояния |
-| R3: AI | Сначала текст, затем изображения и анализ | Черновики сокращают подготовку и не портят существующие материалы |
-| R4: между устройствами | Аккаунты, сервер, файлы, синхронизация, резервирование | Проект корректно переносится, конфликт двух изменений объясним и разрешаем |
-| R5: проверка спроса | Небольшая внешняя группа и наблюдение за использованием | Есть повторное использование и понятные запросы, прежде чем расширять продукт |
+| P0: design/prototype | This document, mockups, questions, canvas/storage probe | Clear scenario, MVP boundaries and risky assumptions |
+| M1: project/image | Create project/map, upload, pan/zoom, save, early export | Reload/round-trip preserve image/context |
+| M2: regions/notes | Polygon, editing, Markdown (later visual editor), undo | A real map can be annotated/saved |
+| M3: objects/play | Markers, region bindings, statuses, search, Play | Room flow without external notes |
+| M4: session readiness | Import, errors, offline, migration, backup | Prepare/run one adventure and restore data |
+| R1: editor improvements | Many images, relations/transitions/attachments, important NPCs, log, grid/snap | Address observed preparation problems |
+| R2: reference library | Standalone library, map references/cache | Direct/room access without duplicated state |
+| R3: AI | Text, then images/analysis | Drafts reduce preparation without damaging material |
+| R4: devices | Accounts, server, files, sync, backup | Correct transfer, explained/resolvable conflicts |
+| R5: demand validation | Small external group, usage observation | Reuse and clear requests before expansion |
 
-R1 — набор возможностей для приоритизации, а не один огромный релиз. После сессии выбираем 1–2 самых мешающих ограничения. R2 и R3 могут поменяться местами. R4 делаем только при реальной потребности в другом устройстве. Публичность не следует автоматически из наличия сервера.
+R1 is a prioritization set, not one huge release. After a session choose the one/two most obstructive limits. R2/R3 may swap. R4 requires an actual second-device need; a server does not imply public availability.
 
-## 12. Первые задачи для разработки
+## 12. First development tasks
 
-Каждая строка — небольшой вертикальный результат: интерфейс, данные и проверка работают вместе. Крупные строки разделяются на подзадачи до выдачи агенту.
+Each row is a small vertical outcome: working UI/data/checks together. Split large tasks before assigning an agent.
 
-| ID | Задача | Зависит от | Критерий приёмки |
+| ID | Task | Depends on | Acceptance |
 | --- | --- | --- | --- |
-| BM-001 | Создать репозиторий, приложение и документировать команды запуска | — | Стартовая страница открывается; build/typecheck/lint проходят; инструкции воспроизводимы |
-| BM-002 | Модель Project/Map/Asset и repository IndexedDB | 001 | Созданный проект виден после reload; отклонённая запись не показывает успех |
-| BM-003 | Upload изображения, canvas и viewport | 002 | Картинка видна; pan/zoom не меняют её мировые координаты; данные переживают reload |
-| BM-004 | Первый архив export/import, schemaVersion | 003 | Импорт-копия содержит картинку и заметки; испорченный архив не меняет базу |
-| BM-005 | Создание и редактирование полигона | 003 | 3+ вершины, Esc, замыкание, перенос, undo; после reload контур совпадает |
-| BM-006 | Подпись, hover и единая карточка с визуальным редактором | 005 | Пустая область в редактировании, заполненная в просмотре; общие Save/Cancel; безопасные HTML paste и изображения; миграция Markdown; viewport сохраняется |
-| BM-007 | Entity/MarkerPlacement и привязка к области | 006 | Противник и дверь имеют разные статусы; блокировка работает; удаление области не удаляет NPC |
-| BM-008 | Сворачиваемая навигация «Области» / «Маркеры» | 007 | Начальный экран — карта; нет списка в хедере; поиск, фильтры и группировка по карте; результат открывает нужную карту и карточку |
-| BM-009 | Игровой режим | 007 | Геометрия не двигается; статус меняется и сохраняется; заметки доступны |
-| BM-010 | Укрепить сохранение, архивы и работу без сети | 004–009 | Полный round-trip, атомарный отказ квоты/импорта, защита вкладок, production offline reload, явное обновление и миграции реальных старых схем |
-| BM-011 | Пилот на игре и следующий backlog | 010 | Есть список наблюдений и решений; следующая итерация основана на конкретной проблеме |
+| BM-001 | Repository/app/startup documentation | — | Startup opens, build/typecheck/lint pass, reproducible instructions |
+| BM-002 | Project/Map/Asset, IndexedDB repository | 001 | Project after reload; rejected write shows no success |
+| BM-003 | Image upload, canvas, viewport | 002 | Image visible; pan/zoom preserve world geometry; reload |
+| BM-004 | First export/import archive, schemaVersion | 003 | Copy contains image/notes; corrupt archive leaves DB unchanged |
+| BM-005 | Polygon creation/editing | 003 | 3+ vertices, Escape, closure, movement, undo, reload |
+| BM-006 | Label, hover, single visual-editor card | 005 | Empty edit/filled view, Save/Cancel, safe HTML/images, Markdown migration, stable viewport |
+| BM-007 | Entity/MarkerPlacement and bindings | 006 | Different enemy/door statuses, locking; region deletion retains NPC |
+| BM-008 | Collapsible Regions / Markers navigation | 007 | Map first; no header list; search/filters/grouping; correct map/card |
+| BM-009 | Play | 007 | Geometry protected, statuses save, notes accessible |
+| BM-010 | Storage/archive/offline reliability | 004–009 | Full round-trip, atomic quota/import failures, tab protection, production offline reload, explicit updates, real old-schema migrations |
+| BM-011 | Game pilot/next backlog | 010 | Observations/decisions; next iteration based on a concrete problem |
 
-**Первое техническое исследование:** проверить polygon hit-testing, zoom/pan, привязку координат и сохранение blobs на одном изображении с несколькими областями. Можно выполнить как раннюю часть BM-003; не превращать в отдельную библиотеку редактора.
+**First technical investigation:** polygon hit-testing, zoom/pan, coordinates and blob persistence on one image with several regions. It may be early BM-003 work; do not turn it into an editor library.
 
-**Первый законченный срез:** BM-001…004 — открыть приложение, создать проект, загрузить карту, написать контекст, перезагрузить, экспортировать и восстановить копию. Он полезен для проверки основы, но ещё не называется MVP ведущего.
+**First completed slice:** BM-001…004 opens the app, creates a project, uploads a map, writes context, reloads, exports/restores. It validates the foundation but is not yet the GM's MVP.
 
-### Реализация BM-010 до ручной приёмки
+### BM-010 implementation and acceptance history
 
-Сохранение подтверждается завершённой транзакцией, ошибки сохраняют черновик и допускают повтор без изменения viewport. Замена и удаление фона также сохраняют камеру карты, включая успешный повтор после ошибки; fit выполняется при первом открытии карты и явно через «Показать всю карту». Связанные документы, изображения, сущности/размещения и revision пишутся атомарно. Последовательная запись контекста и транзакционная проверка revision исключают устаревшую перезапись. Квота, разрешения, неизвестная версия базы и неудачная миграция поясняются; база не очищается.
+Save is confirmed by completed transaction; failures retain drafts and allow retry without viewport changes. Background replacement/removal and successful retries retain map camera; fit is first opening or explicit Show entire map. Documents/images/entities/placements/revision write atomically. Serialized context writes and transactional revision checks prevent stale overwrites. Quota, permission, unknown database version and failed migrations are explained; no database clearing.
 
-В UI-01 механизм единственной редактирующей вкладки временно отключён `projectLocksEnabled = false`; плашка и передача права скрыты. BrowserProjectAccess остаётся изолированным для включения одной настройкой. Обе вкладки могут редактировать, но не синхронизируются; транзакционная revision-проверка отклоняет устаревшую запись, оставляя черновик. Пользователь явно разрешил перенос всего снимка BM-010 вместе с принятой UI-01 в main.
+UI-01 temporarily disables single-editor tabs through projectLocksEnabled=false; banners/ownership transfer are hidden. BrowserProjectAccess remains isolated for one-setting reactivation. Both tabs edit without synchronization; stale transactional writes are rejected with drafts retained. The user explicitly authorized merging the full BM-010 snapshot with accepted UI-01.
 
-Production-сборка кэширует всю локальную оболочку и ленивые ресурсы canvas/редактора. После первого открытия с сетью и подтверждения «Готово к работе без сети» приложение перезагружается офлайн на том же origin/профиле (HTTPS или localhost). Карты и вложения читаются из IndexedDB. Dev-сервер офлайн-оболочку не устанавливает. Обновление ожидает явного «Применить обновление»; несохранённые правки, запись и активный инструмент блокируют действие. Другие вкладки не перезагружаются автоматически, их старые ресурсы удерживаются.
+Production caches the entire local shell and lazy canvas/editor resources. After first online opening and Ready to work offline, the same HTTPS/localhost origin/profile reloads offline. Maps/attachments use IndexedDB. Dev installs no offline shell. Updates wait for Apply update; drafts, writing and tools block it. Other tabs never auto-reload; their old resources remain.
 
-Версии **IndexedDB 7 / Project 1 / ZIP 6** сохранены. Реальные старые Markdown/одиночные привязки мигрируют с сохранением данных; ошибка upgrade полностью откатывается. ZIP проверяет структуру, ограничения размеров, SHA-256 и ссылки до атомарного импорта независимой копии со всеми новыми ID. Settings и viewport не входят в архив. Новых зависимостей нет. Подробности, проверки и ограничения: [reliability-offline.md](reliability-offline.md).
+BM-010 retained **IndexedDB 7 / Project 1 / ZIP 6**. Real old Markdown/single bindings migrate without loss; failed upgrade fully rolls back. ZIP verifies structure, size limits, SHA-256 and links before atomic independent-copy import/remapping. Settings/viewport excluded. No new dependencies. See [details/checks/limits](reliability-offline.md).
 
-## 13. Работа с AI-агентами
+## 13. Working with AI agents
 
-### Распределение ответственности
+### Responsibilities
 
-Пользователь — владелец продукта: определяет пользу, проверяет реальные сценарии, выбирает приоритеты. Основной агент — реализует одну согласованную задачу и собирает результат. Второй агент при необходимости делает независимый review или проверку. Параллельная разработка разных модулей начинается только после фиксации границ и контрактов; несколько агентов не должны одновременно переписывать общую модель данных.
+The user owns product usefulness, real-scenario acceptance and priorities. The primary agent implements one agreed task and assembles the result. A second agent may provide independent review/checks when authorized. Parallel modules require agreed boundaries/contracts; agents must not simultaneously rewrite shared models.
 
-Это предлагаемый процесс будущей разработки. В текущем шаге код полноценного продукта и параллельная команда агентов не запускались.
+This was the proposed development process at the initial design step, which did not launch a complete product or parallel agent team. Current repository instructions and explicit user scope govern actual work.
 
-### Цикл одной задачи
+### One-task cycle
 
-1. Описать конкретное поведение, входные данные и критерии приёмки.
-2. Агент читает текущий код, документацию и локальные инструкции; предлагает узкий план.
-3. Реализует задачу в отдельной ветке, избегая несогласованного расширения объёма.
-4. Проверяет поведение и подходящие тесты; сообщает о сбоях, а не скрывает их.
-5. Независимый review для рискованных изменений: хранилище, импорт, геометрия, миграции.
-6. Пользователь проверяет превью по короткому сценарию. Найденные проблемы исправляются в той же задаче.
-7. После приёмки — commit/merge по принятому процессу репозитория; обновить задачи и проектные решения.
+1. Define concrete behavior, input and acceptance.
+2. Read code/docs/local rules and propose a narrow plan.
+3. Implement on a separate branch without unapproved scope expansion.
+4. Check behavior/tests and report failures honestly.
+5. Independent review for risky storage/import/geometry/migration changes when agreed.
+6. User checks preview using a short scenario; fix issues in the same task.
+7. After acceptance, commit/merge only through the agreed repository process; update tasks/decisions.
 
-Не просим агента «сделать всё приложение по документу». Даём одну задачу с демонстрируемым результатом. На каждом шаге приложение должно запускаться.
+Do not ask an agent to build the whole document. Assign one demonstrable task; the app must remain runnable after every step.
 
-### Шаблон задачи агенту
+### Agent task template
 
 ```text
-Проект: Bounty Mapper.
-Прочитай docs/product-design.md, AGENTS.md и текущий код соответствующего модуля.
-Задача: [BM-ID и конкретное пользовательское поведение].
-Входит: [узкий перечень].
-Ограничения: [что ещё не реализуем; существующие контракты].
-Критерии приёмки: [наблюдаемые действия и результат].
-Проверь: [подходящие build/typecheck/lint/test и ручной сценарий].
-Не меняй формат хранения без миграции. Не добавляй API-ключи и реальные
-материалы приключения в репозиторий. При неоднозначности сначала проверь
-документацию; значимые продуктовые решения перечисли отдельно.
-В результате: работающий срез, список изменений, результаты проверок,
-ограничения и короткий сценарий ручной проверки.
+Project: Bounty Mapper.
+Read docs/product-design.md, AGENTS.md and the relevant implementation.
+Task: [BM-ID and concrete user behavior].
+Included: [narrow list].
+Constraints: [deferred work; existing contracts].
+Acceptance: [observable actions/results].
+Check: [appropriate build/typecheck/lint/tests and manual scenario].
+Do not change storage format without migration. Do not add API keys or
+real adventure materials. Check documentation before asking about ambiguity;
+list significant product decisions separately.
+Deliver: working slice, changes, check results, limitations and short manual steps.
 ```
 
-### Инструкции для будущего AGENTS.md
+### Original AGENTS.md requirements
 
-- Один task/PR — один понятный сценарий.
-- Domain не зависит от React, Konva и конкретного хранилища.
-- Данные проекта отделены от UI-состояния и изображений-предпросмотров.
-- Каждое изменение формата сопровождается решением о версии и миграции.
-- Никаких ложных состояний «Сохранено» и автоматического затирания данных.
-- Базовые команды, принятые тесты и критерии готовности записаны в README.
-- Не добавлять зависимости для простых задач без объяснения необходимости.
-- Изменение модели/публичного контракта требует обновления документации.
-- Reviewer проверяет сохранность данных, координаты при zoom и реальные сценарии, а не только стиль кода.
+- One task/PR — one clear scenario.
+- Domain independent of React, Konva, storage.
+- Project data separate from UI state/previews.
+- Every format change has a version/migration decision.
+- No false Saved state or automatic data overwrite.
+- Commands, agreed tests/readiness documented in README.
+- No unnecessary dependencies without explaining need.
+- Models/public contracts require documentation updates.
+- Review checks data preservation, zoom coordinates and real flows, not only style.
 
-Это заготовка требований, не уже установленный файл инструкций. При создании репозитория переносим только подтверждённые правила.
+These were proposed requirements, not an installed instruction file at design time; only confirmed rules were carried into the repository.
 
-## 14. Качество и приёмка MVP
+## 14. MVP quality and acceptance
 
-Проверки концентрируются на том, что дорого потерять или трудно заметить:
+Focus checks on costly loss and subtle problems:
 
-- UX карты: после открытия нет навязанной карточки или списка; hover не меняет выделение; один клик открывает детали; номер/название видны; закрытие панелей не сбрасывает viewport; поиск через две вкладки находит объект на другой карте.
+- Map UX: no forced card/list, hover preserves selection, one click opens details, number/title visible, panel close retains viewport, two-tab search reaches another map.
+- Geometry: screen↔world, valid outline, shape-preserving drag, correct hit-testing after zoom.
+- Data: save/reload, images/references in export/import, atomic failed import, migration.
+- Game: room → description → enemy → status → reward → reload.
+- Undo: region/marker create/delete/move, one action per undo; familiar separate text undo.
+- Errors: unsupported image, unavailable/quota storage, invalid archive, unknown version.
+- Secrets: Markdown/scripts are not executable; AI keys excluded from archive/repo; no claim of safe player view.
+- Accessibility: named controls, visible focus, list alternative to canvas, Escape/Enter, status beyond color.
 
-- Геометрия: преобразование screen↔world, валидность контура, перенос без деформации, совпадение hit-testing после зума.
-- Данные: сохранение и reload; export/import с изображениями; сохранение всех ссылок; атомарность ошибки импорта; миграция.
-- Игровой сценарий: открыть комнату → прочитать описание → открыть противника → сменить статус → найти награду → перезагрузить.
-- Undo: создание/удаление/перенос области или маркера; одно действие возвращается одной отменой. Редактор текста использует привычный текстовый undo.
-- Ошибки: неподдерживаемое изображение, недоступное хранилище, ошибка квоты, неверный архив, неизвестная версия.
-- Секреты: Markdown не исполняет скрипты; AI-ключи не входят в архивы и репозиторий; MVP не обещает безопасного player-view.
-- Доступность: названия контролов, видимый фокус, список объектов как альтернатива canvas; Esc и Enter; статус не только цветом.
+Final acceptance: two maps, at least five regions, NPC/enemy/door/reward; general/local notes; search; real session; export/restore into a clean test profile. No lost content, images, geometry or statuses.
 
-Финальная приёмка: проект с двумя картами, минимум пятью областями, NPC, противником, дверью и наградой; общие и локальные заметки; поиск; проведение реальной сессии; экспорт и восстановление на чистом тестовом профиле. Без потерь содержимого, изображений, геометрии и статусов.
+## 15. Deciding whether to develop further
 
-## 15. Как понять, что проект стоит развивать
+Before the pilot, record ordinary book/note lookup tasks: room description, enemy, check, reward. Repeat comparable tasks after map preparation. Compare convenience/time without promising “twice as fast.”
 
-До пилота фиксируем несколько обычных задач поиска в книге/заметках: найти описание комнаты, противника, проверку и награду. После подготовки карты повторяем аналогичные задачи. Сравниваем удобство и время; пока не устанавливаем обещание «вдвое быстрее».
+After the first session record external-app exits, misplaced information, accidental changes, repeated entry and map preparation time. No data loss is mandatory; preparation savings require observation.
 
-После первой сессии записываем: где пришлось выйти из приложения; какая информация оказалась не на месте; что было случайно изменено; что пришлось вводить повторно; сколько заняла подготовка карты. Отсутствие потери данных — обязательный критерий, а экономия подготовки проверяется наблюдением.
+Later external pilot: several GMs prepare their own maps and return next session. Study repeat use/real limits before public-service/payment decisions. Personal MVP analytics can be manual.
 
-Внешний пилот позднее: несколько ведущих готовят собственную карту и возвращаются к ней на следующей сессии. Изучаем повторное использование и реальные ограничения до решения о публичном сервисе и оплате. Аналитику личного MVP можно вести вручную.
+## 16. Open decisions
 
-## 16. Открытые решения
-
-| Вопрос | Текущее предположение | Когда нужно решить |
+| Question | Working assumption | Decision point |
 | --- | --- | --- |
-| Репозиторий и среда разработки | Отдельный репозиторий Bounty Mapper, локальный запуск и превью | Перед BM-001 |
-| Тестовое приключение | Одна карта из реально используемых материалов пользователя | Перед BM-003 / пилотом |
-| Изображения на карту | Одно в MVP, несколько в R1 | Зафиксировано для MVP; пересмотр после сессии |
-| Настоящий формат существующей базы | Неизвестен; нужен пример/код/экспорт | Перед R2 |
-| Приоритет справочника относительно AI | Выбрать по тому, что больше мешает подготовке | После MVP |
-| Сетка и масштаб в игровых единицах | Вне MVP; визуальная разметка независима | Перед R1-сеткой |
-| AI-провайдер и бюджет | Не выбраны | Перед R3 |
-| Источник правды при синхронизации | Локальная БД в MVP; стратегия конфликтов не выбрана | Перед R4 |
-| Показ игрокам | В MVP только экран ведущего; отдельный безопасный режим позже | При подтверждённой необходимости |
+| Repository/environment | Separate Bounty Mapper repo, local startup/preview | Before BM-001 |
+| Test adventure | One user-used real map, kept outside repository | Before BM-003/pilot |
+| Images per map | One MVP, several R1 | Fixed for MVP; review after session |
+| Existing database format | Unknown; need example/code/export | Before R2 |
+| Reference versus AI priority | Choose the larger preparation obstacle | After MVP |
+| Grid/game-unit scale | Outside MVP; independent visual annotation | Before R1 grid |
+| AI provider/budget | Not selected | Before R3 |
+| Sync source of truth | Local DB in MVP; conflict strategy undecided | Before R4 |
+| Player display | GM screen only, separate safe view later | Confirmed need |
 
-## 17. Ближайшие действия
+## 17. Initial next actions
 
-1. Проверить макет v0.2 на конкретной комнате: старт с карты, номер/название, hover заметок, полная карточка по клику, поиск через вкладки «Области» / «Маркеры».
-2. Уточнить границы первого среза и выбрать тестовую карту.
-3. Создать отдельный репозиторий, перенести этот документ в `docs/`, добавить README и подтверждённые инструкции агентам.
-4. Реализовать BM-001…004 и проверить сохранение/восстановление.
-5. Добавлять области, маркеры и игровой режим по одной задаче.
-6. Провести пилот, затем выбрать следующие улучшения и только после этого AI/интеграции.
+1. Test v0.2 mockup on a room: map first, label, hover, click card, Regions/Markers search.
+2. Clarify first-slice boundaries and select a test map.
+3. Create separate repo, move design into docs/, add README/confirmed agent rules.
+4. Implement BM-001…004 and verify saving/restoration.
+5. Add regions/markers/Play one task at a time.
+6. Pilot, prioritize improvements, then AI/integrations.
 
-### Старт локальной разработки в VS Code
+### Starting local development in VS Code
 
-1. Создать отдельную папку `bounty-mapper` и открыть её через File → Open Folder.
-2. Положить этот документ в `docs/product-design.md`, исходные наброски — в `docs/mapper.md`. Агенту в редакторе нужен явный доступ к файлам; не рассчитываем, что история этого чата автоматически станет контекстом репозитория.
-3. Открыть Codex в VS Code; при необходимости установить официальное расширение и войти с аккаунтом ChatGPT. Актуальная инструкция: [Codex IDE extension](https://developers.openai.com/codex/ide/).
-4. В терминале VS Code проверить `node --version`, `npm --version`, `git --version`. Если инструмента нет — установить его; совместимость версий проекта проверяется при BM-001.
-5. Первая задача агенту — только BM-001: scaffold React/TypeScript/Vite, README, согласованные инструкции AGENTS.md, команды запуска и проверок. Начальное UI: компактная панель и пустая рабочая область карты, без демонстрационной базы объектов и открытых боковых панелей. Инициализировать Git; не публиковать репозиторий и не делать commit без согласованного процесса.
-6. Запустить приложение по инструкции агента и проверить в браузере. Затем отдельные задачи: локальный проект → загрузка карты/pan/zoom → сохранение и экспорт → области → hover/карточка → маркеры → навигация/поиск → игровой режим.
+1. Create bounty-mapper folder and open via File → Open Folder.
+2. Place this document in docs/product-design.md and source sketches in docs/mapper.md. Editor agents need explicit file access; chat history is not automatically repository context.
+3. Open Codex in VS Code; install the official extension/sign in if needed. Reference: [Codex IDE extension](https://developers.openai.com/codex/ide/).
+4. Check node --version, npm --version, git --version; install missing tools. Project compatibility is checked in BM-001.
+5. First task is only BM-001: React/TypeScript/Vite scaffold, README, agreed AGENTS rules, startup/check commands. Initial UI is compact controls/empty map, no demo database/open sidebars. Initialize Git; publication/commits require agreed authorization.
+6. Start/check in browser; later tasks: local project → upload/pan/zoom → save/export → regions → hover/card → markers → search → Play.
 
-Для старта достаточно одного агента разработки. Review подключается на завершённый срез; параллельная работа появляется только после выделения независимых задач. Настройка AI внутри Bounty Mapper не требуется для работы coding-агента.
+One development agent suffices initially. Review attaches to completed slices; parallel work needs independent agreed tasks. AI settings inside Bounty Mapper are unnecessary for coding-agent operation.
 
-## 18. Технические первоисточники
+## 18. Primary technical sources
 
-Источники проверены при подготовке v0.1; они подтверждают свойства инструментов, но не заменяют прототип и тесты проекта.
+Sources were checked for v0.1; they describe tool capabilities, not substitutes for prototypes/tests.
 
-- [IndexedDB API — MDN](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API): структурированные данные и blobs в браузере.
-- [Storage quotas and eviction criteria — MDN](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria): квоты, ошибки и удаление данных.
-- [StorageManager.persist() — MDN](https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist): запрос persistent storage, который браузер может не удовлетворить.
-- [React Transformer — Konva](https://konvajs.org/docs/react/Transformer.html): выбор, перенос и изменение размера элементов.
-- [Zoom relative to pointer — Konva](https://konvajs.org/docs/sandbox/Zooming_Relative_To_Pointer.html): масштабирование относительно положения указателя.
+- [IndexedDB API — MDN](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API): structured browser data/blobs.
+- [Storage quotas/eviction — MDN](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria): quotas, errors, eviction.
+- [StorageManager.persist() — MDN](https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist): persistent storage may be declined.
+- [React Transformer — Konva](https://konvajs.org/docs/react/Transformer.html): selection/movement/resizing.
+- [Pointer-relative zoom — Konva](https://konvajs.org/docs/sandbox/Zooming_Relative_To_Pointer.html): zoom at pointer.
 
-## Журнал решений
+## Decision log
 
-| Дата | Решение | Основание |
+| Date | Decision | Basis |
 | --- | --- | --- |
-| 2026-10-07 | Личное использование сначала | Ответ пользователя |
-| 2026-10-07 | На одном устройстве сначала; синхронизация позже | Ответ пользователя |
-| 2026-10-07 | AI после редактора | Ответ пользователя |
-| 2026-10-07 | Разделить карту/этаж и графические слои | Предложение из анализа требований |
-| 2026-10-07 | Разделить Entity и MarkerPlacement | Предложение для общих описаний и переходов |
-| 2026-10-07 | Экспорт с изображениями входит в MVP | Предложение для проверяемого локального хранения |
-| 2026-10-07 | Backend не нужен до AI/синхронизации | Предложение под согласованный личный MVP |
-| 2026-10-08 | Начальный экран — карта, панели открываются по запросу | Уточнение пользователя |
-| 2026-10-08 | Номер/название области на карте, заметки при hover, полная карточка по одному клику | Уточнение пользователя |
-| 2026-10-08 | Навигация с вкладками «Области» / «Маркеры», поиск, фильтрация и группировка | Уточнение пользователя |
-| 2026-10-09 | BM-005 принята: перенос вершин во время создания; двойной клик по ручке удаляет вершину без завершения контура; выбор цвета не закрывает палитру, клик снаружи закрывает | Ручная приёмка пользователя |
-| 2026-10-09 | BM-006, уточнение до приёмки: одна HTML-панель, общий черновик Save/Cancel вместо автосохранения, выбор при несохранённом переходе, текстовый undo отдельно от геометрии | Явное указание пользователя; [детали](region-details.md) |
-| 2026-10-09 | BM-006: Tiptap WYSIWYG, очищенная HTML/plain/bitmap вставка, изображения через Asset; единый rich JSON; IndexedDB 5 переносит Markdown v4, ZIP 4 читает v1/v2/v3 | Уточнение пользователя и совместимость; [формат](backup-format.md) |
-| 2026-10-09 | BM-006 и доработки приняты вручную; следующий этап — BM-007 | Подтверждение пользователя |
-| 2026-10-09 | BM-007: независимые Entity/MarkerPlacement, ручные привязки, общий черновик карточки и изображения, постоянный размер иконок; IndexedDB 6 добавляет хранилища, ZIP 5 читает v1…4 | Текущий запрос пользователя; [детали](markers.md) |
-| 2026-10-10 | Доработки BM-007: камера сохраняется при записи, очистке полей и resize; черновик маркера переносится до Save; контекстное подменю типов размещает в точке ПКМ; несколько regionIds, миграция IndexedDB 6→7 и ZIP 5→6 | Уточнение пользователя; [детали](markers.md) |
-| 2026-10-10 | BM-007: переходы область ↔ маркер через связанные карточки центрируют выбранный элемент без изменения zoom; несохранённые правки разрешаются до перемещения камеры; обычное открытие с карты сохраняет вид | Уточнение пользователя; [детали](markers.md) |
-| 2026-10-11 | BM-007 и доработки приняты: viewport без сбросов/мерцания, перенос нового маркера, несколько привязок с миграцией и частичным снятием, контекстное подменю и двусторонние переходы с центрированием | Ручная приёмка пользователя; [детали](markers.md) |
-| 2026-10-11 | BM-008: сворачиваемая навигация с независимыми настройками вкладок, поиск/AND-фильтры и OR/AND тегов, все согласованные группировки; общий переход с подтверждением черновика, память viewport каждой карты и центрирование поверх её zoom; создание/переименование Map без смены схемы | Текущий запрос пользователя; [детали](navigation-search.md) |
-| 2026-10-11 | Доработки BM-008 до приёмки: меню карт в хедере, подтверждаемое атомарное удаление с сохранением общих данных, компактный поиск и общие подсказки тегов; история settings обновляется транзакцией карточки, старые проекты получают стабильный fallback без смены версий | Текущий запрос пользователя; [детали](navigation-search.md) |
-| 2026-10-11 | BM-008 и UI/UX-доработки приняты вручную; следующий этап — BM-009, режим подготовки/игры | Подтверждение пользователя |
-| 2026-10-11 | BM-009 до приёмки: режим проекта как отдельная UI-настройка settings, подготовка по умолчанию; игра блокирует геометрию и показывает единую карточку в просмотре; атомарные статусы Entity с отдельной отменой, без изменения viewport; IndexedDB 7 / Project 1 / ZIP 6 без новых полей документа | Текущий запрос пользователя; [детали](play-mode.md) |
-| 2026-10-11 | BM-009 прошла ручную проверку; следующий этап — BM-010: надёжность локальных данных, резервных копий и офлайн-запуска | Подтверждение пользователя |
-| 2026-10-11 | BM-010 до приёмки: один редактор Web Locks с перечитыванием перед получением права; понятные ошибки квоты/версии/миграции; проверка real-format и полного ZIP round-trip; production precache и обновление по явному действию с защитой черновика, без смены схем и зависимостей | Текущий запрос пользователя; [детали](reliability-offline.md) |
+| 2026-10-07 | Personal use first | User answer |
+| 2026-10-07 | One device first, synchronization later | User answer |
+| 2026-10-07 | AI after editor | User answer |
+| 2026-10-07 | Separate maps/floors from graphical layers | Requirements analysis proposal |
+| 2026-10-07 | Separate Entity / MarkerPlacement | Shared descriptions/transitions proposal |
+| 2026-10-07 | Image-inclusive export in MVP | Verifiable local-storage proposal |
+| 2026-10-07 | No backend before AI/synchronization | Agreed personal MVP proposal |
+| 2026-10-08 | Map first, panels on request | User clarification |
+| 2026-10-08 | Number/title, hover notes, full one-click card | User clarification; later hover revised in UI-02 |
+| 2026-10-08 | Regions / Markers navigation, search/filters/grouping | User clarification |
+| 2026-10-09 | Accepted BM-005: creation-time vertex movement, double-click handle deletion without completion, persistent palette until outside click | Manual acceptance |
+| 2026-10-09 | BM-006 before acceptance: one HTML panel, shared Save/Cancel replaces card autosave, dirty-transition decisions, separate text undo | Explicit user instruction; [details](region-details.md) |
+| 2026-10-09 | BM-006 Tiptap WYSIWYG, sanitized HTML/plain/bitmap paste, Asset images, one rich JSON; IndexedDB 5 migrates Markdown v4, ZIP 4 reads v1/v2/v3 | User clarification/compatibility; [format](backup-format.md) |
+| 2026-10-09 | BM-006/refinements manually accepted; BM-007 next | User confirmation |
+| 2026-10-09 | BM-007 independent Entity/Placement, manual bindings, shared draft/images, fixed icon size; IndexedDB 6 stores, ZIP 5 reads v1…4 | User task; [details](markers.md) |
+| 2026-10-10 | BM-007 camera retained on write/clear/resize; draft marker movement; right-click type submenu; multiple regionIds, IndexedDB 6→7 / ZIP 5→6 migrations | User clarification; [details](markers.md) |
+| 2026-10-10 | Region ↔ marker links center without zoom changes after resolving drafts; ordinary map opens retain view | User clarification; [details](markers.md) |
+| 2026-10-11 | BM-007 accepted: stable viewport, draft movement, multi-bindings/migration/partial unlinking, submenu, two-way centered links | Manual acceptance |
+| 2026-10-11 | BM-008 separate tab state, search/AND filters/OR-AND tags, agreed groups; shared draft-aware navigation, per-map view memory, scale-preserving centering, map create/rename without schema change | User task; [details](navigation-search.md) |
+| 2026-10-11 | BM-008 refinements: header map menu, confirmed atomic deletion preserving shared data, compact search, common tags; transactional settings history/fallback without new version | User task; [details](navigation-search.md) |
+| 2026-10-11 | BM-008/refinements accepted; BM-009 next | User confirmation |
+| 2026-10-11 | BM-009 before acceptance: per-project settings mode, Preparation default, Play geometry guard/view cards, atomic Entity statuses/separate undo, stable viewport; versions 7/1/6 unchanged | User task; [details](play-mode.md) |
+| 2026-10-11 | BM-009 accepted; BM-010 reliability/backups/offline next | User confirmation |
+| 2026-10-11 | BM-010 before acceptance: Web Locks single editor/reread on ownership, quota/version/migration errors, real-format/full ZIP round-trip, production precache/explicit protected update, no schema/dependency changes | User task; [details](reliability-offline.md); Web Locks later disabled by UI-01 |
 
-### UI-01 — компактное управление, принято вручную
+### UI-01 — compact controls, manually accepted
 
-Хедер содержит бургер, проект с «i» для прежнего контекста, режим, поиск и меню карт справа. Проекты/импорт/экспорт находятся в бургере; действия фона — в меню карты с названием цели и подтверждением удаления. Создание, undo/redo и камера закреплены группами поверх видимой рабочей области, панели не закрывают инструменты.
+Header: burger, project/information for previous context, mode, search, map menu right. Projects/import/export live in the burger; backgrounds in map menu with target name/deletion confirmation. Creation, undo/redo and camera tools are grouped over the visible workspace without panels obscuring them.
 
-Существующая область перемещается только в общем режиме редактирования её карточки; отдельного режима переноса нет. Перемещение включено в черновик Save/Cancel и защиту переходов, ошибка сохраняет черновик. Связанные маркеры остаются на месте. В просмотре, игре и при закрытой карточке drag изнутри области перемещает камеру. Правки вершин и создание сохраняют прежние правила. Данные и viewport независимы; версии IndexedDB 7 / Project 1 / ZIP 6 не меняются. [Подробности UI-01](ui-controls.md).
+Existing regions move only in their card's overall edit mode; no separate movement mode. Movement joins Save/Cancel/transition protection; failure retains draft. Bound markers stay put. In view/Play/closed-card states, dragging inside regions pans. Vertex/creation rules remain. Data/viewport independent; IndexedDB 7 / Project 1 / ZIP 6 unchanged. [UI-01](ui-controls.md).
 
-### UI-02 — карточки, подсказки и ловушки, принята вручную
+### UI-02 — cards, tooltips and traps, manually accepted
 
-Единая ширина правой карточки регулируется мышью/касанием и клавиатурой, сохраняется как UI-настройка; изменение ширины/окна не меняет камеру и черновик. Общий редактор использует компактные иконки и «Ещё». Region получает обычный многострочный shortDescription; hover области показывает его и теги вместо заметок ведущего. Общие плашки ограничены пятью тегами с «ещё N». Новый Entity.kind=trap имеет статусы armed/disarmed и список совместимых проверок RegionCheck с обязательной положительной целой СЛ; проверки/статус принадлежат сущности. Все меню, связи, поиск, игра, сохранение и архивы поддерживают новый тип. IndexedDB 8 / Project 1 / ZIP 7; старые поля получают пустые значения, upgrade атомарен. [Полное принятое задание, реализация и ручная проверка](ui-cards-tooltips-traps.md).
+Shared adjustable right-panel width persists as UI preference; width/window changes retain camera/draft. Shared compact editor has More. Region.shortDescription is plain multiline; hover uses it/tags instead of GM notes. Badges show five tags plus remaining count. Entity.kind=trap has armed/disarmed statuses and Entity-owned RegionCheck-compatible checks with required positive integer DC. All menus, bindings, search, Play, storage/archive support it. IndexedDB 8 / Project 1 / ZIP 7; old fields become empty in atomic upgrade. [Full UI-02 task/implementation/manual check](ui-cards-tooltips-traps.md).
 
-UI-02 принята вручную 11 октября 2026. Повторные проверки: typecheck/lint/build, 164 unit-теста и 40 браузерных сценариев Edge — успешны. Следующая итерация UI-03: форматированный контекст приключения, описание карты и подтверждённое удаление проектов.
+Accepted October 11, 2026. Repeated typecheck/lint/build, 164 unit tests and 40 Edge scenarios passed. Next UI-03: formatted context/map descriptions and confirmed project deletion.
 
+### UI-03 — adventure context, map description and project deletion, manually accepted
 
-### UI-03 — контекст приключения, описание карты и удаление проекта, принята вручную
+UI-03/fixes accepted. Repeated typecheck/lint/build, 176 unit tests and 43 production Edge scenarios passed; no new features added during finalization.
 
-UI-03 и исправления приняты пользователем. Повторные проверки: typecheck, lint, build, 176 unit-тестов и 43 production-сценария Edge — успешны; новых функций при фиксации этапа не добавлено.
+Hosting: GitHub Pages via Actions, Node.js 24, lockfile install/checks before publishing dist/. Production-only base preserves local root startup. Worker/cache separate by shell path; IndexedDB remains origin/profile bound. Localhost transfer requires ZIP export/import. IndexedDB 9 / Project 2 / ZIP 8 unchanged by hosting; no accounts/server storage. Addresses/update flow: [README](../README.md#github-pages).
 
-Размещение приложения: GitHub Pages через Actions, Node.js 24, установка по lockfile и проверки до публикации `dist/`. Путь сайта задаётся только для production-сборки; локальный запуск остаётся в `/`. Service Worker и офлайн-кэш разделяются по пути оболочки, данные IndexedDB остаются привязанными к origin/профилю. При переходе с localhost проекты переносятся явно ZIP-экспортом/импортом. Форматы IndexedDB 9 / Project 2 / ZIP 8 не меняются, аккаунты и серверное хранение не добавляются. Целевые адреса и порядок обновления описаны в [README](../README.md#github-pages).
+Project/map information buttons open saved content in the shared right panel. Map name appears in its heading; shared width and stable viewport. Preparation provides filling/editing with the same visual editor/Save/Cancel; Play renders formatting/images only. Closing, object/map/project/mode changes use three draft choices; previous-object tools stop after resolution. Map switching updates open descriptions to target content.
 
-«i» рядом с проектом и отдельная «i» рядом с меню карт открывают соответствующий сохранённый документ в одной общей правой панели. Название карты указано в заголовке; ширина общая с областями/маркерами, открытие и сохранение сохраняют viewport. В подготовке доступны заполнение/редактирование, общий визуальный редактор и Save/Cancel; в игре — только просмотр форматирования и изображений. Закрытие, смена объекта/карты/проекта/режима используют три решения для черновика; инструменты прошлого объекта прекращаются после этого решения. При переключении карты открытое описание показывает документ цели.
+IndexedDB 9 / Project 2 / ZIP 8 replaces actual Markdown contextMd/notesMd with sole Project.context / Map.description documents. Plain text/line breaks survive; HTML is not interpreted; existing parser converts old Markdown without reconverting rich documents. Upgrade atomic; ZIP 1…7 supported. Both documents/original images archived with remapped assetId. New maps have empty descriptions; nonempty old imports survive.
 
-IndexedDB 9 / Project 2 / ZIP 8: Project.context заменяет реально использовавшийся Markdown contextMd, Map.description заменяет notesMd без второй редактируемой копии. Обычный текст и переносы сохраняются, HTML не интерпретируется, прежний Markdown преобразуется существующим парсером, преобразованные документы не меняются повторно. Upgrade атомарен; старые ZIP 1…7 поддерживаются. Оба документа и оригинальные изображения входят в архив; копия переназначает все ссылки assetId. Начальные описания карт пустые; непустой notesMd из прежнего импорта сохраняется при миграции.
+Each project menu offers confirmed named deletion with consequences. Maps/regions/placements/entities/assets/project settings delete atomically while preserving other projects. Resolve current drafts first; success opens list. Failure keeps old snapshot/retry, concurrent duplicate operations prevented. Assets are not cross-project; context/description references count for background/map deletion. No trash. [UI-03 checks/limits](ui-project-map-context.md).
 
-Меню каждого проекта содержит отдельное подтверждаемое удаление с именем и последствиями. Карты, области, размещения, сущности, assets и настройки конкретного проекта удаляются одной транзакцией, чужие данные сохраняются. Черновик текущего проекта сначала разрешается; после успешного удаления открывается список. Ошибка сохраняет старый снимок и даёт повтор, повторный запуск во время операции исключён. Assets не разделяются между проектами, а ссылки из контекста/описаний учитываются при удалении фона и карт. Корзины нет. [Поведение, проверки и ограничения UI-03](ui-project-map-context.md).
+### Localization — manually accepted
+
+English is the default without a saved preference; Russian remains available as Русский. The burger offers English / Русский without flags. Switching immediately updates every interface label and html.lang while preserving project/map, viewport, search, selection, open card and live drafts. The browser-origin language preference persists separately from projects, is not archived, and is retryable on storage failure. Generation/adventure text is never translated. Stable dictionary keys support parameters and locale plural rules; type/status stored values are unchanged. Human-maintained documentation is English, with intentional historical migration literals and Russian fixtures retained.
+
+For a selected map without a background, Preparation shows a centered Add a map image prompt, PNG/JPEG/WebP formats and Add map image using the existing upload input/validation/transaction flow. Cancel leaves data unchanged; errors allow retry; success removes the prompt, removal restores it. Existing objects remain interactive outside the button. Play shows only a no-background message. No project/map uses its existing empty state. **IndexedDB 9 / Project 2 / ZIP 8 remain unchanged; no dependencies, external services or network translation.** The user manually accepted localization and the empty-map state on October 12, 2026 and authorized ordinary merging and production publication after passing checks. See [localization.md](localization.md).

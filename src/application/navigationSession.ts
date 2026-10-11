@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import type { NavigationRepository } from './navigationRepository'
 import type { ProjectSession } from './projectSession'
 import { emptyNavigationData } from '../domain/navigation'
@@ -16,7 +17,7 @@ export class NavigationSession {
     this.update({ projectId, data: projectId === this.state.projectId ? this.state.data : emptyNavigationData(), loading: !!projectId, error: undefined })
     if (!projectId) return
     try { const data = await this.repository.load(projectId); if (generation === this.generation) this.update({ data, loading: false }) }
-    catch (error) { if (generation === this.generation) this.update({ loading: false, error: error instanceof Error ? error.message : 'Не удалось прочитать объекты проекта.' }) }
+    catch (error) { if (generation === this.generation) this.update({ loading: false, error: error instanceof Error ? error.message : message("ui.could.not.read.project.objects") }) }
   }
   createMap = async (name: string): Promise<string | undefined> => {
     if (!this.canEdit()) return undefined
@@ -24,16 +25,16 @@ export class NavigationSession {
     try {
       await this.projects.mutateProject(async (project) => { const result = await this.repository.createMap(project, name); mapId = result.map.id; return result.project })
       await this.load(); return mapId
-    } catch (error) { this.update({ error: error instanceof Error ? error.message : 'Не удалось создать карту.' }); return undefined }
+    } catch (error) { this.update({ error: error instanceof Error ? error.message : message("ui.could.not.create.the.map") }); return undefined }
   }
   renameMap = async (mapId: string, name: string): Promise<boolean> => {
     if (!this.canEdit()) return false
     try { await this.projects.mutateProject((project) => this.repository.renameMap(project, mapId, name)); await this.load(); return true }
-    catch (error) { this.update({ error: error instanceof Error ? error.message : 'Не удалось переименовать карту.' }); return false }
+    catch (error) { this.update({ error: error instanceof Error ? error.message : message("ui.could.not.rename.the.map") }); return false }
   }
   deleteMap = async (mapId: string): Promise<boolean> => {
     if (!this.canEdit()) return false
     try { await this.projects.mutateProject((project) => this.repository.deleteMap(project, mapId)); await this.load(); return true }
-    catch (error) { this.update({ error: error instanceof Error ? error.message : 'Не удалось удалить карту.' }); return false }
+    catch (error) { this.update({ error: error instanceof Error ? error.message : message("ui.could.not.delete.the.map") }); return false }
   }
 }

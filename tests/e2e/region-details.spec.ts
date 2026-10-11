@@ -3,7 +3,8 @@ import { clickMenuAction } from './controls'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import { unzipSync } from 'fflate'
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test, configureRussianLocale } from './testLocale'
 import type { Page } from '@playwright/test'
 import type { Region } from '../../src/domain/region'
 import { fitBounds, worldToScreen, zoomAt } from '../../src/domain/viewport'
@@ -218,6 +219,7 @@ test('pastes cleaned HTML/plain text and a screenshot; assets survive failed wri
 
 test('touch opens one card; text undo does not undo map geometry; technical empty blocks stay empty', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ hasTouch: true, baseURL, viewport: { width: 1280, height: 800 } })
+  await configureRussianLocale(context)
   const page = await context.newPage()
   try {
     const box = await seed(page); const original = await stored(page)

@@ -1,3 +1,4 @@
+import { message, localize, t } from '../i18n'
 import type { RegionRepository } from './regionRepository'
 import type { ProjectSession } from './projectSession'
 import type { Point } from '../domain/viewport'
@@ -106,7 +107,7 @@ export class RegionSession {
     catch (error) {
       if (generation !== this.modeGeneration) return
       this.retryModeWork = () => { void this.loadMode(projectId) }
-      this.update({ mode: 'play', modePhase: 'error', modeError: `Не удалось прочитать режим. Геометрия заблокирована. ${error instanceof Error ? error.message : ''}` })
+      this.update({ mode: 'play', modePhase: 'error', modeError: message("ui.could.not.read.the.mode.geometry.is.locked.value", { p0: error instanceof Error ? error.message : '' }) })
     }
   }
   requestMode = (mode: WorkspaceMode) => {
@@ -129,7 +130,7 @@ export class RegionSession {
     } catch (error) {
       if (generation !== this.modeGeneration) return
       this.retryModeWork = () => this.requestMode(mode)
-      this.update({ modePhase: 'error', modeError: `Не удалось сохранить режим. ${error instanceof Error ? error.message : ''}` })
+      this.update({ modePhase: 'error', modeError: message("ui.could.not.save.the.mode.value", { p0: error instanceof Error ? error.message : '' }) })
     }
   }
   setMapNavigator = (handler: (target: NavigationTarget) => Promise<void>) => { this.mapNavigator = handler }
@@ -144,7 +145,7 @@ export class RegionSession {
   }
   readMap = async (mapId: string): Promise<LoadedMapObjects> => {
     const [regions, assets, objects] = await Promise.all([this.repository.load(mapId), this.repository.loadAssets(mapId), this.repository.loadObjects(mapId)])
-    if (objects.markers.some((m) => m.regionIds.some((id) => !regions.some((r) => r.id === id)))) throw new Error('Область маркера не найдена.')
+    if (objects.markers.some((m) => m.regionIds.some((id) => !regions.some((r) => r.id === id)))) throw new Error(message("ui.marker.region.not.found"))
     return { regions, assets, ...objects }
   }
   adoptMap = (target: NavigationTarget, data: LoadedMapObjects & { map?: Map }) => {
@@ -152,7 +153,7 @@ export class RegionSession {
     const information = 'kind' in target ? undefined : info?.kind === 'map' ? data.map ? { ...info, mapId: data.map.id, name: data.map.name, document: data.map.description, draft: undefined, assets: Object.fromEntries(data.assets.map((a) => [a.id, a])) } : undefined : info
     const region = 'kind' in target && target.kind === 'region' ? data.regions.find((r) => r.id === target.id) : undefined
     const marker = 'kind' in target && target.kind === 'marker' ? data.markers.find((m) => m.id === target.id) : undefined
-    if ('kind' in target && !region && !marker) throw new Error('Объект больше не существует на выбранной карте.')
+    if ('kind' in target && !region && !marker) throw new Error(message("ui.the.object.no.longer.exists.on.the.selected.map"))
     ++this.generation; this.loaded = true; this.undoStack = []; this.redoStack = []; this.retryWork = undefined
     const editRegion = region && this.isPreparation() && !regionHasUserContent(region)
     this.update({ information, mapId: target.mapId, regions: data.regions, entities: data.entities, markers: data.markers, assets: Object.fromEntries(data.assets.map((a) => [a.id, a])), phase: 'saved', transitioning: false, error: undefined, draft: undefined, markerTool: undefined, markerDraft: undefined, cardId: region?.id, selectedId: region?.id, markerCardId: marker?.id, selectedMarkerId: marker?.id, cardMode: editRegion ? 'edit' : 'view', details: editRegion ? { [region.id]: { fields: detailsOf(region), assets: [], version: 0, phase: 'dirty' } } : {}, pendingIntent: undefined, imagePending: 0, imageError: undefined, selectedVertex: undefined, vertexMode: false, viewFocus: region ? { point: labelAnchor(region.vertices) } : marker ? { point: { x: marker.x, y: marker.y } } : undefined })
@@ -199,7 +200,7 @@ export class RegionSession {
       if (generation === this.generation) { this.retryWork = () => this.load(mapId); this.fail(error) }
     }
   }
-  private fail(error: unknown) { this.update({ phase: 'error', error: error instanceof Error ? error.message : 'Не удалось сохранить объекты карты.' }) }
+  private fail(error: unknown) { this.update({ phase: 'error', error: error instanceof Error ? error.message : message("ui.could.not.save.map.objects") }) }
   dismiss = () => { this.retryWork = undefined; this.update({ error: undefined }) }
   retry = async () => { if (!this.busy()) await this.retryWork?.() }
   select = (id?: string) => { if (!this.busy() && !this.state.draft && !this.hasUnsavedDetails()) this.update({ selectedId: id ?? this.state.cardId, selectedMarkerId: id ? undefined : this.state.markerCardId, selectedVertex: undefined }) }
@@ -288,7 +289,7 @@ export class RegionSession {
     if (!this.state.draft || !this.ready()) return
     const last = this.state.draft.at(-1)
     if (last && samePoint(last, point)) return
-    if (this.state.draft.length >= MAX_REGION_VERTICES) { this.fail(new Error(`Допустимо не более ${MAX_REGION_VERTICES} вершин области.`)); return }
+    if (this.state.draft.length >= MAX_REGION_VERTICES) { this.fail(new Error(message("ui.a.region.can.have.at.most.value.vertices", { p0: MAX_REGION_VERTICES }))); return }
     this.retryWork = undefined
     this.update({ draft: [...this.state.draft, { ...point }], error: undefined })
   }
@@ -307,9 +308,9 @@ export class RegionSession {
     if (!this.ready() || !this.state.draft) return
     try {
       validatePolygon(this.state.draft)
-      if (this.state.regions.length >= MAX_REGIONS) throw new Error(`Допустимо не более ${MAX_REGIONS} областей.`)
+      if (this.state.regions.length >= MAX_REGIONS) throw new Error(message("ui.at.most.value.regions.are.allowed", { p0: MAX_REGIONS }))
       const number = Math.max(0, ...this.state.regions.map((r) => r.number)) + 1
-      const region: Region = { ...emptyRegionContent(), titleCustomized: false, id: crypto.randomUUID(), mapId: this.state.mapId!, vertices: structuredClone(this.state.draft), order: Math.max(-1, ...this.state.regions.map((r) => r.order)) + 1, number, title: `Область ${number}`, color: '#d7ad62', fillOpacity: 0.4 }
+      const region: Region = { ...emptyRegionContent(), titleCustomized: false, id: crypto.randomUUID(), mapId: this.state.mapId!, vertices: structuredClone(this.state.draft), order: Math.max(-1, ...this.state.regions.map((r) => r.order)) + 1, number, title: t("ui.region.value", { p0: number }), color: '#d7ad62', fillOpacity: 0.4 }
       await this.commit([...this.state.regions, region], region.id, 'edit', true)
     } catch (error) { this.fail(error) }
   }
@@ -330,7 +331,7 @@ export class RegionSession {
   removeVertex = async (index = this.state.selectedVertex) => {
     const region = this.state.regions.find((r) => r.id === this.state.selectedId)
     if (!this.ready() || !region || index === undefined || !Number.isInteger(index) || index < 0 || index >= region.vertices.length) return
-    if (region.vertices.length <= 3) { this.fail(new Error('После удаления должны остаться минимум три вершины.')); return }
+    if (region.vertices.length <= 3) { this.fail(new Error(message("ui.at.least.three.vertices.must.remain.after.deletion"))); return }
     await this.change({ ...region, vertices: region.vertices.filter((_, i) => i !== index) })
   }
   undo = async () => {
@@ -350,8 +351,8 @@ export class RegionSession {
     this.update({ details: { ...this.state.details, [id]: { ...this.state.details[id], fields: structuredClone({ ...(this.state.details[id]?.fields ?? detailsOf(region)), ...fields }), assets: this.state.details[id]?.assets ?? [], version, phase: 'dirty', error: undefined } } })
   }
   beginImageInsertion = () => { if (this.isPreparation() || this.state.information?.kind === 'new-project') this.update({ imagePending: this.state.imagePending + 1, imageError: undefined }) }
-  reportImageError = (error: unknown) => this.update({ imageError: error instanceof Error ? error.message : 'Не удалось вставить изображение или текст.' })
-  endImageInsertion = (error?: unknown) => this.update({ imagePending: Math.max(0, this.state.imagePending - 1), imageError: error ? error instanceof Error ? error.message : 'Не удалось вставить изображение.' : undefined })
+  reportImageError = (error: unknown) => this.update({ imageError: error instanceof Error ? error.message : message("ui.could.not.insert.image.or.text") })
+  endImageInsertion = (error?: unknown) => this.update({ imagePending: Math.max(0, this.state.imagePending - 1), imageError: error ? error instanceof Error ? error.message : message("ui.could.not.insert.image") : undefined })
   addDraftAsset = (id: string, asset: Asset) => {
     if (!this.isPreparation()) return
     const region = this.state.regions.find((r) => r.id === id)
@@ -386,7 +387,7 @@ export class RegionSession {
     if (this.informationWork) return this.informationWork
     const info = this.state.information; const draft = info?.draft
     if (!info || !draft || !this.informationRepository || this.state.imagePending || this.busy() || (info.kind !== 'new-project' && !this.isPreparation())) return Promise.resolve()
-    if (!draft.name.trim()) { this.update({ information: { ...info, draft: { ...draft, phase: 'error', error: 'Укажите название проекта.' } } }); return Promise.resolve() }
+    if (!draft.name.trim()) { this.update({ information: { ...info, draft: { ...draft, phase: 'error', error: message("ui.enter.a.project.name") } } }); return Promise.resolve() }
     this.update({ information: { ...info, draft: { ...draft, phase: 'saving', error: undefined } } })
     this.informationWork = (async () => {
       try {
@@ -395,7 +396,7 @@ export class RegionSession {
         else await this.projects.mutateProject((project) => this.informationRepository!.save(project, fields, draft.assets))
         this.update({ information: { ...info, kind: info.kind === 'new-project' ? 'project' : info.kind, name: fields.name, document: structuredClone(fields.document), draft: undefined, assets: { ...info.assets, ...Object.fromEntries(draft.assets.map((a) => [a.id,a])) } }, cardMode: 'view', imageError: undefined })
       } catch (error) {
-        this.update({ information: { ...info, draft: { ...draft, phase: 'error', error: error instanceof Error ? error.message : 'Не удалось сохранить документ.' } } })
+        this.update({ information: { ...info, draft: { ...draft, phase: 'error', error: error instanceof Error ? error.message : message("ui.could.not.save.the.document") } } })
       } finally { this.informationWork = undefined }
     })()
     return this.informationWork
@@ -408,7 +409,7 @@ export class RegionSession {
     return this.detailsWork
   }
   flushDetails = async () => {
-    if (this.hasUnsavedDetails()) throw new Error('Сначала сохраните или отмените изменения карточки.')
+    if (this.hasUnsavedDetails()) throw new Error(message("ui.save.or.discard.card.changes.first"))
   }
   private async writeDetails(includeErrors: boolean) {
     while (true) {
@@ -453,7 +454,7 @@ export class RegionSession {
       } catch (error) {
         if (generation !== this.generation) return
         const current = this.state.details[id]
-        this.update({ details: { ...this.state.details, [id]: { ...current, phase: 'error', error: error instanceof Error ? error.message : 'Не удалось сохранить карточку.' } } })
+        this.update({ details: { ...this.state.details, [id]: { ...current, phase: 'error', error: error instanceof Error ? error.message : message("ui.could.not.save.the.card") } } })
         return
       }
     }
@@ -466,9 +467,9 @@ export class RegionSession {
   cancelMarkerTool = () => this.update({ markerTool: undefined })
   placeMarker = (point: Point) => {
     if (!this.ready() || !this.state.markerTool) return
-    if (this.state.markers.length >= MAX_MARKERS || this.state.entities.length >= MAX_ENTITIES) { this.fail(new Error('Достигнут лимит маркеров или сущностей проекта.')); return }
+    if (this.state.markers.length >= MAX_MARKERS || this.state.entities.length >= MAX_ENTITIES) { this.fail(new Error(message("ui.the.project.marker.or.entity.limit.was.reached"))); return }
     const kind = this.state.markerTool
-    const entity: Entity = { checks: [], id: crypto.randomUUID(), projectId: this.getProjectId()!, kind, name: markerTypes[kind].label, description: emptyDocument(), status: Object.keys(statusesOf(kind))[0], tags: [] }
+    const entity: Entity = { checks: [], id: crypto.randomUUID(), projectId: this.getProjectId()!, kind, name: localize(markerTypes[kind].label), description: emptyDocument(), status: Object.keys(statusesOf(kind))[0], tags: [] }
     const marker: MarkerPlacement = { id: crypto.randomUUID(), entityId: entity.id, mapId: this.state.mapId!, x: point.x, y: point.y, regionIds: [], color: '#d7ad62', locked: false, order: Math.max(-1, ...this.state.markers.map((m) => m.order)) + 1 }
     try { validateMarker(marker) } catch (error) { this.fail(error); return }
     this.update({ markerTool: undefined, markerCardId: marker.id, selectedMarkerId: marker.id, cardId: undefined, selectedId: undefined, vertexMode: false, cardMode: 'edit', markerDraft: { entity, marker, fields: markerDetailsOf(entity, marker), assets: [], isNew: true, phase: 'dirty', version: 0 } })
@@ -482,7 +483,7 @@ export class RegionSession {
     try {
       validateMarker(marker)
       this.update({ markerDraft: { ...draft, marker, version: draft.version + 1 } })
-    } catch (error) { this.update({ markerDraft: { ...draft, phase: 'error', error: error instanceof Error ? error.message : 'Не удалось переместить черновик маркера.' } }) }
+    } catch (error) { this.update({ markerDraft: { ...draft, phase: 'error', error: error instanceof Error ? error.message : message("ui.could.not.move.the.marker.draft") } }) }
   }
   openMarkerCard = (id: string, center = false) => {
     if (!this.busy() && !this.state.draft && !this.state.markerTool && !this.state.vertexMode && id !== this.state.markerCardId && this.state.markers.some((m) => m.id === id)) this.requestCardIntent({ kind: 'marker', id, ...(center ? { center: true } : {}) })
@@ -522,7 +523,7 @@ export class RegionSession {
       const marker: MarkerPlacement = { ...draft.marker, color: fields.color, locked: fields.locked, regionIds: [...fields.regionIds] }
       try {
         validateEntity(entity); validateMarker(marker)
-        if (marker.regionIds.some((id) => !this.state.regions.some((r) => r.id === id))) throw new Error('Выберите области текущей карты.')
+        if (marker.regionIds.some((id) => !this.state.regions.some((r) => r.id === id))) throw new Error(message("ui.choose.regions.of.the.current.map"))
         const entities = [...this.state.entities.filter((e) => e.id !== entity.id), entity]
         const markersBefore = structuredClone(this.state.markers)
         const markers = draft.isNew ? [...this.state.markers, marker] : this.state.markers.map((m) => m.id === marker.id ? marker : m)
@@ -557,7 +558,7 @@ export class RegionSession {
         const nextDraft = latest.version === draft.version ? undefined : { ...latest, entity, marker, isNew: false, assets: latest.assets.filter((a) => !newAssets.some((written) => written.id === a.id)) }
         this.update({ entities, markers, assets: { ...this.state.assets, ...Object.fromEntries(newAssets.map((a) => [a.id, a])) }, markerDraft: nextDraft, ...(nextDraft ? {} : { cardMode: 'view' }) })
       } catch (error) {
-        if (generation === this.generation && this.state.markerDraft) this.update({ markerDraft: { ...this.state.markerDraft, phase: 'error', error: error instanceof Error ? error.message : 'Не удалось сохранить маркер.' } })
+        if (generation === this.generation && this.state.markerDraft) this.update({ markerDraft: { ...this.state.markerDraft, phase: 'error', error: error instanceof Error ? error.message : message("ui.could.not.save.the.marker") } })
         return
       }
     }
@@ -600,7 +601,7 @@ export class RegionSession {
       else this.statusUndo.push(this.statusRedo.pop()!)
       this.update({ entities: this.state.entities.map((e) => e.id === entity.id ? entity : e), statusAction: { ...command, kind, phase: 'saved' } })
     } catch (error) {
-      if (this.projects.getSnapshot().project?.id === projectId) this.update({ statusAction: { ...command, kind, phase: 'error', error: `Не удалось сохранить статус. ${error instanceof Error ? error.message : ''}` } })
+      if (this.projects.getSnapshot().project?.id === projectId) this.update({ statusAction: { ...command, kind, phase: 'error', error: message("ui.could.not.save.status.value", { p0: error instanceof Error ? error.message : '' }) } })
     }
   }
   private async commit(next: Region[], selectedId?: string, kind: 'edit' | 'undo' | 'redo' = 'edit', finishDraft = false, markers = this.state.markers) {

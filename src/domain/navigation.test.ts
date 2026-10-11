@@ -1,3 +1,4 @@
+import { localize } from '../i18n'
 import { legacyContextDocument } from '../storage/migrateProjectContext'
 import { describe, expect, it } from 'vitest'
 import { defaultFilters, filterNavigation, groupNavigation, navigationStatuses } from './navigation'
@@ -61,8 +62,10 @@ describe('Navigation search, intersecting filters and groups', () => {
     expect(groupNavigation(markers, 'status', data).find((g) => g.key === 'hidden')?.results).toHaveLength(2)
     const regions = filterNavigation(data, 'regions', { ...defaultFilters(), scope: 'project' }, 'a')
     expect(groupNavigation(regions, 'tag', data).find((g) => g.key === 'tag:тайна')?.results).toHaveLength(2)
-    expect(groupNavigation(regions, 'tag', data).find((g) => g.title === 'Без тегов')?.results).toHaveLength(1)
-    expect(navigationStatuses('door')).toEqual({ open: 'Открыта', locked: 'Заперта', hidden: 'Скрыта' })
-    expect(navigationStatuses().hidden).toContain('Скрыт')
+    const untagged = groupNavigation(regions, 'tag', data).find((g) => g.key === 'untagged')!
+    expect(untagged.results).toHaveLength(1)
+    expect(localize(untagged.title)).toBe('Без тегов')
+    expect(Object.fromEntries(Object.entries(navigationStatuses('door')).map(([key, value]) => [key, localize(value)]))).toEqual({ open: 'Открыта', locked: 'Заперта', hidden: 'Скрыта' })
+    expect(localize(navigationStatuses().hidden)).toContain('Скрыт')
   })
 })

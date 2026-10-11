@@ -1,3 +1,4 @@
+import { localize, message as deferredMessage, t } from '../../i18n'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Project } from '../../domain/project'
 import type { ProjectRepository } from '../../application/projectRepository'
@@ -14,26 +15,26 @@ export function ProjectDialog({ repository, session, onClose, onCreate, onOpen, 
   useEffect(() => { ref.current?.showModal() }, [])
   useEffect(() => {
     let active = true
-    repository.list().then((items) => { if (active) { setProjects(items); setError(''); setListing(false) } }).catch((e: unknown) => { if (active) { setError(e instanceof Error ? e.message : 'Не удалось прочитать проекты.'); setListing(false) } })
+    repository.list().then((items) => { if (active) { setProjects(items); setError(''); setListing(false) } }).catch((e: unknown) => { if (active) { setError(e instanceof Error ? e.message : deferredMessage("ui.could.not.read.projects")); setListing(false) } })
     return () => { active = false }
   }, [repository, attempt])
   const blocked = state.loading || session.hasUnsavedChanges()
   return <dialog ref={ref} className="project-dialog" aria-labelledby="project-dialog-title" onCancel={onClose} onClose={onClose}>
-    <div className="dialog-heading"><h2 id="project-dialog-title">Локальные проекты</h2><button type="button" onClick={onClose} aria-label="Закрыть окно проекта">Закрыть</button></div>
-    {message && <p role="status">{message}</p>}
-    {state.error && <p className="form-error" role="alert">{state.error}</p>}
+    <div className="dialog-heading"><h2 id="project-dialog-title">{t("ui.local.projects")}</h2><button type="button" onClick={onClose} aria-label={t("ui.close.project.dialog")}>{t("ui.close")}</button></div>
+    {message && <p role="status">{localize(message)}</p>}
+    {state.error && <p className="form-error" role="alert">{localize(state.error)}</p>}
     <form onSubmit={(event) => { event.preventDefault(); onCreate(name) }}>
-      <label htmlFor="new-project-name">Название нового проекта</label>
-      <div className="create-project-row"><input id="new-project-name" value={name} onChange={(event) => setName(event.target.value)} required autoFocus /><button type="submit" disabled={blocked || !name.trim()}>Создать</button></div>
+      <label htmlFor="new-project-name">{t("ui.new.project.name")}</label>
+      <div className="create-project-row"><input id="new-project-name" value={name} onChange={(event) => setName(event.target.value)} required autoFocus /><button type="submit" disabled={blocked || !name.trim()}>{t("ui.create")}</button></div>
     </form>
-    <h3>Открыть проект</h3>
-    {listing && <p role="status">Чтение проектов…</p>}
-    {error && <div role="alert"><p>{error}</p><button type="button" onClick={() => { setListing(true); setAttempt(attempt + 1) }}>Повторить чтение</button></div>}
-    {!listing && !error && !projects.length && <p>На этом устройстве пока нет проектов.</p>}
+    <h3>{t("ui.open.project")}</h3>
+    {listing && <p role="status">{t("ui.reading.projects")}</p>}
+    {error && <div role="alert"><p>{localize(error)}</p><button type="button" onClick={() => { setListing(true); setAttempt(attempt + 1) }}>{t("ui.retry.reading")}</button></div>}
+    {!listing && !error && !projects.length && <p>{t("ui.no.projects.on.this.device.yet")}</p>}
     <ul className="project-list">{projects.map((project) => <li key={project.id} className="project-list-row">
-      <button type="button" disabled={blocked} aria-label={`Открыть проект «${project.name}»`} onClick={() => onOpen(project.id)}><span>{project.name}</span><small>{project.id === state.project?.id ? 'Текущий проект' : 'Открыть'}</small></button>
-      <details className="project-row-menu"><summary aria-label={`Действия проекта «${project.name}»`}>⋯</summary><button type="button" disabled={blocked} onClick={() => onDelete(project)}>Удалить проект</button></details>
+      <button type="button" disabled={blocked} aria-label={t("ui.open.project.value", { p0: project.name })} onClick={() => onOpen(project.id)}><span>{project.name}</span><small>{localize(project.id === state.project?.id ? deferredMessage("ui.current.project") : deferredMessage("ui.open"))}</small></button>
+      <details className="project-row-menu"><summary aria-label={t("ui.actions.for.project.value", { p0: project.name })}>⋯</summary><button type="button" disabled={blocked} onClick={() => onDelete(project)}>{t("ui.delete.project.b8d719")}</button></details>
     </li>)}</ul>
-    <p className="form-hint">Проекты хранятся только в этом браузере на этом устройстве.</p>
+    <p className="form-hint">{t("ui.projects.are.stored.only.in.this.browser.on.this")}</p>
   </dialog>
 }

@@ -1,3 +1,5 @@
+import { localizedFailure } from '../localizedTestFailure'
+import { localize } from '../i18n'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { RegionSession, detailsOf } from './regionSession'
@@ -70,21 +72,21 @@ describe('BM-009 play mode', () => {
     session.editDetails(r.id, { ...detailsOf(r), title: 'Черновик', gmNotes: markdownToDocument('Не потерять') })
     session.requestMode('play'); expect(session.getSnapshot().pendingIntent).toEqual({ kind: 'mode', mode: 'play' })
     await session.resolveCardIntent('stay')
-    expect(session.getSnapshot().details[r.id].fields.title).toBe('Черновик')
+    expect(localize(session.getSnapshot().details[r.id].fields.title)).toBe('Черновик')
     session.requestMode('play')
     const spy = failPut('projects')
     try { await session.resolveCardIntent('save') } finally { spy.mockRestore() }
     expect(session.getSnapshot()).toMatchObject({ mode: 'prepare', cardId: r.id, details: { [r.id]: { phase: 'error', fields: { title: 'Черновик' } } } })
-    expect((await snapshot()).regions.find((v) => v.id === r.id)?.title).toBe('Зал')
+    expect(localize((await snapshot()).regions.find((v) => v.id === r.id)?.title)).toBe('Зал')
     await session.resolveCardIntent('save')
     expect(session.getSnapshot()).toMatchObject({ mode: 'play', cardMode: 'view', selectedId: r.id, cardId: r.id, details: {} })
     expect(session.getSnapshot().viewFocus).toBe(focus)
-    expect((await snapshot()).regions.find((v) => v.id === r.id)?.title).toBe('Черновик')
+    expect(localize((await snapshot()).regions.find((v) => v.id === r.id)?.title)).toBe('Черновик')
     await mode(session, 'prepare'); session.beginEdit()
     session.editDetails(r.id, { ...session.getSnapshot().details[r.id].fields, title: 'Отбросить' })
     session.requestMode('play'); await session.resolveCardIntent('discard')
     expect(session.getSnapshot().details).toEqual({})
-    expect((await snapshot()).regions.find((v) => v.id === r.id)?.title).toBe('Черновик')
+    expect(localize((await snapshot()).regions.find((v) => v.id === r.id)?.title)).toBe('Черновик')
   })
   it('does not discard drafts or activate the destination when the UI-setting write fails, and allows retry', async () => {
     const { session, modes, r, original, repo, projects } = await setup()
@@ -195,7 +197,7 @@ describe('BM-009 play mode', () => {
   it('validates status type, entity ownership, expected status and revision without damaging stored data', async () => {
     const { repo, original, snapshot, backups } = await setup(); const before = await snapshot()
     const copy = independentCopy(before); await backups.insertCopy(copy)
-    await expect(repo.saveStatus(before.project, copy.entities[0].id, 'alive', 'hidden')).rejects.toThrow('Сущность не найдена')
+    await expect(localizedFailure(repo.saveStatus(before.project, copy.entities[0].id, 'alive', 'hidden'))).rejects.toThrow('Сущность не найдена')
     expect(await snapshot()).toEqual(before)
     for (const [entityId, expected, status] of [['e0', 'alive', 'open'], ['missing', 'alive', 'hidden'], ['e0', 'hidden', 'defeated']]) {
       await expect(repo.saveStatus(before.project, entityId, expected, status)).rejects.toThrow()
@@ -243,14 +245,14 @@ describe('BM-009 play mode', () => {
     expect(session.getSnapshot()).toMatchObject({ mode: 'prepare', modePhase: 'saving', cardMode: 'edit' })
     session.closeCard(); await session.resolveCardIntent('stay'); session.startMarker('enemy')
     expect(session.getSnapshot().pendingIntent).toEqual({ kind: 'mode', mode: 'play' })
-    expect(session.getSnapshot().details[r.id].fields.title).toBe('Черновик')
+    expect(localize(session.getSnapshot().details[r.id].fields.title)).toBe('Черновик')
     release(); await work; expect(session.getSnapshot()).toMatchObject({ mode: 'play', details: {}, pendingIntent: undefined })
   })
   it('migrates absent settings without changing IndexedDB/Project/ZIP versions, rejects corrupt mode settings', async () => {
     const { factory, original, modes, session } = await setup()
     const db = new IndexedDb(() => factory)
     await db.transaction(['settings'], 'readwrite', async (tx) => { await requestResult(tx.objectStore('settings').put('unknown', `workspaceMode:${original.project.id}`)) })
-    await expect(modes.load(original.project.id)).rejects.toThrow('Некорректная')
+    await expect(localizedFailure(modes.load(original.project.id))).rejects.toThrow('Некорректная')
     await session.loadMode(original.project.id); expect(session.getSnapshot()).toMatchObject({ mode: 'play', modePhase: 'error' })
     await modes.save(original.project.id, 'prepare'); session.retryMode()
     await vi.waitFor(() => expect(session.getSnapshot()).toMatchObject({ mode: 'prepare', modePhase: 'saved' }))

@@ -1,3 +1,4 @@
+import { localize, message, t } from '../../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Image as CanvasImage, Circle, Group, Layer, Line, Stage, Text, Path } from 'react-konva'
 import type Konva from 'konva'
@@ -85,7 +86,7 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
     prepareBitmap(asset).then((decoded) => {
       if (active) { setBitmap({ assetId: asset.id, image: decoded }); setDecodeError('') }
     }).catch((error: unknown) => {
-      if (active) setDecodeError(error instanceof Error ? error.message : 'Не удалось отобразить изображение.')
+      if (active) setDecodeError(error instanceof Error ? error.message : message("ui.could.not.display.the.image"))
     })
     return () => { active = false }
   }, [asset])
@@ -117,7 +118,7 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
     })
   }, [session])
   return (
-    <div ref={host} data-map-id={mapId} className={`canvas-host${regions.draft || regions.markerTool ? ' drawing' : ''}`} tabIndex={0} role="region" aria-label="Карта приключения" aria-describedby="map-controls-hint"
+    <div ref={host} data-map-canvas data-map-id={mapId} className={`canvas-host${regions.draft || regions.markerTool ? ' drawing' : ''}`} tabIndex={0} role="region" aria-label={t("ui.adventure.map")} aria-describedby="map-controls-hint"
       onContextMenu={(event) => {
         event.preventDefault()
         if (!editable || regions.draft || regions.markerTool) return
@@ -296,12 +297,12 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
           </Layer>
         </Stage>
       )}
-      {asset && !visibleBitmap && !decodeError && <p className="map-overlay" role="status">Подготовка изображения…</p>}
-      {decodeError && <p className="map-overlay form-error" role="alert">{decodeError}</p>}
+      {asset && !visibleBitmap && !decodeError && <p className="map-overlay" role="status">{t("ui.preparing.image")}</p>}
+      {decodeError && <p className="map-overlay form-error" role="alert">{localize(decodeError)}</p>}
       {menu && !readOnly && <MapContextMenu position={menu} size={size} disabled={!editable} onClose={() => setMenu(undefined)} onRegion={() => { session.start(menu.point); setMenu(undefined); focus() }} onMarker={(kind) => { session.startMarker(kind); session.placeMarker(menu.point); setMenu(undefined); focus() }} />}
-      {hoverRegion && hover && <ObjectTooltip position={hover} size={size}><strong>{hoverRegion.number}. {hoverRegion.title}</strong>{hoverRegion.shortDescription.trim() && <p className="tooltip-description">{hoverRegion.shortDescription}</p>}<TooltipTags tags={hoverRegion.tags} /></ObjectTooltip>}
-      {hoverEntity && markerHover && <ObjectTooltip position={markerHover} size={size}><strong>{hoverEntity.name}</strong><p>{markerTypes[hoverEntity.kind].label} · {statusBadge(hoverEntity.status)} {statusLabel(hoverEntity)}{hoverMarker?.locked ? ' · Закреплён' : ''}</p><TooltipTags tags={hoverEntity.tags} />{hoverEntity.kind === 'trap' && <div className="tooltip-checks">{hoverEntity.checks.slice(0, 3).map((c) => <p key={c.id}>{c.condition} — {c.ability}, СЛ {c.dc}</p>)}{hoverEntity.checks.length > 3 && <small>Ещё проверок: {hoverEntity.checks.length - 3}</small>}</div>}</ObjectTooltip>}
-      <p id="map-controls-hint" className="map-hint">{playing ? 'Игра: геометрия заблокирована · Перемещение вида / масштаб · Ctrl+Z / Ctrl+Shift+Z — статус' : regions.markerTool ? 'Клик или тап — положение маркера · Esc — отмена' : regions.draft ? 'Клик — вершина · Ручки — перемещение · Двойной клик по ручке — удалить · Enter / двойной клик по фону — готово · Esc — отмена' : regions.vertexMode ? 'Перетащите вершину · Клик по ребру — добавить · Двойной клик по ручке / Delete — удалить' : 'Фон — перемещение вида · Колесо — масштаб · Ctrl+Z / Ctrl+Shift+Z — отмена / повтор'}</p>
+      {hoverRegion && hover && <ObjectTooltip position={hover} size={size}><strong>{hoverRegion.number}. {localize(hoverRegion.title)}</strong>{hoverRegion.shortDescription.trim() && <p className="tooltip-description">{hoverRegion.shortDescription}</p>}<TooltipTags tags={hoverRegion.tags} /></ObjectTooltip>}
+      {hoverEntity && markerHover && <ObjectTooltip position={markerHover} size={size}><strong>{hoverEntity.name}</strong><p>{localize(markerTypes[hoverEntity.kind].label)} · {statusBadge(hoverEntity.status)} {localize(statusLabel(hoverEntity))}{localize(hoverMarker?.locked ? message("ui.locked.695017") : '')}</p><TooltipTags tags={hoverEntity.tags} />{hoverEntity.kind === 'trap' && <div className="tooltip-checks">{hoverEntity.checks.slice(0, 3).map((c) => <p key={c.id}>{c.condition} — {c.ability}{t("ui.dc")} {c.dc}</p>)}{hoverEntity.checks.length > 3 && <small>{t('counts.moreChecks', { count: hoverEntity.checks.length - 3 })}</small>}</div>}</ObjectTooltip>}
+      <p id="map-controls-hint" className="map-hint">{localize(playing ? message("ui.play.geometry.locked.pan.zoom.ctrl.z.ctrl.shift") : regions.markerTool ? message("ui.click.or.tap.marker.position.esc.cancel") : regions.draft ? message("ui.click.vertex.handles.move.double.click.handle.delete.enter") : regions.vertexMode ? message("ui.drag.a.vertex.click.edge.add.double.click.handle") : message("ui.background.pan.wheel.zoom.ctrl.z.ctrl.shift.z"))}</p>
     </div>
   )
 }

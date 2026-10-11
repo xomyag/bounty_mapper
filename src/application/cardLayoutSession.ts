@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 export interface CardWidthRepository { load(): Promise<number | undefined>; save(width: number): Promise<void> }
 export function cardWidthBounds(viewWidth: number) {
   const available = Math.max(1, viewWidth - 24)
@@ -14,7 +15,7 @@ export class CardLayoutSession {
   getSnapshot = () => this.state
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   private update(change: Partial<typeof this.state>) { this.state = { ...this.state, ...change }; this.listeners.forEach((listener) => listener()) }
-  initialize = () => this.initialization ??= this.repository.load().then((width) => { if (!this.version && width !== undefined) this.update({ width, phase: 'saved' }) }).catch((error: unknown) => this.update({ phase: 'error', error: `Не удалось прочитать ширину карточки. ${error instanceof Error ? error.message : ''}` }))
+  initialize = () => this.initialization ??= this.repository.load().then((width) => { if (!this.version && width !== undefined) this.update({ width, phase: 'saved' }) }).catch((error: unknown) => this.update({ phase: 'error', error: message("ui.could.not.read.card.width.value", { p0: error instanceof Error ? error.message : '' }) }))
   resize = (width: number) => { if (!Number.isFinite(width)) return; ++this.version; this.update({ width: Math.round(Math.min(900, Math.max(1, width))), phase: 'idle', error: undefined }) }
   save = () => this.writing ??= this.write().finally(() => { this.writing = undefined })
   private async write() {
@@ -22,7 +23,7 @@ export class CardLayoutSession {
       const version = this.version; const width = this.state.width
       this.update({ phase: 'saving', error: undefined })
       try { await this.repository.save(width) }
-      catch (error) { this.update({ phase: 'error', error: `Не удалось сохранить ширину карточки. ${error instanceof Error ? error.message : ''}` }); return }
+      catch (error) { this.update({ phase: 'error', error: message("ui.could.not.save.card.width.value", { p0: error instanceof Error ? error.message : '' }) }); return }
       if (version === this.version) { this.update({ phase: 'saved' }); return }
     }
   }

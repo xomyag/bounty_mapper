@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import { emptyDocument, validateRichDocument } from './richText'
 import type { RichDocument } from './richText'
 export const PROJECT_SCHEMA_VERSION = 2
@@ -50,7 +51,7 @@ export interface ImagePlacement {
 }
 
 export function createProject(name: string): Project {
-  if (!name.trim()) throw new Error('Укажите название проекта.')
+  if (!name.trim()) throw new Error(message("ui.enter.a.project.name"))
   const now = new Date().toISOString()
   return {
     id: crypto.randomUUID(), name: name.trim(), context: emptyDocument(),
@@ -59,7 +60,7 @@ export function createProject(name: string): Project {
 }
 
 export function validateProject(project: Project) {
-  if (!project || project.schemaVersion !== PROJECT_SCHEMA_VERSION) throw new Error('Версия проекта не поддерживается.')
-  if (typeof project.id !== 'string' || !project.id.trim() || typeof project.name !== 'string' || !project.name.trim() || !Number.isSafeInteger(project.revision) || project.revision < 1 || typeof project.createdAt !== 'string' || typeof project.updatedAt !== 'string') throw new Error('Повреждённая запись проекта.')
+  if (!project || project.schemaVersion !== PROJECT_SCHEMA_VERSION) throw new Error(message("ui.unsupported.project.version"))
+  if (typeof project.id !== 'string' || !project.id.trim() || typeof project.name !== 'string' || !project.name.trim() || !Number.isSafeInteger(project.revision) || project.revision < 1 || typeof project.createdAt !== 'string' || typeof project.updatedAt !== 'string') throw new Error(message("ui.corrupted.project.record"))
   validateRichDocument(project.context)
 }

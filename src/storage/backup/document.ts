@@ -1,3 +1,4 @@
+import { message } from '../../i18n/message'
 import type { Asset, ImagePlacement, Map as ProjectMap, Project } from '../../domain/project'
 import { PROJECT_SCHEMA_VERSION } from '../../domain/project'
 import { emptyRegionContent, MAX_REGIONS, MAX_REGION_VERTICES, validateRegion } from '../../domain/region'
@@ -21,7 +22,7 @@ export interface BackupDocument {
   entities: Entity[]
   markerPlacements: MarkerPlacement[]
 }
-function invalid(): never { throw new Error('Некорректная структура данных проекта.') }
+function invalid(): never { throw new Error(message("ui.invalid.project.data.structure")) }
 function record(value: unknown, required: string[], optional: string[] = []): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid()
   const object = value as Record<string, unknown>
@@ -53,7 +54,7 @@ function unique(items: { id: string }[]) { if (new Set(items.map((item) => item.
 export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_LIMITS, formatVersion = 8): BackupDocument {
   const root = record(value, ['project', 'maps', 'imagePlacements', 'assets', ...(formatVersion === 1 ? [] : ['regions']), ...(formatVersion < 5 ? [] : ['entities', 'markerPlacements'])])
   const p = record(root.project, ['id', 'name', formatVersion < 8 ? 'contextMd' : 'context', 'schemaVersion', 'revision', 'createdAt', 'updatedAt'])
-  if (p.schemaVersion !== (formatVersion < 8 ? 1 : PROJECT_SCHEMA_VERSION)) throw new Error('Версия данных проекта не поддерживается.')
+  if (p.schemaVersion !== (formatVersion < 8 ? 1 : PROJECT_SCHEMA_VERSION)) throw new Error(message("ui.unsupported.project.data.version"))
   const project: Project = { id: string(p.id, true), name: string(p.name, true), context: formatVersion < 8 ? migrateProjectContext({ ...p, contextMd: string(p.contextMd) }).context : (validateRichDocument(p.context), p.context), schemaVersion: PROJECT_SCHEMA_VERSION, revision: integer(p.revision, 1), createdAt: date(p.createdAt), updatedAt: date(p.updatedAt) }
   const maps: ProjectMap[] = array(root.maps, limits.maps).map((value) => {
     const m = record(value, ['id', 'projectId', 'name', formatVersion < 8 ? 'notesMd' : 'description', 'order', 'coordinateBounds'])
@@ -70,7 +71,7 @@ export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_L
     if (byteSize > limits.assetBytes || !/^[a-f0-9]{64}$/.test(checksum)) return invalid()
     const pixelWidth = integer(a.pixelWidth, 1); const pixelHeight = integer(a.pixelHeight, 1)
     // Bound image decoding too; metadata is checked against actual decoded dimensions later.
-    if (pixelWidth * pixelHeight > 64 * 1024 * 1024) throw new Error('Изображение превышает лимит 64 мегапикселей.')
+    if (pixelWidth * pixelHeight > 64 * 1024 * 1024) throw new Error(message("ui.the.image.exceeds.the.64.megapixel.limit"))
     return { id: string(a.id, true), projectId: string(a.projectId, true), mimeType, path, byteSize, pixelWidth, pixelHeight, checksum, tags: array(a.tags, 1024).map((tag) => string(tag)), ...(a.caption === undefined ? {} : { caption: string(a.caption) }) }
   })
   const imagePlacements: ImagePlacement[] = array(root.imagePlacements, limits.maps).map((value) => {
@@ -85,7 +86,7 @@ export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_L
       return { x: number(p.x), y: number(p.y) }
     })
     vertexCount += vertices.length
-    if (vertexCount > 65536) throw new Error('Превышен лимит вершин проекта: 65536.')
+    if (vertexCount > 65536) throw new Error(message("ui.the.project.vertex.limit.was.exceeded.65536"))
     if (formatVersion >= 4) { validateRichDocument(r.gmNotes); validateRichDocument(r.playerDescription) }
     const content = formatVersion < 3 ? emptyRegionContent() : {
       gmNotes: formatVersion === 3 ? markdownToDocument(string(r.gmNotesMd)) : r.gmNotes as Region['gmNotes'], playerDescription: formatVersion === 3 ? markdownToDocument(string(r.playerDescriptionMd)) : r.playerDescription as Region['playerDescription'], tags: array(r.tags, 256).map((tag) => string(tag, true)),
@@ -114,16 +115,16 @@ export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_L
   })
   unique(maps); unique(assets); unique(imagePlacements); unique(regions); unique(entities); unique(markerPlacements)
   if (new Set(assets.map((asset) => asset.path)).size !== assets.length || new Set(imagePlacements.map((placement) => placement.mapId)).size !== imagePlacements.length) return invalid()
-  if (maps.some((map) => map.projectId !== project.id) || assets.some((asset) => asset.projectId !== project.id)) throw new Error('Карта или изображение относится к другому проекту.')
+  if (maps.some((map) => map.projectId !== project.id) || assets.some((asset) => asset.projectId !== project.id)) throw new Error(message("ui.a.map.or.image.belongs.to.another.project"))
   const projectAssets = [...documentAssetIds(project.context), ...maps.flatMap((map) => documentAssetIds(map.description))]
-  if (projectAssets.some((id) => !assets.some((asset) => asset.id === id))) throw new Error('Контекст ссылается на отсутствующее изображение.')
+  if (projectAssets.some((id) => !assets.some((asset) => asset.id === id))) throw new Error(message("ui.context.references.a.missing.image"))
   const mapIds = new Set(maps.map((map) => map.id)); const assetIds = new Set(assets.map((asset) => asset.id))
-  if (imagePlacements.some((placement) => !mapIds.has(placement.mapId) || !assetIds.has(placement.assetId))) throw new Error('В проекте есть ссылка на отсутствующую карту или изображение.')
-  if (regions.some((region) => !mapIds.has(region.mapId))) throw new Error('Область ссылается на отсутствующую карту.')
-  if (regions.some((region) => [...documentAssetIds(region.gmNotes), ...documentAssetIds(region.playerDescription)].some((id) => !assetIds.has(id)))) throw new Error('Текст области ссылается на отсутствующее изображение.')
+  if (imagePlacements.some((placement) => !mapIds.has(placement.mapId) || !assetIds.has(placement.assetId))) throw new Error(message("ui.the.project.references.a.missing.map.or.image"))
+  if (regions.some((region) => !mapIds.has(region.mapId))) throw new Error(message("ui.a.region.references.a.missing.map"))
+  if (regions.some((region) => [...documentAssetIds(region.gmNotes), ...documentAssetIds(region.playerDescription)].some((id) => !assetIds.has(id)))) throw new Error(message("ui.region.text.references.a.missing.image"))
   const entityIds = new Set(entities.map((e) => e.id))
-  if (entities.some((e) => e.projectId !== project.id || documentAssetIds(e.description).some((id) => !assetIds.has(id)))) throw new Error('Сущность ссылается на другой проект или отсутствующее изображение.')
-  if (markerPlacements.some((m) => !mapIds.has(m.mapId) || !entityIds.has(m.entityId) || m.regionIds.some((id) => !regions.some((r) => r.id === id && r.mapId === m.mapId)))) throw new Error('Некорректная ссылка размещения маркера.')
+  if (entities.some((e) => e.projectId !== project.id || documentAssetIds(e.description).some((id) => !assetIds.has(id)))) throw new Error(message("ui.an.entity.references.another.project.or.a.missing.image"))
+  if (markerPlacements.some((m) => !mapIds.has(m.mapId) || !entityIds.has(m.entityId) || m.regionIds.some((id) => !regions.some((r) => r.id === id && r.mapId === m.mapId)))) throw new Error(message("ui.invalid.marker.placement.reference"))
   return { project, maps, assets, imagePlacements, regions, entities, markerPlacements }
 }
 

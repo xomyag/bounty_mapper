@@ -1,5 +1,6 @@
 import { finishProjectCreation } from './controls'
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './testLocale'
 import type { Page } from '@playwright/test'
 import type Konva from 'konva'
 import { control, clickMenuAction } from './controls'
@@ -20,7 +21,7 @@ async function stored(page: Page) { return page.evaluate(async () => {
 async function seed(page: Page) {
   await page.goto('/'); await clickMenuAction(page, 'Проекты'); await page.getByLabel('Название нового проекта').fill('UI-02')
   await control(page, 'Создать').click(); await finishProjectCreation(page)
-  await control(page, 'Карты проекта').click(); await page.getByRole('menuitem', { name: 'New map', exact: true }).click(); await page.getByLabel('Название новой карты').fill('Залы')
+  await control(page, 'Карты проекта').click(); await page.getByRole('menuitem', { name: 'Новая карта', exact: true }).click(); await page.getByLabel('Название новой карты').fill('Залы')
   await page.getByRole('dialog').getByRole('button', { name: 'Создать карту', exact: true }).click(); await expect(control(page, 'Добавить область')).toBeEnabled()
   await page.evaluate(async (content) => {
     const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('bounty-mapper'); r.onsuccess = () => resolve(r.result) }); const tx = db.transaction(['maps', 'regions'], 'readwrite')
@@ -72,7 +73,7 @@ test('trap context placement moves before save, rejects bad checks, shares bindi
   for (const tag of ['ловушка', 'камень', 'вода', 'огонь', 'пыль', 'ключ', 'дверь']) { await markerCard(page).getByLabel('Новый тег').fill(tag); await markerCard(page).getByRole('button', { name: 'Добавить тег', exact: true }).click() }
   await markerCard(page).getByRole('button', { name: 'Сохранить', exact: true }).click(); await expect(markerCard(page).getByRole('status')).toHaveText('Сохранено на устройстве'); const saved = await stored(page)
   expect(saved.entities[0]).toMatchObject({ kind: 'trap', status: 'armed' }); expect(saved.entities[0].checks[0]).toMatchObject({ condition: 'Обнаружить', dc: 15 }); expect(saved.entities[0].checks).toHaveLength(4); expect(saved.markers[0].regionIds).toHaveLength(2); expect(saved.markers[0].x).not.toBe(200); expect(await view(page)).toEqual(camera)
-  await control(page, 'Закрыть карточку маркера').click(); const p = await point(page, saved.markers[0]); await page.mouse.move(p.x, p.y); await expect(page.getByRole('tooltip')).toContainText('Обнаружить — Внимательность, СЛ 15'); await expect(page.getByRole('tooltip')).toContainText('Ловушка'); await expect(page.getByRole('tooltip')).toContainText('ещё 2'); await expect(page.getByRole('tooltip')).toContainText('Ещё проверок: 1'); await expect(page.getByRole('tooltip')).not.toContainText('Секретное пояснение')
+  await control(page, 'Закрыть карточку маркера').click(); const p = await point(page, saved.markers[0]); await page.mouse.move(p.x, p.y); await expect(page.getByRole('tooltip')).toContainText('Обнаружить — Внимательность, СЛ 15'); await expect(page.getByRole('tooltip')).toContainText('Ловушка'); await expect(page.getByRole('tooltip')).toContainText('ещё 2'); await expect(page.getByRole('tooltip')).toContainText('ещё 1 проверка'); await expect(page.getByRole('tooltip')).not.toContainText('Секретное пояснение')
   await page.screenshot({ path: info.outputPath('trap-tooltip.png') }); await page.mouse.click(p.x, p.y); await expect(regionCard(page)).toHaveCount(0); await expect(markerCard(page).getByLabel('Проверки ловушки')).toContainText('Секретное пояснение')
   await control(page, 'Игра').click(); await expect(control(page, 'Игра')).toHaveAttribute('aria-pressed', 'true'); await page.getByRole('combobox', { name: 'Быстрая смена статуса', exact: true }).selectOption('disarmed'); await expect(markerCard(page).getByRole('status')).toHaveText('Сохранено на устройстве')
   await expect(markerCard(page).locator('.marker-status')).toContainText('✓'); await expect(markerCard(page).locator('.marker-status')).toContainText('Обезврежена'); await control(page, 'Отменить статус').click(); await expect(markerCard(page).locator('.marker-status')).toContainText('Заряжена'); expect(await view(page)).toEqual(camera)

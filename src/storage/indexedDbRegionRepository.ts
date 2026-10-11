@@ -1,3 +1,4 @@
+import { message } from '../i18n/message'
 import type { RegionRepository } from '../application/regionRepository'
 import { RevisionConflictError } from '../application/projectRepository'
 import type { Asset, Map, Project } from '../domain/project'
@@ -29,11 +30,11 @@ export class IndexedDbRegionRepository implements RegionRepository {
   loadObjects(mapId: string): Promise<MapObjects> {
     return this.db.transaction(['maps', 'entities', 'markerPlacements'], 'readonly', async (tx) => {
       const map = await requestResult(tx.objectStore('maps').get(mapId)) as Map | undefined
-      if (!map) throw new Error('Карта не найдена.')
+      if (!map) throw new Error(message("ui.map.not.found"))
       const entities = await requestResult(tx.objectStore('entities').index('projectId').getAll(map.projectId)) as Entity[]
       const markers = await requestResult(tx.objectStore('markerPlacements').index('mapId').getAll(mapId)) as MarkerPlacement[]
       entities.forEach(validateEntity); markers.forEach(validateMarker)
-      if (markers.some((m) => !entities.some((e) => e.id === m.entityId))) throw new Error('Сущность маркера не найдена.')
+      if (markers.some((m) => !entities.some((e) => e.id === m.entityId))) throw new Error(message("ui.marker.entity.not.found"))
       return { entities, markers: markers.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)) }
     })
   }
@@ -42,8 +43,8 @@ export class IndexedDbRegionRepository implements RegionRepository {
       const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
       if (stored.revision !== project.revision) throw new RevisionConflictError()
       const previous = await requestResult(tx.objectStore('entities').get(entityId)) as Entity | undefined
-      if (!previous || previous.projectId !== project.id) throw new Error('Сущность не найдена в текущем проекте.')
-      if (previous.status !== expectedStatus) throw new Error('Статус уже изменился. Откройте сохранённую версию проекта.')
+      if (!previous || previous.projectId !== project.id) throw new Error(message("ui.entity.not.found.in.the.current.project"))
+      if (previous.status !== expectedStatus) throw new Error(message("ui.the.status.has.already.changed.open.the.saved.version"))
       const entity = { ...previous, status }
       validateEntity(entity)
       const next = { ...stored, revision: stored.revision + 1, updatedAt: new Date().toISOString() }
@@ -57,22 +58,22 @@ export class IndexedDbRegionRepository implements RegionRepository {
       const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
       if (stored.revision !== project.revision) throw new RevisionConflictError()
       const map = await requestResult(tx.objectStore('maps').get(mapId)) as Map | undefined
-      if (!map || map.projectId !== project.id) throw new Error('Карта не принадлежит открытому проекту.')
-      if (regions.length > MAX_REGIONS || new Set(regions.map((r) => r.id)).size !== regions.length) throw new Error('Некорректный список областей.')
+      if (!map || map.projectId !== project.id) throw new Error(message("ui.the.map.does.not.belong.to.the.open.project"))
+      if (regions.length > MAX_REGIONS || new Set(regions.map((r) => r.id)).size !== regions.length) throw new Error(message("ui.invalid.region.list"))
       for (const asset of newAssets) {
         if (asset.projectId !== project.id || !asset.blob || asset.blob.size !== asset.byteSize || asset.byteSize < 1 || asset.byteSize > 64 * 1024 * 1024 ||
             !['image/png', 'image/jpeg', 'image/webp'].includes(asset.mimeType) || !/^[a-f0-9]{64}$/.test(asset.checksum) ||
-            !Number.isSafeInteger(asset.pixelWidth) || !Number.isSafeInteger(asset.pixelHeight) || asset.pixelWidth < 1 || asset.pixelHeight < 1 || asset.pixelWidth * asset.pixelHeight > 64 * 1024 * 1024) throw new Error('Некорректное изображение карточки.')
+            !Number.isSafeInteger(asset.pixelWidth) || !Number.isSafeInteger(asset.pixelHeight) || asset.pixelWidth < 1 || asset.pixelHeight < 1 || asset.pixelWidth * asset.pixelHeight > 64 * 1024 * 1024) throw new Error(message("ui.invalid.card.image"))
         await requestResult(tx.objectStore('assets').add(asset))
       }
       for (const region of regions) {
         validateRegion(region)
-        if (region.mapId !== mapId) throw new Error('Область принадлежит другой карте.')
+        if (region.mapId !== mapId) throw new Error(message("ui.the.region.belongs.to.another.map"))
         const existing = await requestResult(tx.objectStore('regions').get(region.id)) as Region | undefined
-        if (existing && existing.mapId !== mapId) throw new Error('ID области занят другой картой.')
+        if (existing && existing.mapId !== mapId) throw new Error(message("ui.the.region.id.is.used.by.another.map"))
         for (const id of [...documentAssetIds(region.gmNotes), ...documentAssetIds(region.playerDescription)]) {
           const asset = await requestResult(tx.objectStore('assets').get(id)) as Asset | undefined
-          if (!asset || asset.projectId !== project.id) throw new Error('Изображение текста отсутствует или принадлежит другому проекту.')
+          if (!asset || asset.projectId !== project.id) throw new Error(message("ui.a.text.image.is.missing.or.belongs.to.another"))
         }
       }
       const store = tx.objectStore('regions')
@@ -84,21 +85,21 @@ export class IndexedDbRegionRepository implements RegionRepository {
       const entities = objects?.entities ?? await requestResult(entityStore.index('projectId').getAll(project.id)) as Entity[]
       const previousMarkers = await requestResult(markerStore.index('mapId').getAll(mapId)) as MarkerPlacement[]
       const markers: MarkerPlacement[] = objects?.markers ?? previousMarkers.map((m) => ({ ...m, regionIds: m.regionIds.filter((id) => regions.some((r) => r.id === id)) }))
-      if (entities.length > MAX_ENTITIES || markers.length > MAX_MARKERS || new Set(entities.map((e) => e.id)).size !== entities.length || new Set(markers.map((m) => m.id)).size !== markers.length) throw new Error('Превышен лимит или повторяются ID объектов карты.')
+      if (entities.length > MAX_ENTITIES || markers.length > MAX_MARKERS || new Set(entities.map((e) => e.id)).size !== entities.length || new Set(markers.map((m) => m.id)).size !== markers.length) throw new Error(message("ui.the.map.object.limit.was.exceeded.or.object.ids"))
       for (const entity of entities) {
         validateEntity(entity)
         const old = await requestResult(entityStore.get(entity.id)) as Entity | undefined
-        if (entity.projectId !== project.id || (old && old.projectId !== project.id)) throw new Error('Сущность принадлежит другому проекту.')
+        if (entity.projectId !== project.id || (old && old.projectId !== project.id)) throw new Error(message("ui.the.entity.belongs.to.another.project"))
         for (const id of documentAssetIds(entity.description)) {
           const asset = await requestResult(tx.objectStore('assets').get(id)) as Asset | undefined
-          if (!asset || asset.projectId !== project.id) throw new Error('Изображение описания отсутствует или принадлежит другому проекту.')
+          if (!asset || asset.projectId !== project.id) throw new Error(message("ui.a.description.image.is.missing.or.belongs.to.another"))
         }
         await requestResult(entityStore.put(entity))
       }
       for (const marker of markers) {
         validateMarker(marker)
         const old = await requestResult(markerStore.get(marker.id)) as MarkerPlacement | undefined
-        if (marker.mapId !== mapId || (old && old.mapId !== mapId) || !entities.some((e) => e.id === marker.entityId) || marker.regionIds.some((id) => !regions.some((r) => r.id === id))) throw new Error('Некорректная ссылка маркера на карту, сущность или область.')
+        if (marker.mapId !== mapId || (old && old.mapId !== mapId) || !entities.some((e) => e.id === marker.entityId) || marker.regionIds.some((id) => !regions.some((r) => r.id === id))) throw new Error(message("ui.invalid.marker.reference.to.a.map.entity.or.region"))
       }
       for (const marker of previousMarkers) await requestResult(markerStore.delete(marker.id))
       for (const marker of markers) await requestResult(markerStore.add(marker))

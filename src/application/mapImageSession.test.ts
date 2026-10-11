@@ -1,3 +1,4 @@
+import { localize } from '../i18n'
 import { legacyContextDocument } from '../storage/migrateProjectContext'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
@@ -32,7 +33,7 @@ describe('Map image session', () => {
     expect(session.getSnapshot().image.background!.asset.id).toBe(original)
     vi.spyOn(maps, 'replace').mockRejectedValueOnce(new Error('Нет места'))
     await session.upload(new Blob(['replacement']))
-    expect(session.getSnapshot().error).toContain('Ошибка записи')
+    expect(localize(session.getSnapshot().error)).toContain('Ошибка записи')
     expect(session.getSnapshot().image.background!.asset.id).toBe(original)
     expect(projects.getSnapshot().status).toBe('saved')
     await session.retry()

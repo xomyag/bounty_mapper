@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './testLocale'
 import type { Page } from '@playwright/test'
 import type Konva from 'konva'
 import { Buffer } from 'node:buffer'
@@ -20,7 +21,7 @@ async function save(page: Page, kind = 'Контекст приключения'
   await expect(card.getByRole('status')).toHaveText('Сохранено на устройстве')
 }
 async function createMap(page: Page, name: string) {
-  await control(page, 'Карты проекта').click(); await page.getByRole('menuitem', { name: 'New map', exact: true }).click()
+  await control(page, 'Карты проекта').click(); await page.getByRole('menuitem', { name: 'Новая карта', exact: true }).click()
   await page.getByLabel('Название новой карты').fill(name); await page.getByRole('dialog').getByRole('button', { name: 'Создать карту', exact: true }).click()
   await expect(control(page, 'Описание карты')).toBeEnabled(); await expect(page.locator('canvas')).toHaveCount(1)
 }

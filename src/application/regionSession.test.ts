@@ -1,3 +1,5 @@
+import { localizedFailure } from '../localizedTestFailure'
+import { localize } from '../i18n'
 import { describe, expect, it, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { IndexedDbProjectRepository } from '../storage/indexedDbProjectRepository'
@@ -90,11 +92,11 @@ describe('Region commands and saved history', () => {
     session.openCard(b.id)
     expect(session.getSnapshot()).toMatchObject({ cardId: a.id, pendingIntent: { kind: 'open', id: b.id } })
     await session.resolveCardIntent('stay')
-    expect(session.getSnapshot().details[a.id].fields.title).toBe('Мой зал')
+    expect(localize(session.getSnapshot().details[a.id].fields.title)).toBe('Мой зал')
     expect((await repo.load(mapId))[0].title).toBe(a.title)
     session.openCard(b.id); await session.resolveCardIntent('save')
     expect(session.getSnapshot()).toMatchObject({ cardId: b.id, cardMode: 'edit' })
-    expect((await repo.load(mapId)).find((r) => r.id === a.id)?.title).toBe('Мой зал')
+    expect(localize((await repo.load(mapId)).find((r) => r.id === a.id)?.title)).toBe('Мой зал')
     session.editDetails(b.id, { ...detailsOf(b), gmNotes: markdownToDocument('Отбросить B') })
     session.closeCard(); await session.resolveCardIntent('discard')
     expect(session.getSnapshot().cardId).toBeUndefined()
@@ -104,7 +106,7 @@ describe('Region commands and saved history', () => {
     const { session, repo, mapId } = await setup(); await create(session)
     const a = session.getSnapshot().regions[0]
     session.openCard(a.id); session.editDetails(a.id, { ...detailsOf(a), gmNotes: markdownToDocument('Не потерять') })
-    await expect(session.flushDetails()).rejects.toThrow('Сначала сохраните')
+    await expect(localizedFailure(session.flushDetails())).rejects.toThrow('Сначала сохраните')
     session.closeCard()
     vi.spyOn(repo, 'save').mockRejectedValueOnce(new Error('Нет места'))
     await session.resolveCardIntent('save')
@@ -189,7 +191,7 @@ describe('Region commands and saved history', () => {
     session.start(); session.addPoint({ x: 1, y: 2 }); session.removeDraftVertex(0)
     expect(session.getSnapshot().draft).toEqual([])
     await session.finish()
-    expect(session.getSnapshot().error).toContain('три')
+    expect(localize(session.getSnapshot().error)).toContain('три')
     session.cancel()
     expect(await repo.load(mapId)).toHaveLength(1)
   })
@@ -201,7 +203,7 @@ describe('Region commands and saved history', () => {
     await session.removeVertex(0)
     expect((await repo.load(mapId))[0].vertices).toEqual(original.vertices.slice(1))
     await session.removeVertex(1)
-    expect(session.getSnapshot().error).toContain('минимум три')
+    expect(localize(session.getSnapshot().error)).toContain('минимум три')
     expect((await repo.load(mapId))[0].vertices).toEqual(original.vertices.slice(1))
     await session.undo()
     expect(await repo.load(mapId)).toEqual([original])
@@ -213,7 +215,7 @@ describe('Region commands and saved history', () => {
     session.start(); session.addPoint({ x: 0, y: 0 }); session.addPoint({ x: 0, y: 0 }); session.addPoint({ x: 1, y: 1 })
     expect(session.getSnapshot().draft).toHaveLength(2)
     await session.finish()
-    expect(session.getSnapshot().error).toContain('три')
+    expect(localize(session.getSnapshot().error)).toContain('три')
     expect(await repo.load(mapId)).toEqual([])
     session.cancel()
     expect(session.getSnapshot().draft).toBeUndefined()
