@@ -15,6 +15,7 @@ export const emptyNavigationData = (): NavigationData => ({ maps: [], regions: [
 export const defaultFilters = (): NavigationFilters => ({ query: '', scope: 'map', mapId: '', tags: [], tagMatch: 'any', type: '', status: '', regionId: '' })
 export const normalizeSearch = (text: string) => text.normalize('NFKC').toLocaleLowerCase('ru').trim()
 export function filterNavigation(data: NavigationData, tab: NavigationTab, filters: NavigationFilters, currentMapId?: string): NavigationResult[] {
+  const mapOrder = (id: string) => data.maps.find(map => map.id === id)?.order ?? Number.MAX_SAFE_INTEGER
   const entities = new globalThis.Map(data.entities.map((e) => [e.id, e]))
   const candidates: NavigationResult[] = tab === 'regions' ? data.regions.map((r) => ({ id: r.id, mapId: r.mapId, kind: 'region', title: `${r.number}. ${r.title}`, tags: r.tags, region: r })) : data.markers.flatMap((m) => {
     const entity = entities.get(m.entityId)
@@ -29,7 +30,7 @@ export function filterNavigation(data: NavigationData, tab: NavigationTab, filte
     if (tags.length && !(filters.tagMatch === 'all' ? tags.every(matchesTag) : tags.some(matchesTag))) return false
     if (item.marker && (filters.type && item.entity!.kind !== filters.type || filters.status && item.entity!.status !== filters.status || filters.regionId && (filters.regionId === 'unbound' ? item.marker.regionIds.length !== 0 : !item.marker.regionIds.includes(filters.regionId)))) return false
     return true
-  }).sort((a, b) => a.mapId.localeCompare(b.mapId) || (a.region && b.region ? a.region.number - b.region.number : a.title.localeCompare(b.title, 'ru')) || a.id.localeCompare(b.id))
+  }).sort((a, b) => mapOrder(a.mapId)-mapOrder(b.mapId) || a.mapId.localeCompare(b.mapId) || (a.region && b.region ? a.region.number - b.region.number : a.title.localeCompare(b.title, 'ru')) || a.id.localeCompare(b.id))
 }
 export function groupNavigation(results: NavigationResult[], grouping: NavigationGrouping, data: NavigationData): NavigationGroup[] {
   if (grouping === 'none') return [{ key: 'all', title: '', results }]
@@ -48,7 +49,7 @@ export function groupNavigation(results: NavigationResult[], grouping: Navigatio
       groups.set(key, group)
     }
   }
-  return [...groups.values()].sort((a, b) => a.title.localeCompare(b.title, 'ru'))
+  return [...groups.values()].sort((a, b) => grouping === 'map' ? (data.maps.find(map => map.id === a.key)?.order ?? 0)-(data.maps.find(map => map.id === b.key)?.order ?? 0) || a.key.localeCompare(b.key) : a.title.localeCompare(b.title, 'ru'))
 }
 export function navigationStatuses(kind?: MarkerKind): Record<string, string> {
   if (kind) return statusesOf(kind)

@@ -5,7 +5,7 @@ import { emptyNavigationData } from '../domain/navigation'
 import type { NavigationData } from '../domain/navigation'
 
 export class NavigationSession {
-  private state: { projectId?: string; data: NavigationData; loading: boolean; error?: string } = { data: emptyNavigationData(), loading: false }
+  private state: { projectId?: string; data: NavigationData; loading: boolean; orderSaving?: boolean; orderError?: string; error?: string } = { data: emptyNavigationData(), loading: false }
   private generation = 0
   private listeners = new Set<() => void>()
   constructor(private readonly repository: NavigationRepository, private readonly projects: ProjectSession, private readonly canEdit: () => boolean = () => true) {}
@@ -36,5 +36,14 @@ export class NavigationSession {
     if (!this.canEdit()) return false
     try { await this.projects.mutateProject((project) => this.repository.deleteMap(project, mapId)); await this.load(); return true }
     catch (error) { this.update({ error: error instanceof Error ? error.message : message("ui.could.not.delete.the.map") }); return false }
+  }
+  reorderMaps = async (ids: string[]) => {
+    if (!this.canEdit() || this.state.orderSaving || !this.repository.reorderMaps) return
+    this.update({ orderSaving: true, orderError: undefined })
+    try {
+      await this.projects.mutateProject(project => this.repository.reorderMaps!(project,ids))
+      await this.load()
+    } catch (error) { this.update({ orderError: message('order.saveFailed', { detail: error instanceof Error ? error.message : '' }) }) }
+    finally { this.update({ orderSaving: false }) }
   }
 }

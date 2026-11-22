@@ -1,0 +1,70 @@
+import { test, expect, type Page, type Locator } from '@playwright/test'
+import { setLanguage, t, type Language, type MessageKey } from '../../src/i18n'
+import type Konva from 'konva'
+import { emptyRegionContent } from '../../src/domain/region'
+
+const button=(page:Page,key:MessageKey)=>page.getByRole('button',{name:t(key),exact:true})
+const canvas=(page:Page)=>page.locator('[data-map-canvas]')
+async function menu(page:Page,key:MessageKey){await button(page,'ui.project.menu').click();await page.getByRole('menuitem',{name:t(key),exact:true}).click()}
+async function createProject(page:Page,name:string){await menu(page,'ui.projects');await page.getByLabel(t('ui.new.project.name')).fill(name);await button(page,'ui.create').click();const card=page.getByRole('region',{name:t('ui.adventure.context'),exact:true});await card.getByRole('button',{name:t('ui.save'),exact:true}).click();await expect(card.getByRole('status')).toHaveText(t('ui.saved.on.this.device'));await card.getByRole('button',{name:t('ui.close.value',{p0:t('ui.adventure.context').toLowerCase()}),exact:true}).click()}
+async function createMap(page:Page,name:string){await button(page,'ui.project.maps').click();await page.getByRole('menuitem',{name:t('ui.new.map'),exact:true}).click();await page.getByLabel(t('ui.new.map.name'),{exact:true}).fill(name);await page.getByRole('dialog').getByRole('button',{name:t('ui.create.map'),exact:true}).click();await expect(page.locator('.map-menu-trigger')).toHaveText(name);await expect(canvas(page).locator('canvas').first()).toBeVisible()}
+async function go(page:Page,name:string){await button(page,'ui.project.maps').click();await page.getByRole('menuitem',{name:t('ui.go.to.map.value',{p0:name}),exact:true}).click()}
+async function camera(page:Page){return page.evaluate(()=>{const stage=(window as unknown as {Konva:{stages:Konva.Stage[]}}).Konva.stages[0];return{x:stage.x(),y:stage.y(),scale:stage.scaleX()}})}
+async function settings(page:Page){return page.evaluate(async()=>{const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('bounty-mapper');r.onsuccess=()=>resolve(r.result)});const tx=db.transaction(['settings','maps','projects']);const get=<T,>(store:string)=>new Promise<T[]>(resolve=>{const r=tx.objectStore(store).getAll();r.onsuccess=()=>resolve(r.result)});const keys=await new Promise<IDBValidKey[]>(resolve=>{const r=tx.objectStore('settings').getAllKeys();r.onsuccess=()=>resolve(r.result)});const [values,maps,projects]=await Promise.all([get<unknown>('settings'),get<{id:string;name:string;projectId:string;order:number}>('maps'),get<{id:string;name:string}>('projects')]);db.close();return{settings:Object.fromEntries(keys.map((key,i)=>[String(key),values[i]])) as Record<string,{mapId?:string;cameras?:Record<string,{x:number;y:number;scale:number}>}>,maps,projects}})}
+async function dragBefore(page:Page,handle:Locator,row:Locator,artifact="project-insertion-line.png"){const from=(await handle.boundingBox())!,to=(await row.boundingBox())!;await page.mouse.move(from.x+from.width/2,from.y+from.height/2);await page.mouse.down();await page.mouse.move(from.x+from.width/2+12,from.y+from.height/2,{steps:5});await page.mouse.move(to.x+15,to.y+2,{steps:10});await page.mouse.move(to.x+16,to.y+2);await expect(row).toHaveAttribute('data-insertion','before');await page.screenshot({path:test.info().outputPath(artifact)});await page.mouse.up()}
+async function mapStep(page:Page,name:string,direction:'order.up'|'order.down'){const row=page.locator('.map-menu-row').filter({has:page.getByRole('button',{name:t('order.drag',{name}),exact:true})});await row.locator('summary').focus();await page.keyboard.press('Enter');const action=row.getByRole('button',{name:t(direction),exact:true});await action.focus();await page.keyboard.press('Enter')}
+
+for(const language of ['en','ru'] as Language[])test(`${language}: handles and keyboard reorder without navigation; saved map/camera restore independently and ZIP retains map order`,async({page},info)=>{
+  test.setTimeout(120000);setLanguage(language,{setItem:()=>{}});await page.addInitScript(lang=>localStorage.setItem('bounty-mapper:interface-language',lang),language)
+  await page.goto('/');await createProject(page,'First');for(const name of ['A','B','C'])await createMap(page,name)
+  const seeded=await settings(page),project=seeded.projects.find(p=>p.name==='First')!,ids=Object.fromEntries(seeded.maps.map(map=>[map.name,map.id]))
+  await page.evaluate(async({mapId,content})=>{const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('bounty-mapper');r.onsuccess=()=>resolve(r.result)});const tx=db.transaction('regions','readwrite');tx.objectStore('regions').add({...content,id:'room',mapId,number:1,title:'Room',titleCustomized:true,color:'#abcdef',fillOpacity:.4,order:0,vertices:[{x:100,y:100},{x:350,y:100},{x:350,y:300},{x:100,y:300}]});await new Promise<void>(resolve=>{tx.oncomplete=()=>resolve()});db.close()},{mapId:ids.B,content:emptyRegionContent()})
+  await go(page,'B');await expect(canvas(page)).toHaveAttribute('data-map-id',ids.B)
+  await expect(canvas(page).locator('canvas').first()).toBeVisible();const beforeZoom=await camera(page);await button(page,'ui.zoom.in').click();await expect.poll(async()=>(await camera(page)).scale).toBe(beforeZoom.scale*1.25)
+  const box=(await canvas(page).boundingBox())!;await page.mouse.move(box.x+750,box.y+450);await page.mouse.down({button:'middle'});await page.mouse.move(box.x+795,box.y+425,{steps:8});await page.mouse.up({button:'middle'});const viewB=await camera(page)
+  await expect.poll(async()=>(await settings(page)).settings[`mapWorkspace:${project.id}`]?.cameras?.[ids.B]).toEqual(viewB)
+  await page.mouse.click(box.x+viewB.x+200*viewB.scale,box.y+viewB.y+200*viewB.scale)
+  const card=page.getByRole('region',{name:t('ui.region.card'),exact:true});await card.getByRole('button',{name:t('ui.edit'),exact:true}).click();await page.getByLabel(t('ui.region.name'),{exact:true}).fill('Unsaved region title')
+  await button(page,'ui.project.maps').click();const rows=page.locator('.map-menu-row')
+  await dragBefore(page,page.getByRole('button',{name:t('order.drag',{name:'C'}),exact:true}),rows.filter({has:page.getByRole('button',{name:t('order.drag',{name:'A'}),exact:true})}),'map-insertion-line.png')
+  await expect.poll(()=>rows.evaluateAll(items=>items.map(item=>item.getAttribute('data-map-id')))).toEqual([ids.C,ids.A,ids.B])
+  await page.setViewportSize({width:375,height:800});const bounds=(await page.getByRole('menu',{name:t('ui.project.maps'),exact:true}).boundingBox())!;expect(bounds.x+bounds.width).toBeLessThanOrEqual(375);await page.screenshot({path:info.outputPath(`map-order-${language}.png`)});await page.setViewportSize({width:1280,height:800})
+  await expect(page.locator('.map-menu-trigger')).toHaveText('B');expect(await camera(page)).toEqual(viewB);await expect(page.getByLabel(t('ui.region.name'),{exact:true})).toHaveValue('Unsaved region title')
+  await mapStep(page,'C','order.down');await expect.poll(()=>rows.evaluateAll(items=>items.map(item=>item.getAttribute('data-map-id')))).toEqual([ids.A,ids.C,ids.B])
+  await page.evaluate(()=>{const put=IDBObjectStore.prototype.put;(window as unknown as {restoreOrder:()=>void}).restoreOrder=()=>{IDBObjectStore.prototype.put=put};IDBObjectStore.prototype.put=function(...args){if(this.name==='maps')throw new DOMException('Order quota','QuotaExceededError');return put.apply(this,args)}})
+  await mapStep(page,'B','order.up');await expect(page.getByRole('alert')).toContainText('Order quota');expect((await settings(page)).maps.sort((a,b)=>a.order-b.order).map(m=>m.id)).toEqual([ids.A,ids.C,ids.B])
+  await page.evaluate(()=>(window as unknown as {restoreOrder:()=>void}).restoreOrder());await rows.filter({has:page.getByRole('button',{name:t('order.drag',{name:'B'}),exact:true})}).getByRole('button',{name:t('order.up'),exact:true}).click();await expect.poll(()=>rows.evaluateAll(items=>items.map(item=>item.getAttribute('data-map-id')))).toEqual([ids.A,ids.B,ids.C])
+  expect(await camera(page)).toEqual(viewB);await expect(page.getByLabel(t('ui.region.name'),{exact:true})).toHaveValue('Unsaved region title');await page.keyboard.press('Escape')
+  await go(page,'C');const decision=page.getByRole('dialog',{name:t('ui.unsaved.region.changes'),exact:true});await decision.getByRole('button',{name:t('ui.continue.editing'),exact:true}).click()
+  expect((await settings(page)).settings[`mapWorkspace:${project.id}`].mapId).toBe(ids.B)
+  await go(page,'C');await decision.getByRole('button',{name:t('ui.discard.changes'),exact:true}).click();await expect(canvas(page)).toHaveAttribute('data-map-id',ids.C);await expect(canvas(page).locator('canvas').first()).toBeVisible();const viewC=await camera(page)
+  await expect.poll(async()=>(await settings(page)).settings[`mapWorkspace:${project.id}`].mapId).toBe(ids.C)
+  await page.addInitScript(()=>{const state=window as unknown as {seenMaps:string[]};state.seenMaps=[];new MutationObserver(()=>{const id=document.querySelector('[data-map-canvas]')?.getAttribute('data-map-id');if(id)state.seenMaps.push(id)}).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['data-map-id']})})
+  await page.reload();await expect(canvas(page)).toHaveAttribute('data-map-id',ids.C);await expect(canvas(page).locator('canvas').first()).toBeVisible();expect(await camera(page)).toEqual(viewC)
+  expect(await page.evaluate(id=>(window as unknown as {seenMaps:string[]}).seenMaps.every(value=>value===id),ids.C)).toBe(true)
+  await button(page,'ui.play').click();await expect(button(page,'ui.play')).toHaveAttribute('aria-pressed','true');await button(page,'ui.project.maps').click()
+  await expect(page.getByRole('button',{name:t('order.drag',{name:'C'}),exact:true})).toBeDisabled()
+  const playingRow=page.locator('.map-menu-row').filter({has:page.getByRole('button',{name:t('order.drag',{name:'C'}),exact:true})});await playingRow.locator('summary').click();await expect(playingRow.getByRole('button',{name:t('order.up'),exact:true})).toBeDisabled();await page.keyboard.press('Escape');await button(page,'ui.preparation').click();await expect(button(page,'ui.preparation')).toHaveAttribute('aria-pressed','true')
+  await go(page,'B');await expect(canvas(page)).toHaveAttribute('data-map-id',ids.B);await expect.poll(()=>camera(page)).toEqual(viewB);await go(page,'C');await expect(canvas(page)).toHaveAttribute('data-map-id',ids.C)
+  await createProject(page,'Second');await createMap(page,'D');const other=(await settings(page)).projects.find(p=>p.name==='Second')!,viewD=await camera(page)
+  await menu(page,'ui.projects');const list=page.locator('.project-list-row');await dragBefore(page,page.getByRole('button',{name:t('order.drag',{name:'Second'}),exact:true}),list.filter({has:page.getByRole('button',{name:t('order.drag',{name:'First'}),exact:true})}))
+  await expect(list.first().getByRole('button',{name:t('ui.open.project.value',{p0:'Second'}),exact:true})).toBeVisible()
+  await expect(page.locator('.map-menu-trigger')).toHaveText('D');expect(await camera(page)).toEqual(viewD)
+  const first=list.filter({has:page.getByRole('button',{name:t('ui.open.project.value',{p0:'First'}),exact:true})})
+  await first.locator('summary').focus();await page.keyboard.press('Enter')
+  await page.evaluate(()=>{const put=IDBObjectStore.prototype.put;(window as unknown as {restoreProjects:()=>void}).restoreProjects=()=>{IDBObjectStore.prototype.put=put};IDBObjectStore.prototype.put=function(...args){if(this.name==='settings'&&args[1]==='projectOrder')throw new DOMException('Project order quota','QuotaExceededError');return put.apply(this,args)}})
+  await first.getByRole('button',{name:t('order.up'),exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Project order quota');await expect(list.first().getByRole('button',{name:t('ui.open.project.value',{p0:'Second'}),exact:true})).toBeVisible()
+  await page.evaluate(()=>(window as unknown as {restoreProjects:()=>void}).restoreProjects());await first.getByRole('button',{name:t('order.up'),exact:true}).focus();await page.keyboard.press('Enter')
+  await expect(list.first().getByRole('button',{name:t('ui.open.project.value',{p0:'First'}),exact:true})).toBeVisible()
+  await first.getByRole('button',{name:t('order.down'),exact:true}).click();await expect(list.first().getByRole('button',{name:t('ui.open.project.value',{p0:'Second'}),exact:true})).toBeVisible()
+  await expect.poll(async()=>(await settings(page)).settings[`mapWorkspace:${other.id}`]?.mapId).toBeTruthy()
+  await page.getByRole('button',{name:t('ui.close.project.dialog'),exact:true}).click();await page.reload();await expect(page.locator('.map-menu-trigger')).toHaveText('D')
+  await menu(page,'ui.projects');await expect(list.first().getByRole('button',{name:t('ui.open.project.value',{p0:'Second'}),exact:true})).toBeVisible()
+  await page.getByRole('button',{name:t('ui.open.project.value',{p0:'First'}),exact:true}).click();await expect(canvas(page)).toHaveAttribute('data-map-id',ids.C);await expect.poll(()=>camera(page)).toEqual(viewC)
+  const download=page.waitForEvent('download');await menu(page,'ui.export.project');const path=info.outputPath('ordered.zip');await(await download).saveAs(path)
+  await page.getByLabel(t('ui.project.archive'),{exact:true}).setInputFiles(path);await expect(page.getByText(t('ui.the.project.copy.was.imported.and.saved.on.this'),{exact:true})).toBeVisible()
+  await expect(page.locator('.map-menu-trigger')).toHaveText('A');const after=await settings(page),copy=after.projects.find(p=>p.id!==project.id&&p.id!==other.id)!
+  expect(after.maps.filter(map=>map.projectId===copy.id).sort((a,b)=>a.order-b.order).map(map=>map.name)).toEqual(['A','B','C'])
+  await menu(page,'ui.projects');await expect(list.last().getByRole('button',{name:t('ui.open.project.value',{p0:copy.name}),exact:true})).toBeVisible()
+  await page.setViewportSize({width:375,height:800});await page.screenshot({path:info.outputPath(`project-order-${language}.png`)})
+})

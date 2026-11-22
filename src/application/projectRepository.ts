@@ -3,6 +3,7 @@ import type { Asset, Project } from '../domain/project'
 
 export interface ProjectRepository {
   list(): Promise<Project[]>
+  reorder?(ids: string[]): Promise<Project[]>
   restore(): Promise<Project | undefined>
   open(id: string): Promise<Project>
   // revision 0 means a new project. Resolves only after the transaction commits.

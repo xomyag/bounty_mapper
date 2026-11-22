@@ -43,4 +43,4 @@ Verification before the subsequent multi-level import extension: **199 unit test
 5. Pan with Space + left drag and the middle button, including above shapes. Enter image alignment: drag above a region/marker moves only the background; its separate camera mode and wheel still work. Test drawing/vertex handles and moving a new duplicate before its first save.
 6. Enter Game and try the same spatial gestures: geometry is fixed, camera/cards work and selection is cleared. Return to Preparation; move a group, reload, export/import and verify coordinates/images/bindings survive while temporary selection is absent. Repeat key controls in English and Russian.
 
-Known limits remain: drafts/selection/cameras/undo history live only in the current page; only marker placements currently have position locks. Stored adventure data is never cleared automatically.
+Known limits remain: drafts/selection/undo history live only in the current page; only marker placements currently have position locks. The later [list-order iteration](list-order-last-map.md) persists cameras and the last open level as local UI settings. Stored adventure data is never cleared automatically.

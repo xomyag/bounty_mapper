@@ -2,12 +2,15 @@ import { message } from '../i18n/message'
 import type { Asset } from '../domain/project'
 import type { MapImage, MapImageRepository } from './mapImageRepository'
 import type { ProjectSession } from './projectSession'
+import type { WorkspaceRepository } from './workspaceRepository'
+import type { ViewportMemory } from './viewportMemory'
 
 export interface MapImageState {
   projectId?: string
   image: MapImage
   phase: 'idle' | 'loading' | 'uploading' | 'saving' | 'saved' | 'error'
   error?: string
+  selectionError?: string
 }
 
 export class MapImageSession {
@@ -18,7 +21,9 @@ export class MapImageSession {
   private readonly repository: MapImageRepository
   private readonly projects: ProjectSession
   private readonly prepare: (file: Blob, projectId: string) => Promise<Asset>
-  constructor(repository: MapImageRepository, projects: ProjectSession, prepare: (file: Blob, projectId: string) => Promise<Asset>, private readonly canEdit: () => boolean = () => true) {
+  private attemptedSelection?: string
+  private selectionWork = Promise.resolve()
+  constructor(repository: MapImageRepository, projects: ProjectSession, prepare: (file: Blob, projectId: string) => Promise<Asset>, private readonly canEdit: () => boolean = () => true, private options: { workspace?: WorkspaceRepository; viewports?: ViewportMemory; prepareOpen?: (image: MapImage) => Promise<void> } = {}) {
     this.repository = repository
     this.projects = projects
     this.prepare = prepare
@@ -36,17 +41,41 @@ export class MapImageSession {
   load = async (projectId?: string) => {
     const version = ++this.loadVersion
     this.retryAction = undefined
+    this.attemptedSelection = undefined
     this.update({ projectId, image: {}, phase: projectId ? 'loading' : 'idle' })
     if (!projectId) return
     try {
-      const image = await this.repository.load(projectId)
-      if (version === this.loadVersion) this.update({ projectId, image, phase: image.background ? 'saved' : 'idle' })
+      const workspace = await this.options.workspace?.load(projectId)
+      const image = await this.repository.load(projectId,workspace?.mapId)
+      await this.options.prepareOpen?.(image)
+      if (version === this.loadVersion) {
+        this.options.viewports?.hydrate(projectId,workspace?.cameras ?? {})
+        this.update({ projectId, image, phase: image.background ? 'saved' : 'idle' })
+      }
     } catch (error) {
       if (version !== this.loadVersion) return
       this.retryAction = () => this.load(projectId)
       this.update({ ...this.state, phase: 'error', error: message("ui.map.read.failed.value", { p0: error instanceof Error ? error.message : '' }) })
     }
   }
+  confirmSelection = () => {
+    const { projectId,image } = this.state
+    const mapId = image.map?.id
+    if (!projectId || !mapId || !this.options.workspace) return this.selectionWork
+    const key = `${projectId}:${mapId}`
+    if (this.attemptedSelection === key) return this.selectionWork
+    this.attemptedSelection = key
+    this.selectionWork = this.selectionWork.then(async () => {
+      try {
+        await this.options.workspace!.select(projectId,mapId)
+        if (this.attemptedSelection === key) this.update({ ...this.state,selectionError: undefined })
+      } catch (error) {
+        if (this.attemptedSelection === key) this.update({ ...this.state,selectionError: message('order.selectionFailed',{detail:error instanceof Error ? error.message : ''}) })
+      }
+    })
+    return this.selectionWork
+  }
+  retrySelection = () => { this.attemptedSelection = undefined; return this.confirmSelection() }
   upload = (file: Blob) => this.change(file)
   remove = () => this.change()
   retry = () => this.retryAction?.() ?? Promise.resolve()
