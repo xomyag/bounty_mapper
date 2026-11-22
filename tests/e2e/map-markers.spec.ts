@@ -242,9 +242,17 @@ test('marker rich text/image drafts survive errors and archive copy; every type 
   // Tiptap restores toolbar focus on the next frame; collapse only after that.
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
   await description.press('Control+End')
-  await expect.poll(() => page.evaluate(() => window.getSelection()?.isCollapsed)).toBe(true)
-  await page.getByLabel('Изображение: Описание маркера').setInputFiles({ name: 'portrait.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
+  await expect.poll(() => description.evaluate((element) => { const selection = window.getSelection(); return !!selection?.isCollapsed && !!selection.anchorNode && element.contains(selection.anchorNode) })).toBe(true)
+  // Use the visible insertion command so the editor processes the caret move
+  // before the file change; setting the hidden input can race selectionchange.
+  const formatting = page.getByRole('toolbar', { name: 'Форматирование: Описание маркера' })
+  const more = formatting.getByRole('button', { name: 'Ещё', exact: true })
+  if (await more.count()) await more.click()
+  const choosingImage = page.waitForEvent('filechooser')
+  await formatting.getByRole('button', { name: 'Вставить изображение', exact: true }).click()
+  await (await choosingImage).setFiles({ name: 'portrait.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
   await expect(description.locator('img')).toBeVisible()
+  await expect(description.locator('strong')).toHaveText('Указывает путь')
   await page.evaluate(() => { const put = IDBObjectStore.prototype.put; Object.defineProperty(window, '__markerPut', { value: put }); IDBObjectStore.prototype.put = function (...args: Parameters<typeof put>) { if (this.name === 'projects') throw new DOMException('Нет места для маркера', 'QuotaExceededError'); return put.apply(this, args) } })
   await page.getByRole('button', { name: 'Закрыть карточку маркера' }).click()
   const prompt = page.getByRole('dialog', { name: 'Несохранённые изменения маркера' })
