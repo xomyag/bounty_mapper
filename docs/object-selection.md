@@ -1,0 +1,46 @@
+# Preparation object movement and mixed selection
+
+This continuation was implemented on `bm-level-import-marker-duplicate` together with level import, marker duplication and background alignment. The user manually accepted the combined release and authorized committing, an ordinary merge and production publication after passing checks; deployment success requires separate confirmation. It **replaces the UI-01 restriction that an existing region moves only inside its card's edit draft**. Card content still uses the shared explicit Save/Cancel workflow.
+
+## Interaction
+
+In Preparation, drag an existing region or unlocked marker to move it without opening a card. The click/drag threshold is **5 CSS screen pixels**, independent of camera zoom. A smaller movement remains a click and opens the existing single card. Completed drags, cancelled drags and marquee release do not open cards. Region vertices retain their explicit edit mode; creation-time vertices and new/duplicated marker drafts retain their existing drag behavior.
+
+Left drag on empty canvas draws a visible rectangular marquee in normal selection mode. Regions intersecting its rectangle are selected, including edge crossings and a rectangle contained inside a polygon; concave regions use their actual polygon rather than its bounding box. Marker centers must lie inside the rectangle. Marker position locks exclude them from marquee, Shift selection and movement. Regions currently have no position-lock field; no new lock model is introduced.
+
+A normal marquee replaces the previous selection. Shift + marquee adds unique objects; Shift + click adds/removes one movable object without opening its card. The count and **Clear selection / Снять выделение** are compact HTML controls, separate from the camera. Clicking empty canvas or pressing Escape clears selection. Escape during a gesture cancels that gesture and restores its prior selection/geometry without a write. Ordinary clicks retain the existing card workflow. Selection outlines never change saved color/fill.
+
+Dragging a selected object moves exactly the selected regions and unlocked placements. Every selected item gets the same world-space delta, calculated from screen motion/current scale. Shape and relative distances are retained. Binding lists never add implicit objects: a linked marker stays fixed unless explicitly selected and is visited only once even when linked to several selected regions. Dragging an unselected object without Shift replaces the old selection and moves only that object; Shift-drag retains the group and adds an unselected target. There is no group deletion, bulk property editing, background selection or cross-map transfer; Delete does not act on transient group selection.
+
+**Space + left drag** and **middle-button drag** pan the camera, including from above an object. Wheel retains pointer-relative zoom; camera buttons/arrow keys remain. A zoom/keyboard-camera command cancels an unfinished spatial gesture before changing the camera. Space is handled only with canvas/body focus, so text, buttons, menus and native text undo stay independent. Pointer capture completes or cancels a gesture outside the canvas. A touch drag on an existing movable object moves it; touch on empty canvas retains camera pan. Selection is disabled during region/marker creation, vertex editing and image alignment. Explicit Space/middle pan is still available in these tools. Alignment's separate Move image / Pan view controls remain.
+
+Game/Play permits camera/navigation/cards but blocks object movement and group selection in both UI and session handlers. Changing map/project/mode clears the temporary selection. Starting another drawing/editing tool clears it as well.
+
+## Drafts, writes and undo
+
+If a spatial drag crosses the threshold while an existing card has unsaved edits, the gesture is cancelled before any geometry preview/write and the existing Save and continue / Discard changes / Continue editing dialog opens. The draft remains intact on Continue editing or failed Save. After resolving Save/Discard, **drag again** to start the movement. This avoids applying a stale pointer gesture after interacting with a modal. Clean edit forms are closed to view before movement so they cannot later restore outdated geometry.
+
+The new marker/duplicate draft remains the exception: its placement can move before first Save, and cancelling its card still writes neither entity nor placement. Its movement is not mixed with an independent saved-map command.
+
+Saved-object drags preview absolute pre-gesture snapshots plus one offset. On release, the existing `RegionRepository.save` transaction writes all changed regions/placements and the project revision together. The preview is held until that transaction resolves, preventing an intermediate old/double offset render. Success creates **one** before/after history command, including a mixed group; one undo/redo restores the complete command. History remains limited to the existing 100 current-map commands. Failure rolls back all records, drops the preview back to stored coordinates, displays the storage error and retains the existing Retry action. It does not advance history or claim success. Cameras are never part of these commands.
+
+## Storage decision and compatibility
+
+**IndexedDB 9 / Project 2 / ZIP 8 remain unchanged.** `RegionSession.selection`, marquee bounds, gesture state and drag previews are temporary UI state. They never enter Region, Entity, MarkerPlacement, ProjectSnapshot, IndexedDB or archives. Existing coordinates, bindings, assets and model limits are reused. No dependency or migration was added. Level import and project ZIP copies retain moved world geometry while generating independent IDs; the imported map still uses the agreed first-open fit. Background alignment continues to affect only ImagePlacement x/y.
+
+## Verification and manual scenario
+
+Unit coverage includes concave-polygon/rectangle intersection, enclosed/crossing/boundary cases, additive deduplication, marker-center rules, locks, uniform translation without source mutation or implicit bindings, atomic late-write rollback/retry, one-command undo/redo, dirty-card resolution, map/mode/tool reset and archive round-trip without UI state.
+
+Browser coverage includes closed-card region movement, click threshold, mixed frame/Shift selection, reversed frames, two zoom levels, locked/multi-bound markers, Escape during a drag, clear selection, dirty-card choices, Space/middle pan, Game protection, text/button focus, frame-by-frame camera stability during failed/retried mixed writes, and ZIP/import/reload. Existing level import, duplicate-draft movement, image alignment, vertex creation/editing and palette regressions remain.
+
+Verification before the subsequent multi-level import extension: **199 unit tests passed**, typecheck and lint passed, root and `/bounty_mapper/` production builds passed. The Edge preview suite passed **49 scenarios** (its Pages-only scenario was skipped at root); the separate Pages-path scenario passed, including resource loading, worker scope and offline reload. Browser checks also cover explicit vertex editing/deletion from a card after clearing selection. The selection toolbar was visually checked at desktop and 375 px widths. The existing Vite warning about the main chunk exceeding 500 kB remains. No commit, merge or publication was performed. Current combined checks are recorded in [the import iteration document](level-import-marker-duplicate.md).
+
+1. Run `npm run dev`. In Preparation create two regions and two markers; bind one marker to both regions and lock the other. Keep cards closed. Drag a region: its shape stays intact, the bound marker stays fixed, and no card opens. Click the region to open the single card.
+2. Draw a frame from empty canvas across both regions and markers. Check the count and outlines; the locked marker is excluded. Use Shift-click and Shift-frame to remove/add objects. Draw another ordinary frame to replace selection. Try Clear selection, empty click and Escape.
+3. Zoom in/out and drag any selected object. Verify equal displacement, unchanged distances/bindings and only one movement per marker. Undo once, then redo. Escape while dragging must leave stored coordinates unchanged.
+4. Edit card text, then try dragging another object/group. Test all three draft choices and retry after a write failure. After resolving a draft, start a new drag. Text undo/Space/menu buttons must not move the map or objects.
+5. Pan with Space + left drag and the middle button, including above shapes. Enter image alignment: drag above a region/marker moves only the background; its separate camera mode and wheel still work. Test drawing/vertex handles and moving a new duplicate before its first save.
+6. Enter Game and try the same spatial gestures: geometry is fixed, camera/cards work and selection is cleared. Return to Preparation; move a group, reload, export/import and verify coordinates/images/bindings survive while temporary selection is absent. Repeat key controls in English and Russian.
+
+Known limits remain: drafts/selection/cameras/undo history live only in the current page; only marker placements currently have position locks. Stored adventure data is never cleared automatically.

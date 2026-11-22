@@ -45,6 +45,10 @@ import { BrowserProjectAccess } from './features/projects/browserProjectAccess'
 import { OfflineSession } from './offline/offlineSession'
 import { projectLocksEnabled } from './application/features'
 import { ProjectMenu } from './features/controls/ProjectMenu'
+import { LevelImportSession } from './application/levelImport'
+import { LevelImportDialog } from './features/projects/LevelImportDialog'
+import { CardConfirmation } from './features/regions/CardConfirmation'
+import { markerCopyPosition } from './domain/copy'
 import { IconButton } from './features/controls/IconButton'
 import { Info, Search, Pentagon, MapPinPlus, Undo2, Redo2, ZoomIn, ZoomOut, Maximize } from 'lucide-react'
 
@@ -109,11 +113,14 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   const markerError = regionState.markerDraft?.phase === 'error'
   const fileInput = useRef<HTMLInputElement>(null)
   const archiveInput = useRef<HTMLInputElement>(null)
+  const levelInput = useRef<HTMLInputElement>(null)
+  const [levels] = useState(() => new LevelImportSession(session, defaultBackupRepository, regions.isPreparation))
+  const levelState = useSyncExternalStore(levels.subscribe, levels.getSnapshot)
   const [backups] = useState(() => new ProjectBackupSession(session, backupRepository))
   const backupState = useSyncExternalStore(backups.subscribe, backups.getSnapshot)
   const [offline] = useState(() => new OfflineSession(() => !session.getSnapshot().loading && !session.hasUnsavedChanges() && !regions.hasUnsavedDetails() && !regions.busy() && !maps.busy() && !backups.busy() && !regions.getSnapshot().draft && !regions.getSnapshot().markerTool && !regions.getSnapshot().vertexMode))
   const offlineState = useSyncExternalStore(offline.subscribe, offline.getSnapshot)
-  const backupBusy = backups.busy() || offlineState.phase === 'applying'
+  const backupBusy = backups.busy() || levels.active() || offlineState.phase === 'applying'
   const updateBlocked = state.loading || (maps.busy() || regions.busy()) || backups.busy() || unsavedDetails || session.hasUnsavedChanges() || !!regionState.draft || !!regionState.markerTool || regionState.vertexMode
   const lifecycle = useRef({ generation: 0 })
   const [fitVersion, setFitVersion] = useState(0)
@@ -124,7 +131,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   const openVersion = session.getOpenVersion()
   const navigationKey = projectId ? `${projectId}:${openVersion}` : undefined
   const closeNavigation = () => { setNavigationProject(undefined); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-controls="project-navigation"]')?.focus()) }
-  const canWriteImage = preparation && !!state.project && !state.loading && !mapBusy && !unsavedDetails && state.status === 'saved' && mapState.projectId === projectId
+  const canWriteImage = preparation && !regionState.imageAlignment && !!state.project && !state.loading && !mapBusy && !unsavedDetails && state.status === 'saved' && mapState.projectId === projectId
   const mapId = mapState.projectId === projectId ? mapState.image.map?.id : undefined
   const cardRegion = regionState.mapId === mapId ? regionState.regions.find((region) => region.id === regionState.cardId) : undefined
   const cardMarker = regionState.mapId === mapId && regionState.markerCardId ? regionState.markerDraft?.marker ?? regionState.markers.find((m) => m.id === regionState.markerCardId) : undefined
@@ -173,6 +180,27 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
     regions.start()
     requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-map-canvas]')?.focus())
   }
+  useEffect(() => { regions.setImageAligner(maps.align) }, [regions, maps])
+  useEffect(() => {
+    regions.setMarkerCopyPosition((marker) => {
+      const left = navigationProject === navigationKey ? 354 : 12
+      const free = workspaceWidth - left - cardWidth - 24
+      // The copy opens a card even when invoked on the canvas. On narrow layouts
+      // both panels start below the controls; keep the copy in that visible strip.
+      const visible = free >= 64 ? { x: left, y: 80, width: free, height: Math.max(48, (workspace.current?.clientHeight ?? 600) - 150) } : { x: Math.min(124, workspaceWidth / 2), y: 12, width: Math.max(48, workspaceWidth - 136), height: 48 }
+      return markerCopyPosition(marker, viewports.get(marker.mapId) ?? { x: 0, y: 0, scale: 1 }, visible)
+    })
+  }, [regions, viewports, workspaceWidth, cardWidth, cardOpen, navigationProject, navigationKey])
+  const confirmLevel = () => { void levels.confirm(async (copy) => {
+    const background = copy.imagePlacements.find((placement) => placement.mapId === copy.maps[0].id)
+    if (background) await prepareBitmap(copy.assets.find((a) => a.id === background.assetId)!)
+  }, (copy) => {
+    const map = copy.maps[0]; const placement = copy.imagePlacements.find((placement) => placement.mapId === map.id)
+    const entities = [...new Map([...navigation.getSnapshot().data.entities, ...copy.entities].map((entity) => [entity.id, entity])).values()]
+    const assets = [...Object.values(regions.getSnapshot().assets), ...copy.assets]
+    regions.adoptMap({ mapId: map.id }, { map, regions: copy.regions.filter((region) => region.mapId === map.id), markers: copy.markerPlacements.filter((marker) => marker.mapId === map.id), entities, assets })
+    maps.adoptSelection({ map, ...(placement ? { background: { placement, asset: copy.assets.find((a) => a.id === placement.assetId)! } } : {}) })
+  }) }
 
   useEffect(() => {
     const lifetime = lifecycle.current
@@ -220,7 +248,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   return (
     <div className="app-shell">
       <header className="control-panel">
-        <ProjectMenu disabled={state.loading || mapBusy || backupBusy || creatingProject} importDisabled={state.loading || mapBusy || backupBusy || unsavedDetails || session.hasUnsavedChanges()} exportDisabled={!projectId || state.loading || mapBusy || backupBusy || unsavedDetails} onProjects={() => setDialog('projects')} onImport={() => archiveInput.current?.click()} onExport={() => { void backups.export(downloadArchive, regions.flushDetails) }}>
+        <ProjectMenu disabled={state.loading || mapBusy || backupBusy || creatingProject} importDisabled={state.loading || mapBusy || backupBusy || unsavedDetails || session.hasUnsavedChanges()} exportDisabled={!projectId || state.loading || mapBusy || backupBusy || unsavedDetails || !!regionState.imageAlignment} levelDisabled={!projectId || !preparation || state.loading || mapBusy || backupBusy || detailsSaving || session.hasUnsavedChanges() || !!regionState.draft || !!regionState.markerTool || regionState.vertexMode} onLevelImport={() => regions.afterDetails(async () => { levelInput.current?.click() })} onProjects={() => { if (regionState.imageAlignment) regions.afterDetails(async () => { setDialog('projects') }); else setDialog('projects') }} onImport={() => archiveInput.current?.click()} onExport={() => { void backups.export(downloadArchive, regions.flushDetails) }}>
           {offlineState.phase !== 'disabled' && <section className="offline-menu" aria-label={t("ui.offline.startup")}><p>{localize(offlineState.message)}</p><button type="button" role="menuitem" disabled={offlineState.phase === 'applying'} onClick={() => { void offline.checkUpdate() }}>{localize(offlineState.phase === 'error' ? message("ui.retry.offline.setup") : message("ui.check.for.updates"))}</button>{offlineState.updateAvailable && <><button type="button" role="menuitem" disabled={updateBlocked || offlineState.phase === 'applying'} onClick={offline.applyUpdate}>{t("ui.apply.update")}</button>{updateBlocked && <p>{t("ui.save.or.discard.changes.and.finish.the.active.tool")}</p>}</>}</section>}
         </ProjectMenu>
         <div className="project-summary"><div className="project-state"><span className="project-name" title={state.project?.name}>{localize(state.project?.name ?? 'Bounty Mapper')}</span>
@@ -232,10 +260,11 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
         {projectId && <div className="mode-switch" role="group" aria-label={t("ui.workspace.mode")}><button type="button" aria-pressed={preparation} disabled={state.readOnly || state.loading || mapBusy || backupBusy || detailsSaving || !!regionState.imagePending || session.hasUnsavedChanges()} onClick={() => regions.requestMode('prepare')}>{t("ui.preparation")}</button><button type="button" aria-pressed={!preparation} disabled={state.readOnly || state.loading || mapBusy || backupBusy || detailsSaving || !!regionState.imagePending || session.hasUnsavedChanges()} onClick={() => regions.requestMode('play')}>{t("ui.play")}</button></div>}
         <IconButton icon={Search} label={t("ui.navigation.and.search")} disabled={!projectId || state.loading || backupBusy} aria-expanded={!!projectId && navigationProject === navigationKey} aria-controls="project-navigation" onClick={() => { setNavigationProject((current) => current === navigationKey ? undefined : navigationKey); if (navigationProject !== navigationKey) requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[data-navigation-search]')?.focus()) }} />
         {mapId && <IconButton icon={Info} label={t("ui.map.description")} disabled={state.loading || mapBusy || backupBusy || creatingProject} onClick={() => regions.openInformation(mapId)} />}
-        {projectId && <MapMenu key={navigationKey} maps={navigationState.data.maps} currentMapId={mapId} disabled={navigationDisabled || navigationState.loading} writesDisabled={mapWritesDisabled} playing={!preparation} onNavigate={(id) => regions.navigate({ mapId: id })} onAction={setMapAction} imageDisabled={!canWriteImage || backupBusy} hasImage={!!mapState.image.background} onUpload={() => fileInput.current?.click()} onRemoveImage={() => { const name = navigationState.data.maps.find((map) => map.id === mapId)?.name ?? ''; if (window.confirm(t("ui.delete.the.background.image.of.map.value.the.map", { p0: name }))) void maps.remove() }} />}
+        {projectId && <MapMenu key={navigationKey} maps={navigationState.data.maps} currentMapId={mapId} disabled={navigationDisabled || navigationState.loading} writesDisabled={mapWritesDisabled || !!regionState.imageAlignment} playing={!preparation} onNavigate={(id) => regions.navigate({ mapId: id })} onAction={setMapAction} imageDisabled={!canWriteImage || backupBusy} hasImage={!!mapState.image.background} onAlignImage={() => { const p = maps.getSnapshot().image.background?.placement; if (p) regions.startImageAlignment(p) }} alignDisabled={!preparation || mapBusy || backupBusy || detailsSaving || !!regionState.imageAlignment} onUpload={() => fileInput.current?.click()} onRemoveImage={() => { const name = navigationState.data.maps.find((map) => map.id === mapId)?.name ?? ''; if (window.confirm(t("ui.delete.the.background.image.of.map.value.the.map", { p0: name }))) void maps.remove() }} />}
       </header>
       <input ref={fileInput} className="file-input" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" aria-label={t("ui.map.image.file")} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void maps.upload(file) }} />
       <input ref={archiveInput} className="file-input" type="file" accept=".zip,application/zip" aria-label={t("ui.project.archive")} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void backups.import(file) }} />
+      <input ref={levelInput} className="file-input" type="file" accept=".zip,application/zip" aria-label={t('level.chooseArchive')} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void levels.read(file) }} />
       {projectLocksEnabled && projectId && <div className="access-banner" role="status"><span>{localize(state.accessMessage)}</span>{state.readOnly ? <button type="button" disabled={state.loading || mapBusy || backupBusy || unsavedDetails} onClick={() => { void session.requestEditing(refreshForEditing) }}>{t("ui.acquire.editing.access")}</button> : <button type="button" disabled={state.loading || mapBusy || backupBusy || unsavedDetails || session.hasUnsavedChanges() || !!regionState.draft || !!regionState.markerTool || regionState.vertexMode} onClick={() => { void session.releaseEditing() }}>{t("ui.release.editing.access")}</button>}</div>}
       {regionState.modeError && <div className="error-banner" role="alert"><span>{localize(regionState.modeError)}</span><button type="button" disabled={state.readOnly || mapBusy || state.loading || backupBusy} onClick={regions.retryMode}>{t("ui.retry.mode.selection")}</button></div>}
       {regionState.statusAction?.phase === 'error' && <div className="error-banner" role="alert"><span>{localize(regionState.statusAction.error)}  {t("ui.the.last.saved.status.is.shown")}</span><button type="button" disabled={state.readOnly || mapBusy || state.loading || backupBusy || unsavedDetails} onClick={() => { void regions.retryStatus() }}>{t("ui.retry.status.change")}</button><button type="button" onClick={regions.dismissStatusError}>{t("ui.dismiss.status.error")}</button></div>}
@@ -247,6 +276,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
       )}
       {mapState.error && <div className="error-banner" role="alert"><span>{localize(mapState.error)}  {t("ui.the.previously.saved.image.has.not.changed")}</span><button type="button" disabled={mapBusy || state.loading} onClick={() => { void maps.retry() }}>{t("ui.retry.map.upload")}</button></div>}
       {backupState.message && <div className={backupState.phase === 'error' ? 'error-banner' : 'backup-message'}><span role={backupState.phase === 'error' ? 'alert' : 'status'}>{localize(backupState.message)}</span><button type="button" onClick={backups.dismiss} aria-label={t("ui.dismiss.archive.message")}>{t("ui.close")}</button></div>}
+      {!!levelState.importedCount && levelState.projectId === projectId && <div className="backup-message"><span role="status">{t('level.success', { count: levelState.importedCount })}</span><button type="button" onClick={levels.cancel} aria-label={t('level.dismiss')}>{t('ui.close')}</button></div>}
       {regionState.error && <div className="error-banner" role="alert"><span>{localize(regionState.error)}</span>{regionState.canRetry && <button type="button" disabled={mapBusy || state.loading || backupBusy} onClick={() => { void regions.retry() }}>{localize(regions.hasLoaded() ? message("ui.retry.saving.map.objects") : message("ui.retry.reading.map.objects"))}</button>}<button type="button" disabled={regionBusy || !regions.hasLoaded()} onClick={regions.dismiss}>{t("ui.dismiss.map.error")}</button></div>}
       {layout.phase === 'error' && <div className="error-banner" role="alert"><span>{localize(layout.error)}</span><button type="button" onClick={() => { void cardLayout.save() }}>{t("ui.retry.saving.width")}</button></div>}
       <main ref={workspace} style={{ '--card-width': cardWidth + 'px' } as CSSProperties} id="map-workspace" className={`map-workspace ${navigationProject === navigationKey && projectId ? 'search-open' : ''} ${cardOpen ? 'card-open' : ''} ${workspaceWidth - (navigationProject === navigationKey && projectId ? 354 : 12) - (cardOpen ? cardWidth + 24 : 12) < 250 ? 'controls-strips' : ''}`} aria-label={t("ui.map.workspace")} tabIndex={-1}>
@@ -255,7 +285,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
           <IconButton icon={MapPinPlus} label={t("ui.add.marker")} disabled={!canEditRegion || !!regionState.draft} aria-expanded={!!mapId && markerPicker === mapId} onClick={() => setMarkerPicker((current) => current === mapId ? undefined : mapId)} />
         </div>
         <div className="workspace-controls history-controls" role="group" aria-label={t("ui.change.history")}>
-          {preparation ? <><IconButton icon={Undo2} label={t("ui.undo")} disabled={!(regionDragAllowed && regions.canUndoDraftGeometry()) && (!canEditRegion || !!regionState.draft || !regionState.canUndo)} onClick={() => { void regions.undo() }} /><IconButton icon={Redo2} label={t("ui.redo")} disabled={!(regionDragAllowed && regions.canRedoDraftGeometry()) && (!canEditRegion || !!regionState.draft || !regionState.canRedo)} onClick={() => { void regions.redo() }} /></> : <><IconButton icon={Undo2} label={t("ui.undo.status")} disabled={state.readOnly || mapBusy || state.loading || backupBusy || !regionState.canUndoStatus} onClick={() => { void regions.undoStatus() }} /><IconButton icon={Redo2} label={t("ui.redo.status")} disabled={state.readOnly || mapBusy || state.loading || backupBusy || !regionState.canRedoStatus} onClick={() => { void regions.redoStatus() }} /></>}
+          {preparation ? <><IconButton icon={Undo2} label={t("ui.undo")} disabled={!canEditRegion || !!regionState.draft || !regionState.canUndo} onClick={() => { void regions.undo() }} /><IconButton icon={Redo2} label={t("ui.redo")} disabled={!canEditRegion || !!regionState.draft || !regionState.canRedo} onClick={() => { void regions.redo() }} /></> : <><IconButton icon={Undo2} label={t("ui.undo.status")} disabled={state.readOnly || mapBusy || state.loading || backupBusy || !regionState.canUndoStatus} onClick={() => { void regions.undoStatus() }} /><IconButton icon={Redo2} label={t("ui.redo.status")} disabled={state.readOnly || mapBusy || state.loading || backupBusy || !regionState.canRedoStatus} onClick={() => { void regions.redoStatus() }} /></>}
         </div>
         <div className="workspace-controls camera-controls" role="group" aria-label={t("ui.map.zoom")}>
           <IconButton icon={ZoomOut} label={t("ui.zoom.out")} disabled={!mapId || mapBusy} onClick={() => setZoomCommand((current) => ({ version: current.version + 1, factor: 1 / 1.25 }))} />
@@ -278,6 +308,16 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
         </div>}
         {regionState.draft && <div className="region-draft-tools" role="group" aria-label={t("ui.creating.region")}><span>{t('counts.vertices', { count: regionState.draft.length })}</span><button type="button" disabled={!canEditRegion} onClick={() => { void regions.finish() }}>{t("ui.done")}</button><button type="button" disabled={regionBusy} onClick={regions.cancel}>{t("ui.cancel.outline")}</button></div>}
         {regionState.markerTool && <div className="region-draft-tools" role="group" aria-label={t("ui.placing.marker")}><span>{t('marker.placementPrompt', { type: markerTypes[regionState.markerTool].label })}</span><button type="button" onClick={regions.cancelMarkerTool}>{t("ui.cancel.placement")}</button></div>}
+        {regionState.imageAlignment && <section className="alignment-tools" aria-label={t('alignment.title')}>
+          <strong>{t('alignment.title')}</strong><p>{t('alignment.hint')}</p>
+          <button type="button" aria-pressed={!regionState.imageAlignment.pan} disabled={detailsSaving || state.loading} onClick={() => regions.panImageAlignment(false)}>{t('alignment.move')}</button>
+          <button type="button" aria-pressed={regionState.imageAlignment.pan} disabled={detailsSaving || state.loading} onClick={() => regions.panImageAlignment(true)}>{t('alignment.pan')}</button>
+          <button type="button" disabled={detailsSaving || state.loading} onClick={() => { void regions.saveImageAlignment() }}>{t('ui.save')}</button>
+          <button type="button" disabled={detailsSaving || state.loading} onClick={regions.cancelImageAlignment}>{t('ui.cancel')}</button>
+          <p role="status">{t(regionState.imageAlignment.phase === 'saving' ? 'ui.saving' : 'alignment.unsaved')}</p>
+          {regionState.imageAlignment.error && <p role="alert">{localize(regionState.imageAlignment.error)}</p>}
+          <CardConfirmation state={regionState} session={regions} label={t('alignment.unsaved')} error={regionState.imageAlignment.error} />
+        </section>}
         {(cardRegion || cardMarker || regionState.information) && <div id="object-card" className="card-panel"><CardResizer width={cardWidth} viewWidth={workspaceWidth} session={cardLayout} />
         {regionState.information && <InformationCard key={`${regionState.information.kind}:${regionState.information.projectId}:${regionState.information.mapId ?? ''}`} state={regionState} session={regions} disabled={mapBusy || backupBusy || deleting || (state.loading && !detailsSaving)} mapName={regionState.information.kind === 'map' ? navigationState.data.maps.find((m) => m.id === regionState.information?.mapId)?.name : undefined} onCancelCreation={() => setDialog('projects')} />}
         {cardRegion && <RegionCard key={cardRegion.id} region={cardRegion} state={regionState} session={regions} disabled={mapBusy || backupBusy || (state.loading && !detailsSaving) || session.hasUnsavedChanges()} geometryDisabled={!canEditRegion} tagCatalog={tags} />}
@@ -287,6 +327,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
       {dialog && <ProjectDialog repository={repository} session={session} message={projectMessage} onClose={() => setDialog(null)} onCreate={(name) => { setDialog(null); regions.createInformation(name) }} onOpen={(id) => { setDialog(null); regions.afterDetails(() => session.open(id)) }} onDelete={(project) => { setDialog(null); setDeleteError(undefined); setDeleteProject(project) }} />}
       {deleteProject && <ProjectDeleteDialog project={deleteProject} busy={deleting} error={deleteError} onCancel={() => { setDeleteProject(undefined); setDialog('projects') }} onDelete={confirmDelete} />}
       {mapAction && <MapActionDialog action={mapAction} disabled={mapWritesDisabled} onSubmit={changeMap} onClose={() => { setMapAction(undefined); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.map-menu-trigger')?.focus()) }} />}
+      {levels.active() && <LevelImportDialog session={levels} targetName={state.project?.name ?? ''} onConfirm={confirmLevel} onChoose={() => levelInput.current?.click()} />}
     </div>
   )
 }

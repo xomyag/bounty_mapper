@@ -46,6 +46,15 @@ a:focus-visible, button:focus-visible, main:focus-visible, input:focus-visible, 
 .panel-actions button { padding: 8px 12px; border: 1px solid #3b454f; border-radius: 6px; background: #252e37; color: #a4afb9; font: inherit; font-size: 13px; }
 .panel-actions button:disabled { cursor: not-allowed; }
 .map-workspace { flex: 1; min-height: 160px; position: relative; background: #11161b; overflow: hidden; }
+.alignment-tools { position: absolute; z-index: 8; left: var(--controls-left, 12px); right: var(--controls-right, 12px); bottom: 56px; margin: 0 auto; max-width: 540px; padding: 12px; border: 1px solid #dfb577; border-radius: 8px; background: #171c21; }
+.alignment-tools p { margin: 6px 0; font-size: 13px; }
+.alignment-tools button { margin: 4px 8px 0 0; }
+.alignment-tools button[aria-pressed=true] { border-color: #dfb577; background: #473c2f; }
+.selection-tools { position: absolute; z-index: 5; top: 12px; left: var(--controls-left, 12px); margin-left: 108px; display: flex; align-items: center; gap: 6px; padding: 4px; max-width: calc(100% - var(--controls-left, 12px) - var(--controls-right, 12px) - 108px); border: 1px solid #dfb577; border-radius: 6px; background: #171c21; font-size: 12px; }
+.selection-tools span { min-width: 0; overflow-wrap: anywhere; }
+.selection-tools button { flex-shrink: 0; min-height: 36px; border: 1px solid #56616c; border-radius: 4px; padding: 5px 6px; background: #2b3540; color: inherit; }
+.controls-strips .selection-tools { left: 12px; max-width: calc(100% - 136px); }
+.canvas-host.selecting, .canvas-host.selecting:active { cursor: default; }
 .empty-state { text-align: center; max-width: 420px; width: calc(100% - 48px); position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 .file-input { display: none; }
 .canvas-host { position: absolute; inset: 0; touch-action: none; cursor: grab; }
@@ -70,6 +79,12 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .project-dialog label { display: block; margin: 16px 0 8px; font-size: 14px; }
 .project-dialog input, .project-dialog textarea { width: 100%; min-width: 0; padding: 10px 12px; color: #e5e8eb; background: #11161b; border: 1px solid #56616c; border-radius: 6px; font: inherit; font-size: 14px; line-height: 1.5; }
 .project-dialog textarea { resize: vertical; }
+.level-choices { min-width: 0; margin: 16px 0; padding: 12px; border: 1px solid #46515c; border-radius: 6px; }
+.project-dialog .level-choices label { display: flex; align-items: flex-start; gap: 10px; overflow-wrap: anywhere; }
+.project-dialog .level-choices input[type=checkbox] { width: 18px; height: 18px; padding: 0; margin: 2px 0 0; flex-shrink: 0; accent-color: #dfb577; }
+.level-choices small { display: block; margin-top: 4px; color: #bec9d3; }
+.level-import-dialog .card-actions { flex-wrap: wrap; }
+.level-import-dialog .card-actions button { max-width: 100%; overflow-wrap: anywhere; }
 .create-project-row { display: flex; gap: 8px; }
 .form-hint { font-size: 13px; line-height: 1.6; color: #a4afb9; }
 .project-dialog h3 { margin-top: 28px; font-size: 16px; font-weight: 500; }

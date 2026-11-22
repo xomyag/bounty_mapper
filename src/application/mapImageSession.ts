@@ -50,6 +50,13 @@ export class MapImageSession {
   upload = (file: Blob) => this.change(file)
   remove = () => this.change()
   retry = () => this.retryAction?.() ?? Promise.resolve()
+  align = async (point: { x: number; y: number }) => {
+    const mapId = this.state.image.map?.id
+    if (!this.canEdit() || !mapId || !this.repository.align || this.busy()) throw new Error(message('alignment.invalid'))
+    let image!: MapImage
+    await this.projects.mutateProject(async (project) => { const result = await this.repository.align!(project, mapId, point); image = result.image; return result.project })
+    this.update({ ...this.state, image, phase: 'saved', error: undefined })
+  }
   readSelection = (mapId: string) => this.repository.load(this.projects.getSnapshot().project!.id, mapId)
   adoptSelection = (image: MapImage) => {
     ++this.loadVersion

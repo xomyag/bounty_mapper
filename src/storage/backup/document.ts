@@ -75,8 +75,8 @@ export function validateDocument(value: unknown, limits: BackupLimits = BACKUP_L
     return { id: string(a.id, true), projectId: string(a.projectId, true), mimeType, path, byteSize, pixelWidth, pixelHeight, checksum, tags: array(a.tags, 1024).map((tag) => string(tag)), ...(a.caption === undefined ? {} : { caption: string(a.caption) }) }
   })
   const imagePlacements: ImagePlacement[] = array(root.imagePlacements, limits.maps).map((value) => {
-    const i = record(value, ['id', 'mapId', 'assetId', 'x', 'y', 'width', 'height', 'rotation', 'order', 'locked', 'visible'])
-    return { id: string(i.id, true), mapId: string(i.mapId, true), assetId: string(i.assetId, true), x: number(i.x), y: number(i.y), width: number(i.width, true), height: number(i.height, true), rotation: number(i.rotation), order: integer(i.order), locked: boolean(i.locked), visible: boolean(i.visible) }
+    const i = record(value, ['id', 'mapId', 'assetId', 'width', 'height', 'rotation', 'order', 'locked', 'visible'], ['x', 'y'])
+    return { id: string(i.id, true), mapId: string(i.mapId, true), assetId: string(i.assetId, true), x: number(i.x === undefined ? 0 : i.x), y: number(i.y === undefined ? 0 : i.y), width: number(i.width, true), height: number(i.height, true), rotation: number(i.rotation), order: integer(i.order), locked: boolean(i.locked), visible: boolean(i.visible) }
   })
   let vertexCount = 0
   const regions: Region[] = (formatVersion === 1 ? [] : array(root.regions, MAX_REGIONS)).map((value) => {

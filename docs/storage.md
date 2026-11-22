@@ -84,6 +84,14 @@ Document images use assetId and originals use the existing assets store. Save wr
 
 ZIP became v4; reading v1/v2/v3 remained. Old archives migrate in memory before atomic import. Card drafts must be explicitly saved/canceled before export; they are neither included nor autosaved. Import remaps rich JSON image.assetId together with project/map/region/check/asset IDs. Failure leaves existing data/active project. See [region-details.md](region-details.md).
 
+## Level import and background alignment
+
+The current iteration adds `insertLevels(project, copy)` to the existing backup repository and an alignment operation to the image repository. Level insertion accepts a nonempty ordered batch, validates the combined target snapshot and revision inside one transaction, reserves nonconflicting names, adds only fresh IDs, and preserves target context/settings. Shared entities/assets are copied once per batch; a failed last write rolls back every added map, attachment and object. The session reads a target snapshot for name previews and refuses confirmation after its revision changes. Background alignment updates existing ImagePlacement x/y and map bounds atomically without changing image size, object geometry or camera. **IndexedDB 9 / Project 2 / ZIP 8 remain unchanged**; batch selection/names/progress stay outside the format, and missing legacy offsets normalize to zero during read, with explicit coordinates on the next write. Marker duplicates reuse existing same-project image Assets and stay outside storage until the shared card Save succeeds. [Details and tests](level-import-marker-duplicate.md).
+
+## Temporary object selection
+
+Preparation marquee/Shift selection and drag previews belong only to `RegionSession`/canvas UI state. They add no persisted field, store or ZIP projection. Ordinary and mixed-object movement reuse the existing atomic `RegionRepository.save` transaction and common before/after undo snapshots; a late write failure rolls back all geometry and the revision. Dirty cards resolve before a new drag, and clean forms cannot write stale positions later. **IndexedDB 9 / Project 2 / ZIP 8 are unchanged.** [Current controls and checks](object-selection.md).
+
 ## Interface language
 
 Language is separate browser-origin UI metadata in localStorage under `bounty-mapper:interface-language`, with stable values en/ru. Missing/invalid preferences default to English. Switching changes only labels and html.lang, retaining project data, cards/drafts, search and camera. Preference-write failure is visible and retryable without reverting the active language. This adds no store, Project field or archive field: **IndexedDB 9 / Project 2 / ZIP 8** remain unchanged. Language is not exported/imported; adventure text, tags, checks and persisted names are never translated. See [localization.md](localization.md).

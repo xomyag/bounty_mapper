@@ -5,7 +5,7 @@ import type { MarkerKind } from '../../domain/marker'
 import type { Point } from '../../domain/viewport'
 import { markerIcons } from './markerIcons'
 
-export function MapContextMenu({ position, size, disabled, onClose, onRegion, onMarker }: { position: Point; size: { width: number; height: number }; disabled: boolean; onClose: () => void; onRegion: () => void; onMarker: (kind: MarkerKind) => void }) {
+export function MapContextMenu({ position, size, disabled, onClose, onRegion, onMarker, onDuplicate }: { position: Point; size: { width: number; height: number }; disabled: boolean; onClose: () => void; onRegion: () => void; onMarker: (kind: MarkerKind) => void; onDuplicate?: () => void }) {
   const root = useRef<HTMLDivElement>(null)
   const parent = useRef<HTMLButtonElement>(null)
   const [expanded, setExpanded] = useState(false)
@@ -27,10 +27,12 @@ export function MapContextMenu({ position, size, disabled, onClose, onRegion, on
       if (items.length) items[(index + items.length + (event.key === 'ArrowDown' ? 1 : -1)) % items.length].focus()
     }
   }}>
+    {onDuplicate ? <button type="button" role="menuitem" disabled={disabled} onClick={onDuplicate}>{t('marker.duplicate')}</button> : <>
     <button type="button" role="menuitem" disabled={disabled} onMouseEnter={() => setExpanded(false)} onClick={onRegion}>{t("ui.add.region")}</button>
     <button ref={parent} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={expanded} disabled={disabled} onMouseEnter={() => setExpanded(true)} onClick={() => setExpanded(true)} onKeyDown={(event) => {
       if (event.key === 'ArrowRight') { event.preventDefault(); setExpanded(true); requestAnimationFrame(() => root.current?.querySelector<HTMLElement>('.marker-submenu button')?.focus()) }
     }}>{t("ui.add.marker")} <span aria-hidden="true">▸</span></button>
     {expanded && <div className="marker-submenu" role="menu" aria-label={t("ui.marker.type")} style={{ left: submenuLeft, top: submenuTop, maxHeight: Math.max(80, size.height - 8) }}>{Object.entries(markerTypes).map(([kind, type]) => <button key={kind} type="button" role="menuitem" disabled={disabled} onClick={() => onMarker(kind as MarkerKind)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={markerIcons[kind as MarkerKind]} /></svg>{localize(type.label)}</button>)}</div>}
+    </>}
   </div>
 }

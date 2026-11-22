@@ -18,9 +18,8 @@ export interface ProjectBackupRepository {
   insertCopy(snapshot: ProjectSnapshot): Promise<Project>
 }
 
-export function independentCopy(snapshot: ProjectSnapshot): ProjectSnapshot {
+export function independentCopy(snapshot: ProjectSnapshot, projectId: string = crypto.randomUUID()): ProjectSnapshot {
   const now = new Date().toISOString()
-  const projectId = crypto.randomUUID()
   const mapIds = new globalThis.Map(snapshot.maps.map((map) => [map.id, crypto.randomUUID()]))
   const assetIds = new globalThis.Map(snapshot.assets.map((asset) => [asset.id, crypto.randomUUID()]))
   const regionIds = new globalThis.Map(snapshot.regions.map((region) => [region.id, crypto.randomUUID()]))

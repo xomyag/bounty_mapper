@@ -148,7 +148,7 @@ Desktop/laptop mouse/trackpad is first priority. On narrow screens open panels s
 - Escape cancels unfinished outlines; drafts are not regions and not exported.
 - At least three distinct vertices; zero area/self-intersections forbidden. Different regions may overlap.
 - Vertex mode supports edge insertion and deletion while retaining three vertices.
-- Whole-region movement preserves shape/description. Bound markers normally stay put because bindings are semantic; joint movement is a later explicit command. UI-01 permits this only within the region card's edit draft.
+- Whole-region movement preserves shape/description. Bound markers stay put unless explicitly selected because bindings are semantic. Current Preparation controls supersede UI-01's card-only draft rule: free region drag and explicit mixed-group drag save atomically on release after resolving dirty cards. Game protects geometry.
 - Overlap selects the top region; others are accessible from lists. Display order persists.
 - Title/tags edit in the card; translucent fill leaves the background visible.
 - Palette remains open after choosing color; outside click closes it. Escape closes and returns focus to the color button.
@@ -497,7 +497,7 @@ Sources were checked for v0.1; they describe tool capabilities, not substitutes 
 
 Header: burger, project/information for previous context, mode, search, map menu right. Projects/import/export live in the burger; backgrounds in map menu with target name/deletion confirmation. Creation, undo/redo and camera tools are grouped over the visible workspace without panels obscuring them.
 
-Existing regions move only in their card's overall edit mode; no separate movement mode. Movement joins Save/Cancel/transition protection; failure retains draft. Bound markers stay put. In view/Play/closed-card states, dragging inside regions pans. Vertex/creation rules remain. Data/viewport independent; IndexedDB 7 / Project 1 / ZIP 6 unchanged. [UI-01](ui-controls.md).
+UI-01 originally limited region movement to its card's edit draft and used interior drag for pan otherwise. **That restriction is superseded by the requested Preparation selection continuation:** existing regions move directly after dirty-card resolution; mixed frame/Shift selection moves only selected unlocked objects in one atomic undo command. Space + left drag and middle drag pan. Bound markers are not added automatically, and vertex/creation rules remain. The original UI-01 versions were IndexedDB 7 / Project 1 / ZIP 6; current selection retains 9/2/8. [Current controls](object-selection.md).
 
 ### UI-02 — cards, tooltips and traps, manually accepted
 
@@ -516,6 +516,14 @@ Project/map information buttons open saved content in the shared right panel. Ma
 IndexedDB 9 / Project 2 / ZIP 8 replaces actual Markdown contextMd/notesMd with sole Project.context / Map.description documents. Plain text/line breaks survive; HTML is not interpreted; existing parser converts old Markdown without reconverting rich documents. Upgrade atomic; ZIP 1…7 supported. Both documents/original images archived with remapped assetId. New maps have empty descriptions; nonempty old imports survive.
 
 Each project menu offers confirmed named deletion with consequences. Maps/regions/placements/entities/assets/project settings delete atomically while preserving other projects. Resolve current drafts first; success opens list. Failure keeps old snapshot/retry, concurrent duplicate operations prevented. Assets are not cross-project; context/description references count for background/map deletion. No trash. [UI-03 checks/limits](ui-project-map-context.md).
+
+### Level tools and object selection — manually accepted
+
+The user manually accepted these additions and the object-selection continuation on `bm-level-import-marker-duplicate`, authorizing an ordinary merge and production publication after passing checks. Preparation's Import levels imports one, several or all explicitly confirmed maps from an existing validated project ZIP into the current project. Checkboxes initially select all in source order, with select/clear actions, pluralized counts and previewed destination names; empty selection is disabled. The union of reachable records/images is remapped once for the entire batch, preserving shared entities/assets across selected maps while excluding unselected maps with an advance warning for their shared-entity placements. One atomic transaction preserves target context and existing records, reserves case-insensitive/trimmed Copy / Copy 2 names against existing and batch maps, and rolls back everything on failure. A changed target revision requires a fresh name review. Success reports the committed count and opens the first imported map without changing existing cameras. Saved-marker duplication creates an independent, unlocked, movable card draft; same-project image Assets may be shared safely. Background alignment edits existing ImagePlacement x/y in a protected Save/Cancel tool; objects and camera remain independent, with separate camera pan mode. IndexedDB 9 / Project 2 / ZIP 8 are retained, and absent legacy offsets read as zero. No new export format, cross-map marker transfer or layer system. [Specification, version decision and checks](level-import-marker-duplicate.md).
+
+### Preparation selection continuation — manually accepted
+
+The current feature branch also implements the user's replacement for UI-01 movement: 5-screen-pixel click/drag separation, free whole-region movement, actual polygon/frame intersections, marker-center selection, Shift union/toggle, temporary selected-object count/Clear selection and uniform mixed-group translation. Locked marker placements are excluded; bindings never imply membership. Escape cancels an active gesture without a write, and release writes one atomic history command with rollback/retry. Dirty card decisions finish before a new gesture; new marker/vertex drafts and image alignment retain their tools. Space/middle pan and text/menu input remain independent. Selection clears across maps/projects/modes, stays outside storage/ZIP, and Game guards all geometry. No group deletion or new data format/dependency is introduced. [Behavior and verification](object-selection.md).
 
 ### Localization — manually accepted
 

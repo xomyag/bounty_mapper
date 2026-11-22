@@ -88,7 +88,7 @@ test('PNG/JPEG/WebP render; pan and pointer zoom preserve placement; project map
   const x = box.x + box.width / 2; const y = box.y + box.height / 2
   const initialBounds = await drawnBounds(page)
   expect(initialBounds.width / initialBounds.height).toBeCloseTo(2, 2)
-  await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 20, y + 10, { steps: 5 }); await page.mouse.up()
+  await page.mouse.move(x, y); await page.mouse.down({button:'middle'}); await page.mouse.move(x + 20, y + 10, { steps: 5 }); await page.mouse.up({button:'middle'})
   await expect.poll(async () => (await drawnBounds(page)).x).toBe(initialBounds.x + 20)
   await expect.poll(async () => (await drawnBounds(page)).y).toBe(initialBounds.y + 10)
   const beforeZoom = await drawnBounds(page)

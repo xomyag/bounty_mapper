@@ -4,7 +4,7 @@ import { useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Menu, FolderOpen, Upload, Download } from 'lucide-react'
 
-export function ProjectMenu({ disabled, importDisabled, exportDisabled, onProjects, onImport, onExport, children }: { disabled: boolean; importDisabled: boolean; exportDisabled: boolean; onProjects: () => void; onImport: () => void; onExport: () => void; children?: ReactNode }) {
+export function ProjectMenu({ disabled, importDisabled, exportDisabled, levelDisabled, onLevelImport, onProjects, onImport, onExport, children }: { disabled: boolean; importDisabled: boolean; exportDisabled: boolean; levelDisabled?: boolean; onLevelImport?: () => void; onProjects: () => void; onImport: () => void; onExport: () => void; children?: ReactNode }) {
   const language = useLanguage()
   const id = useId()
   const panel = useRef<HTMLDivElement>(null)
@@ -22,6 +22,7 @@ export function ProjectMenu({ disabled, importDisabled, exportDisabled, onProjec
     }}>
       <button type="button" role="menuitem" disabled={disabled} onClick={() => act(onProjects)}><FolderOpen aria-hidden="true" size={18} />{t("ui.projects")}</button>
       <button type="button" role="menuitem" disabled={importDisabled} onClick={() => act(onImport)}><Upload aria-hidden="true" size={18} />{t("ui.import.project")}</button>
+      {onLevelImport && <button type="button" role="menuitem" disabled={levelDisabled} onClick={() => act(onLevelImport)}><Upload aria-hidden="true" size={18} />{t('level.import')}</button>}
       <button type="button" role="menuitem" disabled={exportDisabled} onClick={() => act(onExport)}><Download aria-hidden="true" size={18} />{t("ui.export.project")}</button>
       <section className="language-menu" role="group" aria-label={t('language.label')}>
         <strong>{t('language.label')}</strong>

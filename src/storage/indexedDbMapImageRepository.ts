@@ -16,8 +16,9 @@ async function loadMap(tx: IDBTransaction, projectId: string, mapId?: string): P
   const map = mapId ? maps.find((m) => m.id === mapId) : maps.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))[0]
   if (mapId && !map) throw new Error(message("ui.map.not.found.in.the.current.project"))
   if (!map) return {}
-  const placement = await requestResult(tx.objectStore('imagePlacements').index('mapId').get(map.id)) as ImagePlacement | undefined
-  if (!placement) return { map }
+  const saved = await requestResult(tx.objectStore('imagePlacements').index('mapId').get(map.id)) as ImagePlacement | undefined
+  if (!saved) return { map }
+  const placement = { ...saved, x: saved.x === undefined ? 0 : saved.x, y: saved.y === undefined ? 0 : saved.y }
   const asset = await requestResult(tx.objectStore('assets').get(placement.assetId)) as Asset | undefined
   if (!asset || asset.projectId !== projectId || !asset.blob || asset.blob.size !== asset.byteSize ||
       !['image/png', 'image/jpeg', 'image/webp'].includes(asset.mimeType) ||
@@ -84,5 +85,20 @@ export class IndexedDbMapImageRepository implements MapImageRepository {
   }
 
   replace(project: Project, asset: Asset, mapId?: string) { return this.mutate(project, asset, mapId) }
+  align(project: Project, mapId: string, point: { x: number; y: number }): Promise<MapImageResult> {
+    return this.db.transaction(stores, 'readwrite', async (tx) => {
+      const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
+      if (stored.revision !== project.revision) throw new RevisionConflictError()
+      const image = await loadMap(tx, project.id, mapId)
+      if (!image.background || ![point.x, point.y].every((n) => Number.isFinite(n) && Math.abs(n) <= 1e9)) throw new Error(message('alignment.invalid'))
+      const placement = { ...image.background.placement, x: point.x, y: point.y }
+      const map = { ...image.map!, coordinateBounds: { x: placement.x, y: placement.y, width: placement.width, height: placement.height } }
+      const next = { ...stored, revision: stored.revision + 1, updatedAt: new Date().toISOString() }
+      await requestResult(tx.objectStore('imagePlacements').put(placement))
+      await requestResult(tx.objectStore('maps').put(map))
+      await requestResult(tx.objectStore('projects').put(next))
+      return { project: next, image: { map, background: { ...image.background, placement } } }
+    })
+  }
   remove(project: Project, mapId?: string) { return this.mutate(project, undefined, mapId) }
 }

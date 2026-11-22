@@ -63,7 +63,7 @@ export function RegionCard({ region, state, session, disabled, geometryDisabled,
       <section className="region-gm-notes" aria-label={t("ui.region.gm.notes")}><h3>{t("ui.gm.notes")}</h3>{documentHasContent(region.gmNotes) ? <RichTextView document={region.gmNotes} assets={state.assets} /> : <p>{t("ui.no.notes.yet")}</p>}</section>
       <h3>{t("ui.checks")}</h3>{!region.checks.length && <p>{t("ui.no.checks")}</p>}{region.checks.map((c) => <div className="region-check" key={c.id}><strong>{localize(c.condition || message("ui.no.condition"))}</strong><p>{c.ability}{localize(c.dc === undefined ? '' : message("ui.dc.value", { p0: c.dc }))}</p><p>{c.result}</p></div>)}
       <h3>{t("ui.tags")}</h3><p>{localize(region.tags.join(', ') || message("ui.no.tags"))}</p>
-      {!readOnly && <><button type="button" disabled={disabled || state.vertexMode} onClick={session.beginEdit}>{t("ui.edit")}</button><button type="button" disabled={geometryDisabled} onClick={() => { void session.remove() }}>{t("ui.delete.region")}</button></>}
+      {!readOnly && <><button type="button" disabled={disabled || state.vertexMode} onClick={session.beginEdit}>{t("ui.edit")}</button><button type="button" disabled={geometryDisabled} onClick={() => { void session.remove(region.id) }}>{t("ui.delete.region")}</button></>}
     </>}
     <section aria-label={t("ui.linked.markers")}><h3>{t("ui.linked.markers")}</h3><ul className="linked-markers">{state.markers.filter((m) => m.regionIds.includes(region.id)).map((m) => {
       const entity = state.entities.find((e) => e.id === m.entityId)!
