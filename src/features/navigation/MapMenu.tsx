@@ -5,7 +5,7 @@ import { Plus, Check, Pencil, Trash2, ImagePlus, ChevronDown, Map as MapIcon } f
 
 export type MapAction = { kind: 'create' } | { kind: 'rename' | 'delete'; map: Map }
 
-export function MapMenu({ maps, currentMapId, disabled, writesDisabled, playing = false, onNavigate, onAction, imageDisabled, hasImage, onUpload, onRemoveImage }: { maps: Map[]; currentMapId?: string; disabled: boolean; writesDisabled: boolean; playing?: boolean; onNavigate: (mapId: string) => void; onAction: (action: MapAction) => void; imageDisabled: boolean; hasImage: boolean; onUpload: () => void; onRemoveImage: () => void }) {
+export function MapMenu({ maps, currentMapId, disabled, writesDisabled, playing = false, onNavigate, onAction, imageDisabled, hasImage, onUpload, onRemoveImage, onAlignImage, alignDisabled }: { maps: Map[]; currentMapId?: string; disabled: boolean; writesDisabled: boolean; playing?: boolean; onNavigate: (mapId: string) => void; onAction: (action: MapAction) => void; imageDisabled: boolean; hasImage: boolean; onUpload: () => void; onRemoveImage: () => void; onAlignImage?: () => void; alignDisabled?: boolean }) {
   const id = useId()
   const popover = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -30,6 +30,7 @@ export function MapMenu({ maps, currentMapId, disabled, writesDisabled, playing 
       </li>)}</ul>
       <section className="map-image-actions" aria-label={t("ui.current.map.image")}><p>{t("ui.image.3103e4")} {localize(maps.find((map) => map.id === currentMapId)?.name ?? message("ui.first.map"))}</p>
         <button type="button" role="menuitem" disabled={imageDisabled} onClick={() => { close(); onUpload() }}><ImagePlus size={18} aria-hidden="true" />{localize(hasImage ? message("ui.replace.image") : message("ui.upload.map"))}</button>
+        {hasImage && onAlignImage && <button type="button" role="menuitem" disabled={playing || alignDisabled} onClick={() => { close(); onAlignImage() }}>{t('alignment.action')}</button>}
         {hasImage && <button type="button" role="menuitem" disabled={imageDisabled} onClick={() => { close(); onRemoveImage() }}><Trash2 size={18} aria-hidden="true" />{t("ui.remove.image")}</button>}
       </section>
       {writesDisabled && <p className="form-hint">{localize(playing ? message("ui.map.changes.are.available.in.preparation.you.can.switch") : message("ui.to.change.maps.save.or.discard.card.changes.and"))}</p>}

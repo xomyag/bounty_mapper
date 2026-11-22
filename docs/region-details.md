@@ -2,7 +2,7 @@
 
 UI-02 adds a region summary, shared adjustable card width and a compact toolbar with More. Hover shows the summary and tags instead of GM notes. UI-02 versions were IndexedDB 8 / ZIP 7; the sections below record earlier stages. See [current cards and migrations](ui-cards-tooltips-traps.md); UI-03's current overall formats are documented in [backup-format.md](backup-format.md).
 
-UI-01 includes whole-outline movement in the shared draft: only the editable region moves, Save writes geometry with fields, and Cancel restores it. Failures and transition confirmation retain the same draft. Fields and format did not change. See [current controls](ui-controls.md).
+UI-01's former whole-outline movement inside the card draft is **superseded** by the current Preparation controls. Existing regions move without opening/editing their card; ordinary or mixed-group drag resolves dirty cards first, then saves separately on release with atomic undo/redo. Card fields retain explicit Save/Cancel, and vertices retain their own mode. Fields/storage format did not change. See [current movement and selection](object-selection.md).
 
 BM-006 and refinements were manually accepted by the user. Their clarification replaces Markdown source/preview with a visual editor and card autosave with a common Save / Cancel draft.
 

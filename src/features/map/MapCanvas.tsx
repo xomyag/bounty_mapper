@@ -1,6 +1,6 @@
 import { localize, message, t } from '../../i18n'
 import { useEffect, useRef, useState } from 'react'
-import { Image as CanvasImage, Circle, Group, Layer, Line, Stage, Text, Path } from 'react-konva'
+import { Image as CanvasImage, Circle, Group, Layer, Line, Stage, Text, Path, Rect } from 'react-konva'
 import type Konva from 'konva'
 import type { MapImage } from '../../application/mapImageRepository'
 import type { Camera, Point } from '../../domain/viewport'
@@ -14,6 +14,8 @@ import type { ViewportMemory } from '../../application/viewportMemory'
 import { markerTypes, statusBadge, statusLabel } from '../../domain/marker'
 import { markerIcons, markerScreenScale, markerInk } from './markerIcons'
 import { MapContextMenu } from './MapContextMenu'
+import { useMapSelection } from './useMapSelection'
+import { selectionSize } from '../../domain/selection'
 
 interface Props { image: MapImage; fitVersion: number; zoomCommand?: { version: number; factor: number }; regionDragAllowed: boolean; regions: RegionState; session: RegionSession; editable: boolean; viewports: ViewportMemory }
 const flat = (points: Point[]) => points.flatMap((p) => [p.x, p.y])
@@ -23,10 +25,11 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
   const playing = regions.mode === 'play'
   const readOnly = playing || !session.canEditProject()
   const editable = editingAllowed && session.isPreparation()
+  const alignment = regions.imageAlignment
+  const alignmentDrag = useRef<{ pointer: Point; origin: Point } | undefined>(undefined)
   const host = useRef<HTMLDivElement>(null)
   const stage = useRef<Konva.Stage>(null)
   const doubleClickTarget = useRef<{ kind: 'draft' | 'region'; index: number; regionId?: string } | undefined>(undefined)
-  const draggingRegion = useRef(false)
   const draggedMarker = useRef<string | undefined>(undefined)
   const blockStagePan = useRef(false)
   const suppressClick = useRef(false)
@@ -38,13 +41,14 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
   const [decodeError, setDecodeError] = useState('')
   const [pointer, setPointer] = useState<Point>()
   const [preview, setPreview] = useState<Region>()
-  const [menu, setMenu] = useState<{ x: number; y: number; point: Point }>()
+  const [menu, setMenu] = useState<{ x: number; y: number; point: Point; markerId?: string }>()
   const [hover, setHover] = useState<{ id: string; x: number; y: number }>()
   const hoverRegion = !markerHover && !regions.markerTool && !regions.draft && !regions.vertexMode && !preview && hover ? regions.regions.find((r) => r.id === hover.id) : undefined
   const hoverMarker = !regions.markerTool && !regions.draft && !regions.vertexMode && markerHover ? regions.markers.find((m) => m.id === markerHover.id) : undefined
-  const hoverEntity = hoverMarker ? regions.entities.find((e) => e.id === hoverMarker.entityId) : undefined
+  const hoverEntity = !alignment && hoverMarker ? regions.entities.find((e) => e.id === hoverMarker.entityId) : undefined
   const asset = image.background?.asset
-  const placement = image.background?.placement
+  const savedPlacement = image.background?.placement
+  const placement = savedPlacement && alignment ? { ...savedPlacement, x: alignment.x, y: alignment.y } : savedPlacement
   const mapId = image.map?.id
   const visibleBitmap = cachedBitmap(asset?.id) ?? (bitmap?.assetId === asset?.id ? bitmap?.image : undefined)
   // Resizing the viewport (including temporary status banners) must not change
@@ -68,6 +72,8 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
   const setCamera = (change: (current: Camera) => Camera) => {
     setCameraState((current) => ({ key: cameraKey, mapId, camera: change(current?.key === cameraKey ? current.camera : fitted), focus: current?.key === cameraKey ? current.focus : regions.viewFocus }))
   }
+  const interaction = useMapSelection({ host, stage, camera, session, enabled: regionDragAllowed, setCamera })
+  const movePreview = interaction.preview?.mapId === mapId ? interaction.preview : undefined
 
   useEffect(() => {
     const node = host.current!
@@ -95,6 +101,14 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
     const point = stage.current?.getPointerPosition()
     return point ? screenToWorld(point, camera) : undefined
   }
+  const beginAlignmentDrag = () => {
+    const point = worldPointer()
+    if (alignment && !alignment.pan && point && !session.detailsSaving()) alignmentDrag.current = { pointer: point, origin: { x: alignment.x, y: alignment.y } }
+  }
+  const moveAlignmentDrag = () => {
+    const drag = alignmentDrag.current; const point = worldPointer()
+    if (drag && point && alignment && !alignment.pan) session.moveImageAlignment({ x: drag.origin.x + point.x - drag.pointer.x, y: drag.origin.y + point.y - drag.pointer.y })
+  }
   const savePreview = (region: Region) => {
     setPreview(region)
     void session.change(region).finally(() => setPreview(undefined))
@@ -104,6 +118,7 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
   useEffect(() => {
     if (!zoomCommand || consumedZoom.current === zoomCommand.version) return
     consumedZoom.current = zoomCommand.version
+    interaction.cancel()
     setCamera((current) => zoomAt(current, { x: size.width / 2, y: size.height / 2 }, current.scale * zoomCommand.factor))
   })
   useEffect(() => {
@@ -112,19 +127,23 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
       const mode = session.getSnapshot().mode
       if (mode === 'play' && previous !== mode) {
         stage.current?.find((node: Konva.Node) => node.isDragging()).forEach((node) => node.stopDrag())
-        setMenu(undefined); setPreview(undefined); setPointer(undefined); draggingRegion.current = false; draggedMarker.current = undefined; doubleClickTarget.current = undefined; blockStagePan.current = false
+        setMenu(undefined); setPreview(undefined); setPointer(undefined); draggedMarker.current = undefined; doubleClickTarget.current = undefined; blockStagePan.current = false
       }
       previous = mode
     })
   }, [session])
   return (
-    <div ref={host} data-map-canvas data-map-id={mapId} className={`canvas-host${regions.draft || regions.markerTool ? ' drawing' : ''}`} tabIndex={0} role="region" aria-label={t("ui.adventure.map")} aria-describedby="map-controls-hint"
+    <div ref={host} data-map-canvas data-map-id={mapId} className={`canvas-host${regions.draft || regions.markerTool ? ' drawing' : ''}${!playing && !alignment && !regions.draft && !regions.markerTool && !regions.vertexMode ? ' selecting' : ''}`} tabIndex={0} role="region" aria-label={t("ui.adventure.map")} aria-describedby="map-controls-hint"
+      onPointerDownCapture={interaction.pointerDown} onPointerMoveCapture={interaction.pointerMove} onPointerUpCapture={interaction.pointerUp} onPointerCancel={interaction.pointerCancel} onLostPointerCapture={interaction.pointerCancel}
       onContextMenu={(event) => {
         event.preventDefault()
-        if (!editable || regions.draft || regions.markerTool) return
+        if (alignment || readOnly || session.busy() || session.detailsSaving() || regions.draft || regions.markerTool) return
         const rect = host.current!.getBoundingClientRect()
         const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top }
-        setMenu({ x: Math.min(screen.x, Math.max(0, size.width - 196)), y: Math.min(screen.y, Math.max(0, size.height - 90)), point: screenToWorld(screen, camera) })
+        const markerId = stage.current?.getIntersection(screen)?.findAncestor('.map-marker', true)?.getAttr('markerId') as string | undefined
+        if (markerId && !regions.markers.some((m) => m.id === markerId)) return
+        if (!markerId && !editable) return
+        setMenu({ x: Math.min(screen.x, Math.max(0, size.width - 196)), y: Math.min(screen.y, Math.max(0, size.height - 90)), point: screenToWorld(screen, camera), markerId })
         focus()
       }}
       onMouseDownCapture={(event) => {
@@ -144,7 +163,7 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
         blockStagePan.current = !!stage.current?.getIntersection({ x: touch.clientX - rect.left, y: touch.clientY - rect.top })?.findAncestor('.map-marker', true)
       }}
       onDoubleClick={(event) => {
-        if (!editable) return
+        if (!editable || alignment) return
         event.preventDefault()
         const target = doubleClickTarget.current
         doubleClickTarget.current = undefined
@@ -155,12 +174,15 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
       }}
       onKeyDown={(event) => {
         if (event.target !== host.current) return
-        if (event.key === 'Escape') { setMenu(undefined); if (regions.draft) session.cancel(); else if (regions.markerTool) session.cancelMarkerTool(); else if (regions.cardId || regions.markerCardId) session.closeCard(); else session.select() }
+        if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-'].includes(event.key)) interaction.cancel()
+        if (alignment && !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '=', '-'].includes(event.key)) { if (event.key === 'Escape') session.afterDetails(async () => {}); event.preventDefault(); return }
+        if (event.key === 'Escape') { setMenu(undefined); if (regions.draft) session.cancel(); else if (regions.markerTool) session.cancelMarkerTool(); else if (selectionSize(regions.selection)) session.clearSelection(); else if (regions.cardId || regions.markerCardId) session.closeCard(); else session.select() }
         else if (event.key === 'Enter' && regions.draft && editable) void session.finish()
         else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && playing) { if (event.shiftKey) void session.redoStatus(); else void session.undoStatus() }
         else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && playing) void session.redoStatus()
-        else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && (editable || session.canUndoDraftGeometry() || session.canRedoDraftGeometry())) { if (event.shiftKey) void session.redo(); else void session.undo() }
-        else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && (editable || session.canRedoDraftGeometry())) void session.redo()
+        else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && editable) { if (event.shiftKey) void session.redo(); else void session.undo() }
+        else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && editable) void session.redo()
+        else if (event.key === 'Delete' && selectionSize(regions.selection)) { event.preventDefault(); return }
         else if (event.key === 'Delete' && editable && regions.selectedMarkerId) void session.removeMarker()
         else if (event.key === 'Delete' && editable && regions.selectedId) { if (regions.vertexMode) void session.removeVertex(); else void session.remove() }
         else if (event.key === 'ArrowLeft') pan(40, 0)
@@ -172,22 +194,26 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
         event.preventDefault()
       }}>
       {size.width > 0 && size.height > 0 && (
-        <Stage ref={stage} width={size.width} height={size.height} x={camera.x} y={camera.y} scaleX={camera.scale} scaleY={camera.scale} draggable={!regions.draft && !regions.markerTool && !preview}
-          onMouseDown={() => { focus(); setMenu(undefined) }}
-          onMouseMove={() => { if (regions.draft) setPointer(worldPointer()) }}
+        <Stage ref={stage} width={size.width} height={size.height} x={camera.x} y={camera.y} scaleX={camera.scale} scaleY={camera.scale} draggable={alignment ? alignment.pan && !session.detailsSaving() : playing && !preview}
+          onMouseDown={(event) => { focus(); setMenu(undefined); if (event.evt.button === 0) beginAlignmentDrag() }}
+          onMouseMove={() => { moveAlignmentDrag(); if (regions.draft) setPointer(worldPointer()) }}
+          onMouseUp={() => { alignmentDrag.current = undefined }} onMouseLeave={() => { alignmentDrag.current = undefined }}
+          onTouchStart={beginAlignmentDrag} onTouchMove={moveAlignmentDrag} onTouchEnd={() => { alignmentDrag.current = undefined }}
           onClick={(event) => {
-            if (event.evt.button !== 0) return
+            if (event.evt.button !== 0 || alignment) return
             if (regions.markerTool && editable) { const point = worldPointer(); if (point) session.placeMarker(point) }
             else if (regions.draft && editable) { const point = worldPointer(); if (point && event.evt.detail !== 2) session.addPoint(point) }
             else if (event.target === stage.current) session.select()
           }}
-          onTap={() => { if (regions.markerTool && editable) { const point = worldPointer(); if (point) session.placeMarker(point) } }}
+          onTap={() => { if (!alignment && regions.markerTool && editable) { const point = worldPointer(); if (point) session.placeMarker(point) } }}
           onDragStart={(event) => { if (event.target === stage.current) { suppressClick.current = true; if (blockStagePan.current) { event.target.stopDrag(); event.target.position({ x: camera.x, y: camera.y }) } } }}
           onDragEnd={(event) => { if (event.target === stage.current) stopClick() }}
           onDragMove={(event) => {
             if (event.target === stage.current) setCamera((current) => ({ ...current, x: event.target.x(), y: event.target.y() }))
           }}
           onWheel={(event) => {
+            interaction.cancel()
+            alignmentDrag.current = undefined
             event.evt.preventDefault()
             const pointer = event.target.getStage()?.getPointerPosition()
             if (!pointer) return
@@ -198,30 +224,20 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
           <Layer>
             {placement && visibleBitmap && <CanvasImage listening={false} image={visibleBitmap} x={placement.x} y={placement.y} width={placement.width} height={placement.height} rotation={placement.rotation} visible={placement.visible} />}
             {regions.regions.map((saved) => {
-              const displayed = { ...saved, vertices: regions.details[saved.id]?.fields.vertices ?? saved.vertices }
+              const moved = movePreview?.selection.regionIds.includes(saved.id) ? movePreview : undefined
+              const base = moved ? moved.regions.find((r) => r.id === saved.id)! : saved
+              const displayed = { ...base, vertices: moved ? base.vertices : regions.details[saved.id]?.fields.vertices ?? saved.vertices }
               const region = !readOnly && preview?.id === saved.id ? preview : displayed
-              const draggable = regionDragAllowed && session.canMoveRegion(region.id)
-              const selected = region.id === regions.selectedId
+              const selected = region.id === regions.selectedId || regions.selection.regionIds.includes(region.id)
               const vertices = !readOnly && selected && regions.vertexMode && !regions.draft
               const anchor = labelAnchor(region.vertices)
-              return <Group key={region.id} name="map-region" _useStrictMode={!draggable} x={draggable ? undefined : 0} y={draggable ? undefined : 0} draggable={draggable}
-                onMouseDown={(event) => { if (!regions.draft && !regions.vertexMode && !regions.markerTool) { event.cancelBubble = draggable; focus() } }}
-                onTouchStart={(event) => { if (!regions.draft && !regions.vertexMode && !regions.markerTool) event.cancelBubble = draggable }}
+              return <Group key={region.id} name="map-region" regionId={region.id} listening={!alignment} _useStrictMode x={moved ? moved.offset.x : 0} y={moved ? moved.offset.y : 0}
+                onMouseDown={() => { focus() }}
                 onClick={(event) => { if (!regions.draft && !regions.markerTool) { event.cancelBubble = true; if (!suppressClick.current && event.evt.button === 0 && !regions.vertexMode) { setHover(undefined); session.openCard(region.id) } } }}
                 onTap={(event) => { if (!regions.markerTool) { event.cancelBubble = true; if (!suppressClick.current && !regions.draft && !regions.vertexMode) { setHover(undefined); session.openCard(region.id) } } }}
-                onMouseMove={() => { const p = stage.current?.getPointerPosition(); if (p && !draggingRegion.current) setHover({ id: region.id, x: Math.max(8, Math.min(p.x + 16, size.width - 320)), y: Math.max(8, Math.min(p.y + 16, size.height - 180)) }) }}
+                onMouseMove={() => { const p = stage.current?.getPointerPosition(); if (p && !movePreview) setHover({ id: region.id, x: Math.max(8, Math.min(p.x + 16, size.width - 320)), y: Math.max(8, Math.min(p.y + 16, size.height - 180)) }) }}
                 onMouseLeave={() => setHover(undefined)}
-                onDragStart={(event) => { event.cancelBubble = true; draggingRegion.current = true; setHover(undefined); session.select(region.id) }}
-                onDragMove={(event) => { event.cancelBubble = true }}
-                onDragEnd={(event) => {
-                  event.cancelBubble = true
-                  draggingRegion.current = false
-                  stopClick()
-                  const offset = { x: event.target.x(), y: event.target.y() }
-                  event.target.position({ x: 0, y: 0 })
-                  if (!regionDragAllowed) return
-                  session.moveRegionDraft(saved.id, offset)
-                }}>
+                >
                 <Line points={flat(region.vertices)} closed fill={fill(region)} stroke={selected ? '#fff5cb' : region.color} strokeWidth={selected ? 3 : 1.5} strokeScaleEnabled={false} listening={!regions.draft} />
                 {selected && <Line points={flat(region.vertices)} closed stroke="#1a1e29" strokeWidth={1} strokeScaleEnabled={false} dash={[5 / camera.scale, 4 / camera.scale]} listening={false} />}
                 <Text x={anchor.x - 90 / camera.scale} y={anchor.y - 9 / camera.scale} width={180 / camera.scale} align="center" fontSize={14 / camera.scale} fontStyle="bold" text={`${region.number}. ${region.title}`} fill="#ffffff" shadowColor="#000000" shadowBlur={3} shadowOpacity={1} listening={false} />
@@ -258,11 +274,13 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
               const entity = regions.entities.find((e) => e.id === marker.entityId) ?? regions.markerDraft?.entity
               if (!entity) return null
               const scale = markerScreenScale(camera.scale)
-              const active = marker.id === regions.selectedMarkerId
+              const active = marker.id === regions.selectedMarkerId || regions.selection.markerIds.includes(marker.id)
               const isNew = !!regions.markerDraft?.isNew && regions.markerDraft.marker.id === marker.id
               const locked = isNew ? regions.markerDraft!.fields.locked : marker.locked
-              const canDrag = session.isPreparation() && (isNew ? session.canMoveMarkerDraft(marker.id) : editable && !locked)
-              return <Group key={marker.id} name="map-marker" _useStrictMode={readOnly} x={marker.x} y={marker.y} scaleX={scale} scaleY={scale} draggable={canDrag && !regions.draft && !regions.markerTool && !regions.vertexMode} listening={!regions.draft && !regions.markerTool && !regions.vertexMode}
+              const canDrag = isNew && session.canMoveMarkerDraft(marker.id)
+              const moved = movePreview?.selection.markerIds.includes(marker.id) ? movePreview : undefined
+              const base = moved ? moved.markers.find((m) => m.id === marker.id)! : marker
+              return <Group key={marker.id} name="map-marker" markerId={marker.id} _useStrictMode={!isNew || readOnly} x={base.x+(moved ? moved.offset.x : 0)} y={base.y+(moved ? moved.offset.y : 0)} scaleX={scale} scaleY={scale} dragDistance={5} draggable={!alignment && canDrag && !regions.draft && !regions.markerTool && !regions.vertexMode} listening={!alignment && !regions.draft && !regions.markerTool && !regions.vertexMode}
                 onMouseDown={(event) => { event.cancelBubble = true; focus() }}
                 onClick={(event) => { event.cancelBubble = true; if (event.evt.button === 0 && draggedMarker.current !== marker.id) { setMarkerHover(undefined); setHover(undefined); session.openMarkerCard(marker.id) } }}
                 onTap={(event) => { event.cancelBubble = true; if (draggedMarker.current !== marker.id) { setMarkerHover(undefined); setHover(undefined); session.openMarkerCard(marker.id) } }}
@@ -294,15 +312,17 @@ export function MapCanvas({ image, fitVersion, zoomCommand, regionDragAllowed, r
                   session.moveDraftVertex(index, { x: event.target.x(), y: event.target.y() })
                 }} />)}
             </>}
+            {interaction.marquee && <Rect name="selection-box" {...interaction.marquee} stroke="#fff5cb" strokeWidth={1.5/camera.scale} fill="#dfb57722" dash={[6/camera.scale,4/camera.scale]} listening={false} />}
           </Layer>
         </Stage>
       )}
       {asset && !visibleBitmap && !decodeError && <p className="map-overlay" role="status">{t("ui.preparing.image")}</p>}
       {decodeError && <p className="map-overlay form-error" role="alert">{localize(decodeError)}</p>}
-      {menu && !readOnly && <MapContextMenu position={menu} size={size} disabled={!editable} onClose={() => setMenu(undefined)} onRegion={() => { session.start(menu.point); setMenu(undefined); focus() }} onMarker={(kind) => { session.startMarker(kind); session.placeMarker(menu.point); setMenu(undefined); focus() }} />}
-      {hoverRegion && hover && <ObjectTooltip position={hover} size={size}><strong>{hoverRegion.number}. {localize(hoverRegion.title)}</strong>{hoverRegion.shortDescription.trim() && <p className="tooltip-description">{hoverRegion.shortDescription}</p>}<TooltipTags tags={hoverRegion.tags} /></ObjectTooltip>}
-      {hoverEntity && markerHover && <ObjectTooltip position={markerHover} size={size}><strong>{hoverEntity.name}</strong><p>{localize(markerTypes[hoverEntity.kind].label)} · {statusBadge(hoverEntity.status)} {localize(statusLabel(hoverEntity))}{localize(hoverMarker?.locked ? message("ui.locked.695017") : '')}</p><TooltipTags tags={hoverEntity.tags} />{hoverEntity.kind === 'trap' && <div className="tooltip-checks">{hoverEntity.checks.slice(0, 3).map((c) => <p key={c.id}>{c.condition} — {c.ability}{t("ui.dc")} {c.dc}</p>)}{hoverEntity.checks.length > 3 && <small>{t('counts.moreChecks', { count: hoverEntity.checks.length - 3 })}</small>}</div>}</ObjectTooltip>}
-      <p id="map-controls-hint" className="map-hint">{localize(playing ? message("ui.play.geometry.locked.pan.zoom.ctrl.z.ctrl.shift") : regions.markerTool ? message("ui.click.or.tap.marker.position.esc.cancel") : regions.draft ? message("ui.click.vertex.handles.move.double.click.handle.delete.enter") : regions.vertexMode ? message("ui.drag.a.vertex.click.edge.add.double.click.handle") : message("ui.background.pan.wheel.zoom.ctrl.z.ctrl.shift.z"))}</p>
+      {menu && !readOnly && !alignment && <MapContextMenu position={menu} size={size} disabled={menu.markerId ? session.busy() || session.detailsSaving() : !editable} onDuplicate={menu.markerId && regions.markers.some((m) => m.id === menu.markerId) ? () => { session.duplicateMarker(menu.markerId!); setMenu(undefined) } : undefined} onClose={() => setMenu(undefined)} onRegion={() => { session.start(menu.point); setMenu(undefined); focus() }} onMarker={(kind) => { session.startMarker(kind); session.placeMarker(menu.point); setMenu(undefined); focus() }} />}
+      {hoverRegion && hover && !alignment && !movePreview && !interaction.marquee && <ObjectTooltip position={hover} size={size}><strong>{hoverRegion.number}. {localize(hoverRegion.title)}</strong>{hoverRegion.shortDescription.trim() && <p className="tooltip-description">{hoverRegion.shortDescription}</p>}<TooltipTags tags={hoverRegion.tags} /></ObjectTooltip>}
+      {hoverEntity && markerHover && !movePreview && !interaction.marquee && <ObjectTooltip position={markerHover} size={size}><strong>{hoverEntity.name}</strong><p>{localize(markerTypes[hoverEntity.kind].label)} · {statusBadge(hoverEntity.status)} {localize(statusLabel(hoverEntity))}{localize(hoverMarker?.locked ? message("ui.locked.695017") : '')}</p><TooltipTags tags={hoverEntity.tags} />{hoverEntity.kind === 'trap' && <div className="tooltip-checks">{hoverEntity.checks.slice(0, 3).map((c) => <p key={c.id}>{c.condition} — {c.ability}{t("ui.dc")} {c.dc}</p>)}{hoverEntity.checks.length > 3 && <small>{t('counts.moreChecks', { count: hoverEntity.checks.length - 3 })}</small>}</div>}</ObjectTooltip>}
+      {!!selectionSize(regions.selection) && !readOnly && <div className="selection-tools" role="group" aria-label={t('selection.title')}><span role="status">{t('selection.count',{count:selectionSize(regions.selection)})}</span><button type="button" onClick={session.clearSelection}>{t('selection.clear')}</button></div>}
+      <p id="map-controls-hint" className="map-hint">{localize(playing ? message("ui.play.geometry.locked.pan.zoom.ctrl.z.ctrl.shift") : regions.markerTool ? message("ui.click.or.tap.marker.position.esc.cancel") : regions.draft ? message("ui.click.vertex.handles.move.double.click.handle.delete.enter") : regions.vertexMode ? message("ui.drag.a.vertex.click.edge.add.double.click.handle") : message('selection.hint'))}</p>
     </div>
   )
 }

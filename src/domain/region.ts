@@ -1,5 +1,5 @@
 import { message } from '../i18n/message'
-import type { Point } from './viewport'
+import type { Point, Bounds } from './viewport'
 import { documentHasContent, emptyDocument, validateRichDocument } from './richText'
 import type { RichDocument } from './richText'
 
@@ -76,6 +76,21 @@ export function regionHasUserContent(region: Region): boolean {
 }
 
 export const translateVertices = (vertices: Point[], offset: Point): Point[] => vertices.map((p) => ({ x: p.x + offset.x, y: p.y + offset.y }))
+export function polygonIntersectsBounds(vertices: Point[], bounds: Bounds): boolean {
+  const insideBox = (p: Point) => p.x >= bounds.x && p.x <= bounds.x+bounds.width && p.y >= bounds.y && p.y <= bounds.y+bounds.height
+  const corners = [{x:bounds.x,y:bounds.y},{x:bounds.x+bounds.width,y:bounds.y},{x:bounds.x+bounds.width,y:bounds.y+bounds.height},{x:bounds.x,y:bounds.y+bounds.height}]
+  if (vertices.some(insideBox)) return true
+  for (const point of corners) {
+    let inside = false
+    for (let i=0,j=vertices.length-1;i<vertices.length;j=i++) {
+      const a=vertices[j], b=vertices[i]
+      if (onSegment(a,b,point)) return true
+      if ((a.y>point.y)!==(b.y>point.y) && point.x < (b.x-a.x)*(point.y-a.y)/(b.y-a.y)+a.x) inside=!inside
+    }
+    if (inside) return true
+  }
+  return vertices.some((a,i) => corners.some((c,j) => intersects(a,vertices[(i+1)%vertices.length],c,corners[(j+1)%4])))
+}
 export function projectOnEdge(point: Point, a: Point, b: Point): Point {
   const length = (b.x - a.x) ** 2 + (b.y - a.y) ** 2
   const t = length ? Math.max(0, Math.min(1, ((point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y)) / length)) : 0

@@ -8,13 +8,17 @@ Implemented **BM-001…009**: React + TypeScript + Vite, local IndexedDB project
 
 **BM-010 joined the full main snapshot by explicit user authorization with accepted UI-01.** Reliability, offline startup and failure retries remain; Web Locks are temporarily disabled while revision checks stay active. [BM-010 limitations](docs/reliability-offline.md).
 
-**UI-01 manually accepted and normally merged into main.** Header: burger, project with context information button, mode, search, map menu. Projects/import/export/offline updates are in the burger; background actions in the map menu. Creation, undo/redo and camera have separate overlay groups. Whole regions move only while their cards are editing; movement joins Save/Cancel and does not move markers. lucide-react 1.55.0 provides consistent control icons. [Behavior/versions/manual steps](docs/ui-controls.md).
+**UI-01 manually accepted and normally merged into main.** Header: burger, project with context information button, mode, search, map menu. Projects/import/export/offline updates are in the burger; background actions in the map menu. Creation, undo/redo and camera have separate overlay groups. Its former card-only region movement rule is superseded by the current Preparation selection controls below. lucide-react 1.55.0 provides consistent control icons. [Behavior/versions/manual steps](docs/ui-controls.md).
 
 **UI-02 accepted, committed (`1ad2792`), normally merged (`cd91543`).** Shared resizable card width, compact formatting, region summary, shared hover tag badges and Trap checks/game statuses. No new dependencies. UI-02 versions: **IndexedDB 8 / Project 1 / ZIP 7** with lossless text/image migration. [Behavior/compatibility/manual steps](docs/ui-cards-tooltips-traps.md).
 
 **UI-03 and fixes manually accepted.** Adventure context and independent map descriptions use the same visual editor/right panel/Save-Cancel draft. Creation with text/images is atomic; cancel leaves no project. Project-list menus support confirmed deletion with rollback. Current versions: **IndexedDB 9 / Project 2 / ZIP 8**, retaining legacy compatibility. [Behavior/migration](docs/ui-project-map-context.md).
 
 **Localization and the empty-map upload state were manually accepted on October 12, 2026; the user authorized merging and production publication.** English is default without a saved preference; English / Русский in the burger switches immediately and restores after reload. Labels, types/statuses, editor, confirmations/errors and offline UI are localized. User names/context/descriptions/tags/checks/imported text are unchanged. Language stays outside Project/ZIP. For a selected map without a background, Preparation shows Add a map image, supported formats and the central Add map image button; it uses the existing upload path without obscuring object interactions. Play shows a message without upload. [Implementation and manual checks](docs/localization.md).
+
+**The level-tools and object-selection release was manually accepted; the user authorized an ordinary merge and production publication after passing checks.** Implemented on `bm-level-import-marker-duplicate`: **Import levels**, saved-marker **Duplicate**, and **Align map image** in Preparation. Import levels accepts one, several or all maps from a validated project ZIP: all start checked, final names are previewed, shared entities/images retain their links through one batch ID mapping, and one transaction inserts the entire selection. Existing context/maps stay intact; success opens the first selected map. It reuses project ZIP validation and existing drafts/transactions; IndexedDB 9 / Project 2 / ZIP 8 and dependencies remain unchanged. [Behavior, compatibility, checks and manual scenario](docs/level-import-marker-duplicate.md).
+
+The accepted release also includes free region movement and mixed region/marker selection in Preparation. Drag an object to move; drag empty canvas to select; Shift adds/toggles; Space + left drag or middle-button drag pans. One group drag saves atomically as one undo/redo command; dirty cards resolve before a new drag. Clear selection/Escape affect UI state only, and locked markers are excluded. This replaces the previous requirement to edit a region card before moving it. [Controls, limits and manual verification](docs/object-selection.md).
 
 ## Requirements
 
@@ -155,8 +159,8 @@ BM-005 with vertex/palette fixes was manually accepted on 2026-10-09; retain the
 1. Add region and at least three vertices. Outline/preliminary edges follow pointer. Move existing handles during creation; double-click a handle deletes without finishing. Enter, double-click free space (last new vertex) or Done closes with number/title/40% fill. Completing double-click adds its point once.
 2. Start another outline/Escape: removed, never saved/exported. Two vertices, a line or crossing bow-tie fail validation without creating a region; Escape cancels.
 3. Right-click empty map → Add region: menu point becomes first vertex. Create an overlapping region; overlap is legal, the top one selects, lower ones are reachable in free space/navigation.
-4. Creation leaves card closed; click opens one panel. Number/title/color/opacity/whole-outline movement share Save/Cancel. Filled cards open view; Edit enables movement. Palette stays after selection; outside click/Escape closes with draft color retained. One completed draft drag undoes/redoes as a whole. View/closed-card interior drag pans. Wheel/camera controls change only viewport.
-5. Edit vertices: drag handles, click edge to add. Double-click handle/Delete selected/Delete vertex remove, retaining three vertices and valid geometry. Invalid intersection/zero area rejected. Undo/redo includes these changes. Finish vertex editing; whole movement uses card Edit.
+4. Creation leaves card closed; click opens one panel. Number/title/color/opacity share Save/Cancel. Existing contours move directly in Preparation after resolving dirty cards; one drag saves as one undo command. Palette stays after color selection; outside click/Escape closes with draft color retained. Space/middle drag pans; ordinary empty-space drag selects.
+5. Edit vertices: drag handles, click edge to add. Double-click handle/Delete selected/Delete vertex remove, retaining three vertices and valid geometry. Invalid intersection/zero area rejected. Undo/redo includes these changes. Finish vertex editing to return to ordinary movement/selection.
 6. Delete/undo a region; with map focus Ctrl+Z, Ctrl+Shift+Z/Ctrl+Y. Reload restores saved regions with closed panels/cleared selection/history.
 7. Export/import copy and edit its region; original unchanged. BM-004 archives restore maps/images without regions. Background replace/remove preserves contours.
 8. The isolated Web Locks mechanism can make the second tab view-only and reread upon acquisition; UI-01 currently disables it, so both edit with revision-conflict protection. Quota/rollback/draft retention are automated; retry never overwrites another revision.
@@ -172,7 +176,7 @@ BM-006 visual editor/images/shared-card refinements were manually accepted.
 3. Paste browser HTML with heading/emphasis/list/link/table: supported formatting stays, external layout may change. Plain paste remains text. Arbitrary HTML/events/unsafe links never execute.
 4. Paste clipboard screenshot/Ctrl+V or Insert image PNG/JPEG/WebP. Verify proportions/card width/removal. Cancel restores saved fields/removes new images; reenter/Save, wait for confirmation/view. Filled reopening shows Edit/Delete region.
 5. Edit then select another region/close. Check save-and-continue/discard/continue; rapid switches never mix text. Ctrl+Z in text leaves geometry. Empty paragraphs/only number/color changes are not filled content.
-6. Pan/zoom and open/close preserve camera. With card closed, interior drag pans and does not open it. Vertex editing uses the same panel. Retain creation-time handle/double-click/palette regressions.
+6. Pan/zoom and open/close preserve camera. In Preparation an interior drag moves the region without opening its card; Space/middle drag pans. Dirty cards resolve first; vertex editing uses its existing mode. Retain creation-time handle/double-click/palette regressions.
 7. Save/reload: formatting/images/checks/tags restore. ZIP copy changes/image deletion leave original intact. v1/v2 get empty fields; v3 ZIP/v4 DB migrate Markdown.
 8. Write failure retains input/images without Saved. Dialog-triggered save also retains error/continue path. Forced image failure/rollback/revision conflict are automated.
 
@@ -260,7 +264,7 @@ Important-entity library, relationships, statblocks, separate attachments, AI, s
 
 ## Manual check UI-01
 
-Start dev. Check burger/information/map menus/confirmations/creation/search. Interior region drag with closed/view card pans; Edit moves only that outline. Save/Cancel handles geometry/text together. Check dirty transitions, undo/redo, Play, narrow window and second tab. [Full short scenario](docs/ui-controls.md).
+Start dev. Check burger/information/map menus/confirmations/creation/search. Current Preparation controls supersede the original UI-01 movement rule: drag a region with its card closed/view to move it; frame/Shift selects a mixed group; Space + left drag or middle drag pans. Resolve dirty cards before a new drag; movement saves separately as one atomic undo command. Check dirty transitions, undo/redo, Play, narrow window and second tab. [Full short scenario](docs/ui-controls.md).
 
 ## Manual check UI-02
 

@@ -63,8 +63,7 @@ test('polygon drag/vertices stay in world coordinates, one drag is one undo; met
   await page.mouse.click(box.x + 200, box.y + 220)
   await expect(page.getByRole('region', { name: 'Карточка области', exact: true })).toBeVisible()
   await drag(page, { x: box.x + 200, y: box.y + 220 }, { x: box.x + 240, y: box.y + 250 })
-  expect((await stored(page)).regions[0]).toEqual(original)
-  await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
+  await expect.poll(async () => (await stored(page)).regions[0].vertices[0].x).toBeGreaterThan(original.vertices[0].x)
   await expect(page.getByRole('region', { name: 'Карточка области', exact: true }).getByRole('status')).toHaveText('Сохранено на устройстве')
   await page.getByRole('button', { name: 'Закрыть карточку области', exact: true }).click()
   const moved = (await stored(page)).regions[0]

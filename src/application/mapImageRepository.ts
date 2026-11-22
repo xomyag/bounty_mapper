@@ -12,4 +12,5 @@ export interface MapImageRepository {
   load(projectId: string, mapId?: string): Promise<MapImage>
   replace(project: Project, asset: Asset, mapId?: string): Promise<MapImageResult>
   remove(project: Project, mapId?: string): Promise<MapImageResult>
+  align?(project: Project, mapId: string, point: { x: number; y: number }): Promise<MapImageResult>
 }

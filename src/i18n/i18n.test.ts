@@ -42,7 +42,9 @@ describe('Interface localization', () => {
   it('selects English and Russian plural forms for visible counters', () => {
     setLanguage('en', { setItem: () => {} })
     expect([1, 2, 5].map((count) => t('counts.results', { count }))).toEqual(['1 result', '2 results', '5 results'])
+    expect([0, 1, 2, 21].map((count) => t('level.confirm', { count }))).toEqual(['Import 0 levels', 'Import 1 level', 'Import 2 levels', 'Import 21 levels'])
     setLanguage('ru', { setItem: () => {} })
     expect([1, 2, 5, 21].map((count) => t('counts.vertices', { count }))).toEqual(['1 вершина', '2 вершины', '5 вершин', '21 вершина'])
+    expect([0, 1, 2, 5, 21, 22].map((count) => t('level.confirm', { count }))).toEqual(['Импортировать 0 уровней', 'Импортировать 1 уровень', 'Импортировать 2 уровня', 'Импортировать 5 уровней', 'Импортировать 21 уровень', 'Импортировать 22 уровня'])
   })
 })

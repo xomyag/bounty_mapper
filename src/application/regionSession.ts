@@ -1,12 +1,15 @@
 import { message, localize, t } from '../i18n'
 import type { RegionRepository } from './regionRepository'
 import type { ProjectSession } from './projectSession'
-import type { Point } from '../domain/viewport'
-import { emptyRegionContent, labelAnchor, MAX_REGIONS, MAX_REGION_VERTICES, regionHasUserContent, samePoint, translateVertices, validatePolygon, validateRegion } from '../domain/region'
+import type { Point, Bounds } from '../domain/viewport'
+import { emptySelection, selectBounds, validSelection, translateSelection } from '../domain/selection'
+import type { ObjectSelection } from '../domain/selection'
+import { emptyRegionContent, labelAnchor, MAX_REGIONS, MAX_REGION_VERTICES, regionHasUserContent, samePoint, validatePolygon, validateRegion } from '../domain/region'
 import { documentAssetIds } from '../domain/richText'
 import type { Region, RegionContent } from '../domain/region'
 import { createProject } from '../domain/project'
-import type { Asset, Project, Map } from '../domain/project'
+import type { Asset, Project, Map, ImagePlacement } from '../domain/project'
+import { availableCopyName } from '../domain/copy'
 import type { InformationRepository } from './informationRepository'
 import type { RichDocument } from '../domain/richText'
 
@@ -20,7 +23,7 @@ import type { WorkspaceMode } from '../domain/workspaceMode'
 import type { ModeRepository } from './modeRepository'
 
 export interface RegionDetails extends RegionContent { number: string; title: string; color: string; fillOpacity: number; vertices: Point[] }
-interface DetailsDraft { fields: RegionDetails; assets: Asset[]; version: number; phase: 'dirty' | 'saving' | 'error'; error?: string; geometryUndo?: Point[][]; geometryRedo?: Point[][] }
+interface DetailsDraft { fields: RegionDetails; assets: Asset[]; version: number; phase: 'dirty' | 'saving' | 'error'; error?: string }
 export const detailsOf = (region: Region): RegionDetails => ({ shortDescription: region.shortDescription, number: String(region.number), title: region.title, color: region.color, fillOpacity: region.fillOpacity, vertices: structuredClone(region.vertices), gmNotes: structuredClone(region.gmNotes), playerDescription: structuredClone(region.playerDescription), checks: structuredClone(region.checks), tags: [...region.tags] })
 export type MarkerCheckDraft = Omit<Region['checks'][number], 'dc'> & { dc: string }
 export interface MarkerDetails { checks: MarkerCheckDraft[]; name: string; description: Entity['description']; tags: string[]; status: string; color: string; regionIds: string[]; locked: boolean }
@@ -32,6 +35,8 @@ interface StatusAction extends StatusCommand { kind: 'change' | 'undo' | 'redo';
 export interface LoadedMapObjects { regions: Region[]; assets: Asset[]; entities: Entity[]; markers: MarkerPlacement[] }
 
 export interface RegionState {
+  selection: ObjectSelection
+  imageAlignment?: { original: ImagePlacement; x: number; y: number; pan: boolean; phase: 'dirty' | 'saving' | 'error'; error?: string }
   information?: InformationCard
   mode: WorkspaceMode
   modePhase: 'idle' | 'loading' | 'saving' | 'saved' | 'error'
@@ -69,7 +74,7 @@ export interface RegionState {
 interface Command { before: Region[]; after: Region[]; markersBefore: MarkerPlacement[]; markersAfter: MarkerPlacement[]; selectedId?: string }
 
 export class RegionSession {
-  private state: RegionState = { mode: 'prepare', modePhase: 'idle', canUndoStatus: false, canRedoStatus: false, regions: [], entities: [], markers: [], details: {}, assets: {}, cardMode: 'view', imagePending: 0, phase: 'idle', vertexMode: false, canUndo: false, canRedo: false, canRetry: false }
+  private state: RegionState = { selection: emptySelection(), mode: 'prepare', modePhase: 'idle', canUndoStatus: false, canRedoStatus: false, regions: [], entities: [], markers: [], details: {}, assets: {}, cardMode: 'view', imagePending: 0, phase: 'idle', vertexMode: false, canUndo: false, canRedo: false, canRetry: false }
   private informationWork?: Promise<void>
   private detailsWork?: Promise<void>
   private markerWork?: Promise<void>
@@ -86,11 +91,37 @@ export class RegionSession {
   private retryModeWork?: () => void
   private statusUndo: StatusCommand[] = []
   private statusRedo: StatusCommand[] = []
+  private alignImage?: (point: Point) => Promise<void>
+  private markerCopyPoint?: (marker: MarkerPlacement) => Point
+  setImageAligner = (save: (point: Point) => Promise<void>) => { this.alignImage = save }
+  setMarkerCopyPosition = (position: (marker: MarkerPlacement) => Point) => { this.markerCopyPoint = position }
+  isAlignmentDirty = () => { const a = this.state.imageAlignment; return !!a && (a.x !== a.original.x || a.y !== a.original.y || a.phase !== 'dirty') }
+  startImageAlignment = (placement: ImagePlacement) => {
+    if (!this.isPreparation() || placement.mapId !== this.state.mapId || this.state.draft || this.state.markerTool || this.state.vertexMode) return
+    this.afterDetails(async () => { this.update({ information: undefined, cardId: undefined, markerCardId: undefined, selectedId: undefined, selectedMarkerId: undefined, imageAlignment: { original: { ...placement }, x: placement.x, y: placement.y, pan: false, phase: 'dirty' } }) })
+  }
+  moveImageAlignment = (point: Point) => {
+    const a = this.state.imageAlignment
+    if (!a || !this.isPreparation() || this.busy() || this.detailsSaving() || ![point.x, point.y].every((n) => Number.isFinite(n) && Math.abs(n) <= 1e9)) return
+    this.update({ imageAlignment: { ...a, ...point, phase: 'dirty', error: undefined } })
+  }
+  panImageAlignment = (pan: boolean) => { const a = this.state.imageAlignment; if (a && !this.detailsSaving()) this.update({ imageAlignment: { ...a, pan } }) }
+  cancelImageAlignment = () => { if (!this.detailsSaving()) this.update({ imageAlignment: undefined }) }
+  saveImageAlignment = async () => {
+    const a = this.state.imageAlignment
+    if (!a || !this.alignImage || !this.isPreparation() || this.detailsSaving()) return
+    this.update({ imageAlignment: { ...a, phase: 'saving', error: undefined } })
+    try { await this.alignImage({ x: a.x, y: a.y }); this.update({ imageAlignment: undefined }) }
+    catch (error) { this.update({ imageAlignment: { ...a, phase: 'error', error: error instanceof Error ? error.message : message('alignment.invalid') } }) }
+  }
   setTagCatalog = (catalog: string[]) => { this.tagCatalog = catalog }
   constructor(private readonly repository: RegionRepository, private readonly projects: ProjectSession, private readonly modes: ModeRepository, private readonly informationRepository?: InformationRepository) {}
   getSnapshot = () => this.state
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   private update(fields: Partial<RegionState>) {
+    const next = { ...this.state, ...fields }
+    const resetSelection = (Object.hasOwn(fields,'mapId') && fields.mapId !== this.state.mapId) || next.mode !== this.state.mode || next.mode !== 'prepare' || next.imageAlignment || next.draft || next.markerTool || next.markerDraft?.isNew || next.vertexMode
+    fields.selection = resetSelection ? emptySelection() : validSelection(fields.selection ?? this.state.selection, next.regions, next.markers)
     this.state = { ...this.state, ...fields, canUndo: !!this.undoStack.length, canRedo: !!this.redoStack.length, canRetry: !!this.retryWork, canUndoStatus: !!this.statusUndo.length, canRedoStatus: !!this.statusRedo.length }
     this.listeners.forEach((listener) => listener())
   }
@@ -166,26 +197,35 @@ export class RegionSession {
   }
   isMarkerDirty = () => !!this.state.markerDraft && (this.state.markerDraft.isNew || this.state.markerDraft.phase === 'error' || this.state.markerDraft.phase === 'saving' || JSON.stringify(this.state.markerDraft.fields) !== JSON.stringify(markerDetailsOf(this.state.markerDraft.entity, this.state.markerDraft.marker)))
   isInformationDirty = () => { const info = this.state.information; const d = info?.draft; return !!info && (info.kind === 'new-project' || !!d && (d.phase !== 'dirty' || d.name !== info.name || JSON.stringify(d.document) !== JSON.stringify(info.document))) }
-  hasUnsavedDetails = () => this.isInformationDirty() || Object.keys(this.state.details).some(this.isDetailsDirty) || this.isMarkerDirty() || this.state.imagePending > 0
-  detailsSaving = () => !!this.informationWork || !!this.detailsWork || !!this.markerWork || Object.values(this.state.details).some((draft) => draft.phase === 'saving')
-  ready = () => this.isPreparation() && this.loaded && !!this.state.mapId && !this.busy() && !this.hasUnsavedDetails() && !this.projects.getSnapshot().loading && !this.projects.hasUnsavedChanges()
-  canMoveRegion = (id: string) => this.isPreparation() && this.loaded && this.state.cardId === id && this.state.cardMode === 'edit' && !!this.state.details[id] && !this.busy() && !this.detailsSaving() && !this.state.imagePending && !this.state.pendingIntent && !this.state.vertexMode && !this.state.draft && !this.state.markerTool && !this.projects.getSnapshot().loading && !this.projects.hasUnsavedChanges()
-  canUndoDraftGeometry = () => !!this.state.cardId && this.canMoveRegion(this.state.cardId) && !!this.state.details[this.state.cardId]?.geometryUndo?.length
-  canRedoDraftGeometry = () => !!this.state.cardId && this.canMoveRegion(this.state.cardId) && !!this.state.details[this.state.cardId]?.geometryRedo?.length
-  moveRegionDraft = (id: string, offset: Point) => {
-    if (!this.canMoveRegion(id) || ![offset.x, offset.y].every(Number.isFinite) || (!offset.x && !offset.y)) return
-    const draft = this.state.details[id]
-    const vertices = translateVertices(draft.fields.vertices, offset)
-    try { validatePolygon(vertices) } catch (error) { this.fail(error); return }
-    this.update({ details: { ...this.state.details, [id]: { ...draft, fields: { ...draft.fields, vertices }, version: draft.version + 1, phase: 'dirty', error: undefined, geometryUndo: [...(draft.geometryUndo ?? []), structuredClone(draft.fields.vertices)].slice(-100), geometryRedo: [] } } })
+  hasUnsavedDetails = () => this.isAlignmentDirty() || this.isInformationDirty() || Object.keys(this.state.details).some(this.isDetailsDirty) || this.isMarkerDirty() || this.state.imagePending > 0
+  detailsSaving = () => this.state.imageAlignment?.phase === 'saving' || !!this.informationWork || !!this.detailsWork || !!this.markerWork || Object.values(this.state.details).some((draft) => draft.phase === 'saving')
+  ready = () => !this.state.imageAlignment && this.isPreparation() && this.loaded && !!this.state.mapId && !this.busy() && !this.hasUnsavedDetails() && !this.projects.getSnapshot().loading && !this.projects.hasUnsavedChanges()
+  canUseSelection = () => this.isPreparation() && this.loaded && !!this.state.mapId && !this.busy() && !this.detailsSaving() && !this.state.imagePending && !this.state.pendingIntent && !this.state.imageAlignment && !this.state.vertexMode && !this.state.draft && !this.state.markerTool && !this.projects.getSnapshot().loading && !this.projects.hasUnsavedChanges()
+  clearSelection = () => this.update({ selection: emptySelection(), selectedId: undefined, selectedMarkerId: undefined })
+  setSelection = (selection: ObjectSelection) => { if (this.canUseSelection()) this.update({ selection, selectedId: undefined, selectedMarkerId: undefined }) }
+  boxSelect = (bounds: Bounds, additive = false) => {
+    if (this.canUseSelection()) this.setSelection(selectBounds(bounds, this.state.regions, this.state.markers, additive ? this.state.selection : emptySelection()))
   }
-  private stepDraftGeometry(redo: boolean) {
-    if (redo ? !this.canRedoDraftGeometry() : !this.canUndoDraftGeometry()) return false
-    const id = this.state.cardId!; const draft = this.state.details[id]
-    const from = [...(redo ? draft.geometryRedo! : draft.geometryUndo!)]; const vertices = from.pop()!
-    const to = [...(redo ? draft.geometryUndo ?? [] : draft.geometryRedo ?? []), structuredClone(draft.fields.vertices)]
-    this.update({ details: { ...this.state.details, [id]: { ...draft, fields: { ...draft.fields, vertices }, version: draft.version + 1, phase: 'dirty', error: undefined, geometryUndo: redo ? to : from, geometryRedo: redo ? from : to } } })
+  toggleSelection = (kind: 'region' | 'marker', id: string) => {
+    const key = kind === 'region' ? 'regionIds' : 'markerIds'
+    const list = this.state.selection[key]
+    this.setSelection({ ...this.state.selection, [key]: list.includes(id) ? list.filter((value) => value !== id) : [...list,id] })
+  }
+  prepareObjectMove = () => {
+    if (!this.canUseSelection()) return false
+    if (this.hasUnsavedDetails()) { this.afterDetails(async () => {}); return false }
+    // A clean edit form must not retain geometry that could overwrite this move.
+    this.update({ details: {}, markerDraft: undefined, cardMode: 'view', information: this.state.information ? { ...this.state.information, draft: undefined } : undefined })
     return true
+  }
+  moveObjects = async (selection: ObjectSelection, delta: Point) => {
+    if (!this.canUseSelection() || !this.ready() || (!delta.x && !delta.y)) return
+    this.retryWork=undefined
+    try {
+      const next = translateSelection(this.state.regions, this.state.markers, selection, delta)
+      if (!next.regions.some((r,i) => r !== this.state.regions[i]) && !next.markers.some((m,i) => m !== this.state.markers[i])) return
+      await this.commit(next.regions, this.state.selectedId, 'edit', false, next.markers)
+    } catch (error) { this.fail(error) }
   }
   load = async (mapId?: string) => {
     const generation = ++this.generation
@@ -205,6 +245,7 @@ export class RegionSession {
   retry = async () => { if (!this.busy()) await this.retryWork?.() }
   select = (id?: string) => { if (!this.busy() && !this.state.draft && !this.hasUnsavedDetails()) this.update({ selectedId: id ?? this.state.cardId, selectedMarkerId: id ? undefined : this.state.markerCardId, selectedVertex: undefined }) }
   openCard = (id: string, center = false) => {
+    if (!this.busy() && id === this.state.cardId && !this.state.draft && !this.state.vertexMode && !this.state.markerTool) { this.update({selectedId:id,selectedMarkerId:undefined}); return }
     if (!this.busy() && !this.state.draft && !this.state.markerTool && !this.state.vertexMode && this.state.regions.some((r) => r.id === id) && id !== this.state.cardId) this.requestCardIntent({ kind: 'open', id, ...(center ? { center: true } : {}) })
   }
   closeCard = () => this.requestCardIntent({ kind: 'close' })
@@ -224,6 +265,7 @@ export class RegionSession {
     else void this.applyCardIntent(intent)
   }
   private async applyCardIntent(intent: CardIntent) {
+    if (this.state.imageAlignment) this.update({ imageAlignment: undefined })
     if (intent.kind === 'information' || intent.kind === 'create-project') {
       if (!this.informationRepository) return
       this.update({ transitioning: true, pendingIntent: undefined, error: undefined })
@@ -261,14 +303,14 @@ export class RegionSession {
     } else if (intent.kind === 'marker') {
       const marker = this.state.markers.find((m) => m.id === intent.id)!
       this.update({ cardId: undefined, selectedId: undefined, selectedVertex: undefined, vertexMode: false, markerCardId: intent.id, selectedMarkerId: intent.id, cardMode: 'view', ...(intent.center ? { viewFocus: { point: { x: marker.x, y: marker.y } } } : {}) })
-    } else if (intent.kind === 'vertices') this.update({ cardMode: 'view', vertexMode: true, selectedVertex: undefined })
+    } else if (intent.kind === 'vertices') this.update({ cardMode: 'view', vertexMode: true, selectedId: this.state.cardId ?? this.state.selectedId, selectedVertex: undefined })
     else this.update({ cardId: undefined, cardMode: 'view', selectedId: undefined, vertexMode: false, selectedVertex: undefined })
   }
   resolveCardIntent = async (choice: 'save' | 'discard' | 'stay') => {
     const intent = this.state.pendingIntent
     if (!intent || this.busy() || this.detailsSaving()) return
     if (choice === 'stay') { if (intent.kind === 'action') intent.onStay?.(); this.update({ pendingIntent: undefined }); return }
-    if (choice === 'save') { if (this.state.information?.draft) await this.saveInformation(); else if (this.state.markerDraft) await this.saveMarkerDetails(); else await this.saveDetails(); if (this.hasUnsavedDetails()) return }
+    if (choice === 'save') { if (this.state.imageAlignment) await this.saveImageAlignment(); else if (this.state.information?.draft) await this.saveInformation(); else if (this.state.markerDraft) await this.saveMarkerDetails(); else await this.saveDetails(); if (this.hasUnsavedDetails()) return }
     if (this.state.information?.draft) this.update({ information: this.state.information.kind === 'new-project' ? undefined : { ...this.state.information, draft: undefined }, cardMode: 'view' })
     await this.applyCardIntent(intent)
   }
@@ -324,9 +366,9 @@ export class RegionSession {
       await this.commit(next, region.id)
     } catch (error) { this.fail(error) }
   }
-  remove = async () => {
-    if (!this.ready() || this.state.draft || !this.state.selectedId) return
-    await this.commit(this.state.regions.filter((r) => r.id !== this.state.selectedId), undefined)
+  remove = async (id = this.state.selectedId) => {
+    if (!this.ready() || this.state.draft || !id) return
+    await this.commit(this.state.regions.filter((r) => r.id !== id), undefined)
   }
   removeVertex = async (index = this.state.selectedVertex) => {
     const region = this.state.regions.find((r) => r.id === this.state.selectedId)
@@ -335,12 +377,10 @@ export class RegionSession {
     await this.change({ ...region, vertices: region.vertices.filter((_, i) => i !== index) })
   }
   undo = async () => {
-    if (this.stepDraftGeometry(false)) return
     const command = this.undoStack.at(-1)
     if (command && this.ready() && !this.state.draft) await this.commit(command.before, command.selectedId, 'undo', false, command.markersBefore)
   }
   redo = async () => {
-    if (this.stepDraftGeometry(true)) return
     const command = this.redoStack.at(-1)
     if (command && this.ready() && !this.state.draft) await this.commit(command.after, command.selectedId, 'redo', false, command.markersAfter)
   }
@@ -464,6 +504,21 @@ export class RegionSession {
     this.applyCardIntent({ kind: 'close' })
     this.dismiss(); this.update({ markerTool: kind })
   }
+  duplicateMarker = (id: string) => {
+    if (!this.isPreparation() || !this.loaded || this.busy() || this.state.imageAlignment || this.state.draft || this.state.markerTool || this.state.vertexMode || !this.state.markers.some((m) => m.id === id)) return
+    this.afterDetails(async () => {
+      const source = this.state.markers.find((m) => m.id === id)
+      const original = this.state.entities.find((e) => e.id === source?.entityId)
+      if (!source || !original || !this.isPreparation()) return
+      if (this.state.markers.length >= MAX_MARKERS || this.state.entities.length >= MAX_ENTITIES) throw new Error(message('ui.the.project.marker.or.entity.limit.was.reached'))
+      const names = this.state.markers.map((m) => this.state.entities.find((e) => e.id === m.entityId)!.name)
+      const entity: Entity = { ...structuredClone(original), id: crypto.randomUUID(), name: availableCopyName(original.name, names, true), checks: original.checks.map((c) => ({ ...c, id: crypto.randomUUID() })) }
+      const point = this.markerCopyPoint?.(source) ?? { x: source.x + 36, y: source.y + 36 }
+      const marker: MarkerPlacement = { ...structuredClone(source), ...point, id: crypto.randomUUID(), entityId: entity.id, locked: false, order: Math.max(-1, ...this.state.markers.map((m) => m.order)) + 1 }
+      validateEntity(entity); validateMarker(marker)
+      this.update({ information: undefined, markerCardId: marker.id, selectedMarkerId: marker.id, cardId: undefined, selectedId: undefined, vertexMode: false, cardMode: 'edit', markerDraft: { entity, marker, fields: markerDetailsOf(entity, marker), assets: [], isNew: true, phase: 'dirty', version: 0 } })
+    })
+  }
   cancelMarkerTool = () => this.update({ markerTool: undefined })
   placeMarker = (point: Point) => {
     if (!this.ready() || !this.state.markerTool) return
@@ -486,6 +541,7 @@ export class RegionSession {
     } catch (error) { this.update({ markerDraft: { ...draft, phase: 'error', error: error instanceof Error ? error.message : message("ui.could.not.move.the.marker.draft") } }) }
   }
   openMarkerCard = (id: string, center = false) => {
+    if (!this.busy() && id === this.state.markerCardId && !this.state.draft && !this.state.vertexMode && !this.state.markerTool) { this.update({selectedMarkerId:id,selectedId:undefined}); return }
     if (!this.busy() && !this.state.draft && !this.state.markerTool && !this.state.vertexMode && id !== this.state.markerCardId && this.state.markers.some((m) => m.id === id)) this.requestCardIntent({ kind: 'marker', id, ...(center ? { center: true } : {}) })
   }
   beginMarkerEdit = () => {
