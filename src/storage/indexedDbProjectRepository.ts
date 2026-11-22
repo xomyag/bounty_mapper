@@ -6,6 +6,8 @@ import type { Asset, Map, Project } from '../domain/project'
 
 import { writeDocumentAssets } from './documentAssets'
 import { IndexedDb, requestResult, DATABASE_NAME } from './indexedDb'
+import { appendProject, projectList, workspaceKey } from './workspaceSettings'
+import { isCompleteOrder } from '../domain/listOrder'
 
 export function readProject(value: unknown): Project {
   validateProject(value as Project)
@@ -20,9 +22,20 @@ export class IndexedDbProjectRepository implements ProjectRepository {
   }
 
   list(): Promise<Project[]> {
-    return this.db.transaction(['projects'], 'readonly', async (tx) => {
-      const values: unknown[] = await requestResult(tx.objectStore('projects').getAll())
-      return values.map(readProject).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    return this.db.transaction(['projects','settings'], 'readwrite', async (tx) => {
+      const projects = (await projectList(tx)).map(readProject)
+      const ids = projects.map(project => project.id)
+      const saved: unknown = await requestResult(tx.objectStore('settings').get('projectOrder'))
+      if (ids.length && JSON.stringify(saved) !== JSON.stringify(ids)) await requestResult(tx.objectStore('settings').put(ids, 'projectOrder'))
+      return projects
+    })
+  }
+  reorder(ids: string[]): Promise<Project[]> {
+    return this.db.transaction(['projects','settings'], 'readwrite', async tx => {
+      const projects = await projectList(tx)
+      if (!isCompleteOrder(ids,projects.map(project => project.id))) throw new Error(message('order.listChanged'))
+      await requestResult(tx.objectStore('settings').put(ids,'projectOrder'))
+      return ids.map(id => projects.find(project => project.id === id)!)
     })
   }
 
@@ -55,6 +68,7 @@ export class IndexedDbProjectRepository implements ProjectRepository {
       const saved = { ...project, name: project.name.trim(), revision: project.revision + 1, updatedAt: new Date().toISOString() }
       validateProject(saved)
       await writeDocumentAssets(tx, project.id, assets, [saved.context])
+      if (!existing) await appendProject(tx, project.id)
       await requestResult(store.put(saved))
       await requestResult(tx.objectStore('settings').put(saved.id, 'activeProjectId'))
       return saved
@@ -77,7 +91,9 @@ export class IndexedDbProjectRepository implements ProjectRepository {
         for (const key of keys) await requestResult(tx.objectStore(store).delete(key))
       }
       const settings = tx.objectStore('settings')
-      for (const key of [`workspaceMode:${project.id}`, `tagHistory:${project.id}`]) await requestResult(settings.delete(key))
+      for (const key of [`workspaceMode:${project.id}`, `tagHistory:${project.id}`, workspaceKey(project.id)]) await requestResult(settings.delete(key))
+      const order = (await projectList(tx)).filter(item => item.id !== project.id).map(item => item.id)
+      await requestResult(settings.put(order,'projectOrder'))
       if (await requestResult(settings.get('activeProjectId')) === project.id) await requestResult(settings.delete('activeProjectId'))
       await requestResult(tx.objectStore('projects').delete(project.id))
     })

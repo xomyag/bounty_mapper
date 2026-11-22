@@ -108,6 +108,9 @@ async function seed(page: Page) {
   }, { regions, entities, markers, projectId })
   await page.reload(); await expect(page.getByRole('button', { name: 'Добавить маркер', exact: true })).toBeEnabled()
   await expect(nav(page)).toBeHidden(); await expect(page.locator('.region-card')).toHaveCount(0)
+  // Reload intentionally restores the last level (b). These scenarios start
+  // from the tower, so select it explicitly instead of relying on first-map fit.
+  await switchMap(page,a.id)
   await page.getByRole('button', { name: 'Навигация и поиск', exact: true }).click()
   return { a, b, regions, markers, entities }
 }

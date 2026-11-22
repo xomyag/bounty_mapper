@@ -6,4 +6,5 @@ export interface NavigationRepository {
   createMap(project: Project, name: string): Promise<{ project: Project; map: Map }>
   renameMap(project: Project, mapId: string, name: string): Promise<Project>
   deleteMap(project: Project, mapId: string): Promise<Project>
+  reorderMaps?(project: Project, ids: string[]): Promise<Project>
 }

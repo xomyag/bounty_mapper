@@ -1,15 +1,17 @@
 import { localize, message, t } from '../../i18n'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { Map } from '../../domain/project'
-import { Plus, Check, Pencil, Trash2, ImagePlus, ChevronDown, Map as MapIcon } from 'lucide-react'
+import { Plus, Check, Pencil, Trash2, ImagePlus, ChevronDown, Map as MapIcon, GripVertical } from 'lucide-react'
+import { useListReorder } from '../controls/useListReorder'
 
 export type MapAction = { kind: 'create' } | { kind: 'rename' | 'delete'; map: Map }
 
-export function MapMenu({ maps, currentMapId, disabled, writesDisabled, playing = false, onNavigate, onAction, imageDisabled, hasImage, onUpload, onRemoveImage, onAlignImage, alignDisabled }: { maps: Map[]; currentMapId?: string; disabled: boolean; writesDisabled: boolean; playing?: boolean; onNavigate: (mapId: string) => void; onAction: (action: MapAction) => void; imageDisabled: boolean; hasImage: boolean; onUpload: () => void; onRemoveImage: () => void; onAlignImage?: () => void; alignDisabled?: boolean }) {
+export function MapMenu({ maps, currentMapId, disabled, writesDisabled, playing = false, onNavigate, onAction, imageDisabled, hasImage, onUpload, onRemoveImage, onAlignImage, alignDisabled, onReorder, orderDisabled, orderSaving, orderError }: { maps: Map[]; currentMapId?: string; disabled: boolean; writesDisabled: boolean; playing?: boolean; onNavigate: (mapId: string) => void; onAction: (action: MapAction) => void; imageDisabled: boolean; hasImage: boolean; onUpload: () => void; onRemoveImage: () => void; onAlignImage?: () => void; alignDisabled?: boolean; onReorder?: (ids:string[])=>void; orderDisabled?:boolean; orderSaving?:boolean; orderError?:string }) {
   const id = useId()
   const popover = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState(false)
+  const sorting = useListReorder(maps.map(map=>map.id),!!orderDisabled||playing||!onReorder,ids=>onReorder?.(ids))
   const close = () => popover.current?.hidePopover()
   const action = (value: MapAction) => { close(); onAction(value) }
   return <div className="map-menu">
@@ -23,10 +25,14 @@ export function MapMenu({ maps, currentMapId, disabled, writesDisabled, playing 
       if (event.key === 'Escape') { event.preventDefault(); close(); trigger.current?.focus() }
     }}>
       <button type="button" role="menuitem" disabled={writesDisabled} onClick={() => action({ kind: 'create' })}><Plus size={18} aria-hidden="true" />{t('ui.new.map')}</button>
-      <ul role="none">{maps.map((map) => <li key={map.id} role="none" className="map-menu-row" data-map-id={map.id}>
+      {orderSaving && <p role="status">{t('order.saving')}</p>}
+      {orderError && <p role="alert" className="form-error">{localize(orderError)}</p>}
+      <ul role="none">{maps.map((map,index) => <li key={map.id} role="none" className="map-menu-row" data-map-id={map.id} {...sorting.row(map.id)}>
+        <button type="button" className="list-drag-handle" aria-label={t('order.drag',{name:map.name})} title={t('order.drag',{name:map.name})} {...sorting.handle(map.id)}><GripVertical size={18} aria-hidden="true" /></button>
         <button type="button" role="menuitem" aria-current={map.id === currentMapId ? 'page' : undefined} aria-label={t("ui.go.to.map.value", { p0: map.name })} disabled={disabled} onClick={() => { close(); onNavigate(map.id) }}>{map.id === currentMapId ? <Check size={18} aria-hidden="true" /> : <MapIcon size={18} aria-hidden="true" />}{map.name}</button>
         <button type="button" role="menuitem" aria-label={t("ui.rename.map.value", { p0: map.name })} disabled={writesDisabled} onClick={() => action({ kind: 'rename', map })}><Pencil size={16} aria-hidden="true" />{t("ui.rename")}</button>
         <button type="button" role="menuitem" aria-label={t("ui.delete.map.value", { p0: map.name })} disabled={writesDisabled} onClick={() => action({ kind: 'delete', map })}><Trash2 size={16} aria-hidden="true" />{t("ui.delete")}</button>
+        <details className="project-row-menu map-order-menu"><summary aria-label={t('order.actions',{name:map.name})}>⋯</summary><button type="button" disabled={orderDisabled||playing||!onReorder||index===0} onClick={()=>sorting.step(map.id,-1)}>{t('order.up')}</button><button type="button" disabled={orderDisabled||playing||!onReorder||index===maps.length-1} onClick={()=>sorting.step(map.id,1)}>{t('order.down')}</button></details>
       </li>)}</ul>
       <section className="map-image-actions" aria-label={t("ui.current.map.image")}><p>{t("ui.image.3103e4")} {localize(maps.find((map) => map.id === currentMapId)?.name ?? message("ui.first.map"))}</p>
         <button type="button" role="menuitem" disabled={imageDisabled} onClick={() => { close(); onUpload() }}><ImagePlus size={18} aria-hidden="true" />{localize(hasImage ? message("ui.replace.image") : message("ui.upload.map"))}</button>

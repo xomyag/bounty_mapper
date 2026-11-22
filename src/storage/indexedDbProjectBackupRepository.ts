@@ -8,6 +8,7 @@ import { availableCopyNames } from '../domain/copy'
 import { documentFromSnapshot } from './backup/document'
 import { RevisionConflictError } from '../application/projectRepository'
 import { message } from '../i18n/message'
+import { appendProject } from './workspaceSettings'
 
 const stores = ['projects', 'maps', 'assets', 'imagePlacements', 'regions', 'entities', 'markerPlacements']
 
@@ -52,6 +53,7 @@ export class IndexedDbProjectBackupRepository implements ProjectBackupRepository
   // Only a fully validated snapshot with fresh IDs reaches this boundary.
   insertCopy(snapshot: ProjectSnapshot): Promise<Project> {
     return this.db.transaction([...stores, 'settings'], 'readwrite', async (tx) => {
+      await appendProject(tx, snapshot.project.id)
       await requestResult(tx.objectStore('projects').add(snapshot.project))
       for (const map of snapshot.maps) await requestResult(tx.objectStore('maps').add(map))
       for (const asset of snapshot.assets) await requestResult(tx.objectStore('assets').add(asset))

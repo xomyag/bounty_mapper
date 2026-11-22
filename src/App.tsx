@@ -35,6 +35,8 @@ import type { NavigationRepository } from './application/navigationRepository'
 import { NavigationSession } from './application/navigationSession'
 import { NavigationPanel } from './features/navigation/NavigationPanel'
 import { ViewportMemory } from './application/viewportMemory'
+import type { WorkspaceRepository } from './application/workspaceRepository'
+import { IndexedDbWorkspaceRepository } from './storage/indexedDbWorkspaceRepository'
 import { prepareBitmap } from './features/map/bitmapCache'
 import { MapMenu, MapActionDialog } from './features/navigation/MapMenu'
 import type { MapAction } from './features/navigation/MapMenu'
@@ -61,12 +63,13 @@ const defaultBackupRepository = new IndexedDbProjectBackupRepository()
 const defaultRegionRepository = new IndexedDbRegionRepository()
 const defaultNavigationRepository = new IndexedDbNavigationRepository()
 const defaultModeRepository = new IndexedDbModeRepository()
+const defaultWorkspaceRepository = new IndexedDbWorkspaceRepository()
 const statusLabels = {
   idle: message("ui.no.project.open"), dirty: message("ui.unsaved.changes"), saving: message("ui.saving"),
   saved: message("ui.saved.on.this.device"), error: message("ui.save.failed"),
 }
 
-export function App({ repository = defaultRepository, mapRepository = defaultMapRepository, backupRepository = defaultBackupRepository, regionRepository = defaultRegionRepository, navigationRepository = defaultNavigationRepository, modeRepository = defaultModeRepository, informationRepository = defaultInformationRepository }: { repository?: ProjectRepository; mapRepository?: MapImageRepository; backupRepository?: ProjectBackupRepository; regionRepository?: RegionRepository; navigationRepository?: NavigationRepository; modeRepository?: ModeRepository; informationRepository?: InformationRepository }) {
+export function App({ repository = defaultRepository, mapRepository = defaultMapRepository, backupRepository = defaultBackupRepository, regionRepository = defaultRegionRepository, navigationRepository = defaultNavigationRepository, modeRepository = defaultModeRepository, informationRepository = defaultInformationRepository, workspaceRepository = mapRepository === defaultMapRepository ? defaultWorkspaceRepository : undefined }: { repository?: ProjectRepository; mapRepository?: MapImageRepository; backupRepository?: ProjectBackupRepository; regionRepository?: RegionRepository; navigationRepository?: NavigationRepository; modeRepository?: ModeRepository; informationRepository?: InformationRepository; workspaceRepository?: WorkspaceRepository }) {
   useLanguage()
   const [cardLayout] = useState(() => new CardLayoutSession(new IndexedDbCardWidthRepository()))
   const layout = useSyncExternalStore(cardLayout.subscribe, cardLayout.getSnapshot)
@@ -88,7 +91,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
     const target = deleteProject
     const run = async () => {
       deletingRef.current = true; setDeleting(true); setDeleteError(undefined)
-      try { await session.remove(target); setDeleteProject(undefined); setProjectMessage(message("ui.project.value.deleted", { p0: target.name })); setDialog('projects') }
+      try { await session.remove(target); viewports.forgetProject(target.id); setDeleteProject(undefined); setProjectMessage(message("ui.project.value.deleted", { p0: target.name })); setDialog('projects') }
       catch (error) { setDeleteError(error instanceof Error ? error.message : message("ui.could.not.delete.the.project")) }
       finally { deletingRef.current = false; setDeleting(false) }
     }
@@ -97,13 +100,14 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   }
   const regionState = useSyncExternalStore(regions.subscribe, regions.getSnapshot)
   const preparation = regions.isPreparation()
-  const [maps] = useState(() => new MapImageSession(mapRepository, session, prepareImage, regions.isPreparation))
+  const [viewports] = useState(() => new ViewportMemory(workspaceRepository))
+  const cameraState = useSyncExternalStore(viewports.subscribe,viewports.getSnapshot)
+  const [maps] = useState(() => new MapImageSession(mapRepository, session, prepareImage, regions.isPreparation, { workspace: workspaceRepository, viewports, prepareOpen: async image => { if (image.background) await prepareBitmap(image.background.asset) } }))
   const mapState = useSyncExternalStore(maps.subscribe, maps.getSnapshot)
   const [navigation] = useState(() => new NavigationSession(navigationRepository, session, regions.isPreparation))
   const navigationState = useSyncExternalStore(navigation.subscribe, navigation.getSnapshot)
   const [navigationProject, setNavigationProject] = useState<string>()
   const [mapAction, setMapAction] = useState<MapAction>()
-  const [viewports] = useState(() => new ViewportMemory())
   const regionBusy = regions.busy()
   const unsavedDetails = regions.hasUnsavedDetails()
   const detailsSaving = regions.detailsSaving()
@@ -160,6 +164,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
       const prepared = deletingCurrent && next ? await Promise.all([maps.readSelection(next.id), regions.readMap(next.id)]) : undefined
       if (prepared?.[0].background) await prepareBitmap(prepared[0].background.asset)
       if (!await navigation.deleteMap(mapAction.map.id)) throw new Error(navigation.getSnapshot().error)
+      viewports.forgetMap(mapAction.map.id)
       if (deletingCurrent) {
         if (next && prepared) { regions.adoptMap({ mapId: next.id }, { ...prepared[1], map: prepared[0].map }); maps.adoptSelection(prepared[0]) }
         else { void regions.load(undefined); maps.adoptSelection({}) }
@@ -211,6 +216,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
   useEffect(() => { void regions.loadMode(projectId) }, [regions, projectId, openVersion])
   useEffect(() => { void maps.load(projectId) }, [maps, projectId, openVersion])
   useEffect(() => { const current = regions.getSnapshot(); if (current.mapId !== mapId || current.information && current.information.projectId !== projectId) void regions.load(mapId) }, [regions, mapId, projectId])
+  useEffect(() => { if (mapId && regionState.mapId === mapId && regions.hasLoaded()) void maps.confirmSelection() }, [maps,regions,mapId,projectId,regionState.mapId,regionState.phase])
   useEffect(() => { void navigation.load(projectId) }, [navigation, projectId, state.project?.revision, openVersion])
   useEffect(() => { regions.setTagCatalog(tags) }, [regions, tags])
   useEffect(() => regions.subscribe(() => { if (regions.getSnapshot().mode === 'play') setMarkerPicker(undefined) }), [regions])
@@ -260,7 +266,7 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
         {projectId && <div className="mode-switch" role="group" aria-label={t("ui.workspace.mode")}><button type="button" aria-pressed={preparation} disabled={state.readOnly || state.loading || mapBusy || backupBusy || detailsSaving || !!regionState.imagePending || session.hasUnsavedChanges()} onClick={() => regions.requestMode('prepare')}>{t("ui.preparation")}</button><button type="button" aria-pressed={!preparation} disabled={state.readOnly || state.loading || mapBusy || backupBusy || detailsSaving || !!regionState.imagePending || session.hasUnsavedChanges()} onClick={() => regions.requestMode('play')}>{t("ui.play")}</button></div>}
         <IconButton icon={Search} label={t("ui.navigation.and.search")} disabled={!projectId || state.loading || backupBusy} aria-expanded={!!projectId && navigationProject === navigationKey} aria-controls="project-navigation" onClick={() => { setNavigationProject((current) => current === navigationKey ? undefined : navigationKey); if (navigationProject !== navigationKey) requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[data-navigation-search]')?.focus()) }} />
         {mapId && <IconButton icon={Info} label={t("ui.map.description")} disabled={state.loading || mapBusy || backupBusy || creatingProject} onClick={() => regions.openInformation(mapId)} />}
-        {projectId && <MapMenu key={navigationKey} maps={navigationState.data.maps} currentMapId={mapId} disabled={navigationDisabled || navigationState.loading} writesDisabled={mapWritesDisabled || !!regionState.imageAlignment} playing={!preparation} onNavigate={(id) => regions.navigate({ mapId: id })} onAction={setMapAction} imageDisabled={!canWriteImage || backupBusy} hasImage={!!mapState.image.background} onAlignImage={() => { const p = maps.getSnapshot().image.background?.placement; if (p) regions.startImageAlignment(p) }} alignDisabled={!preparation || mapBusy || backupBusy || detailsSaving || !!regionState.imageAlignment} onUpload={() => fileInput.current?.click()} onRemoveImage={() => { const name = navigationState.data.maps.find((map) => map.id === mapId)?.name ?? ''; if (window.confirm(t("ui.delete.the.background.image.of.map.value.the.map", { p0: name }))) void maps.remove() }} />}
+        {projectId && <MapMenu key={navigationKey} maps={navigationState.data.maps} currentMapId={mapId} disabled={navigationDisabled || navigationState.loading} writesDisabled={mapWritesDisabled || !!regionState.imageAlignment} playing={!preparation} onReorder={navigation.reorderMaps} orderDisabled={!navigationRepository.reorderMaps || !preparation || navigationDisabled || detailsSaving || navigationState.loading || navigationState.orderSaving || !!regionState.imageAlignment} orderSaving={navigationState.orderSaving} onNavigate={(id) => regions.navigate({ mapId: id })} onAction={setMapAction} imageDisabled={!canWriteImage || backupBusy} hasImage={!!mapState.image.background} onAlignImage={() => { const p = maps.getSnapshot().image.background?.placement; if (p) regions.startImageAlignment(p) }} alignDisabled={!preparation || mapBusy || backupBusy || detailsSaving || !!regionState.imageAlignment} onUpload={() => fileInput.current?.click()} onRemoveImage={() => { const name = navigationState.data.maps.find((map) => map.id === mapId)?.name ?? ''; if (window.confirm(t("ui.delete.the.background.image.of.map.value.the.map", { p0: name }))) void maps.remove() }} />}
       </header>
       <input ref={fileInput} className="file-input" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" aria-label={t("ui.map.image.file")} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void maps.upload(file) }} />
       <input ref={archiveInput} className="file-input" type="file" accept=".zip,application/zip" aria-label={t("ui.project.archive")} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void backups.import(file) }} />
@@ -275,6 +281,9 @@ export function App({ repository = defaultRepository, mapRepository = defaultMap
         </div>
       )}
       {mapState.error && <div className="error-banner" role="alert"><span>{localize(mapState.error)}  {t("ui.the.previously.saved.image.has.not.changed")}</span><button type="button" disabled={mapBusy || state.loading} onClick={() => { void maps.retry() }}>{t("ui.retry.map.upload")}</button></div>}
+      {mapState.selectionError && <div className="error-banner" role="alert"><span>{localize(mapState.selectionError)}</span><button type="button" onClick={()=>{void maps.retrySelection()}}>{t('ui.retry')}</button></div>}
+      {cameraState.error && <div className="error-banner" role="alert"><span>{localize(cameraState.error)}</span><button type="button" onClick={()=>{void viewports.flush()}}>{t('ui.retry')}</button></div>}
+      {navigationState.orderError && <div className="error-banner" role="alert">{localize(navigationState.orderError)}</div>}
       {backupState.message && <div className={backupState.phase === 'error' ? 'error-banner' : 'backup-message'}><span role={backupState.phase === 'error' ? 'alert' : 'status'}>{localize(backupState.message)}</span><button type="button" onClick={backups.dismiss} aria-label={t("ui.dismiss.archive.message")}>{t("ui.close")}</button></div>}
       {!!levelState.importedCount && levelState.projectId === projectId && <div className="backup-message"><span role="status">{t('level.success', { count: levelState.importedCount })}</span><button type="button" onClick={levels.cancel} aria-label={t('level.dismiss')}>{t('ui.close')}</button></div>}
       {regionState.error && <div className="error-banner" role="alert"><span>{localize(regionState.error)}</span>{regionState.canRetry && <button type="button" disabled={mapBusy || state.loading || backupBusy} onClick={() => { void regions.retry() }}>{localize(regions.hasLoaded() ? message("ui.retry.saving.map.objects") : message("ui.retry.reading.map.objects"))}</button>}<button type="button" disabled={regionBusy || !regions.hasLoaded()} onClick={regions.dismiss}>{t("ui.dismiss.map.error")}</button></div>}

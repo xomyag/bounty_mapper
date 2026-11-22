@@ -12,6 +12,9 @@ import { IndexedDb, requestResult, DATABASE_NAME } from './indexedDb'
 import { readProject } from './indexedDbProjectRepository'
 import { RevisionConflictError } from '../application/projectRepository'
 import { documentAssetIds } from '../domain/richText'
+import { isCompleteOrder } from '../domain/listOrder'
+import { workspaceKey } from './workspaceSettings'
+import { readWorkspace } from './indexedDbWorkspaceRepository'
 
 export class IndexedDbNavigationRepository implements NavigationRepository {
   private readonly db: IndexedDb
@@ -51,8 +54,20 @@ export class IndexedDbNavigationRepository implements NavigationRepository {
   }
   createMap(project: Project, name: string) { return this.mutate(project, name) }
   async renameMap(project: Project, mapId: string, name: string) { return (await this.mutate(project, name, mapId)).project }
+  reorderMaps(project: Project, ids: string[]): Promise<Project> {
+    return this.db.transaction(['projects','maps'], 'readwrite', async tx => {
+      const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
+      if (stored.revision !== project.revision) throw new RevisionConflictError()
+      const maps = await requestResult(tx.objectStore('maps').index('projectId').getAll(project.id)) as Map[]
+      if (!isCompleteOrder(ids,maps.map(map => map.id))) throw new Error(message('order.listChanged'))
+      for (const [order,id] of ids.entries()) await requestResult(tx.objectStore('maps').put({ ...maps.find(map => map.id === id)!, order }))
+      const next = { ...stored, revision: stored.revision+1, updatedAt: new Date().toISOString() }
+      await requestResult(tx.objectStore('projects').put(next))
+      return next
+    })
+  }
   deleteMap(project: Project, mapId: string): Promise<Project> {
-    return this.db.transaction(['projects', 'maps', 'regions', 'entities', 'markerPlacements', 'imagePlacements', 'assets'], 'readwrite', async (tx) => {
+    return this.db.transaction(['projects', 'maps', 'regions', 'entities', 'markerPlacements', 'imagePlacements', 'assets','settings'], 'readwrite', async (tx) => {
       const stored = readProject(await requestResult(tx.objectStore('projects').get(project.id)))
       if (stored.revision !== project.revision) throw new RevisionConflictError()
       const maps = await requestResult(tx.objectStore('maps').index('projectId').getAll(project.id)) as Map[]
@@ -73,6 +88,11 @@ export class IndexedDbNavigationRepository implements NavigationRepository {
       }
       // Entities survive placement/map deletion, including their rich-text assets.
       await requestResult(tx.objectStore('maps').delete(mapId))
+      const settings = tx.objectStore('settings')
+      const workspace = readWorkspace(await requestResult(settings.get(workspaceKey(project.id))))
+      delete workspace.cameras[mapId]
+      if (workspace.mapId === mapId) workspace.mapId = undefined
+      await requestResult(settings.put(workspace,workspaceKey(project.id)))
       const next = { ...stored, revision: stored.revision + 1, updatedAt: new Date().toISOString() }
       await requestResult(tx.objectStore('projects').put(next))
       return next
